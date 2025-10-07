@@ -9,6 +9,13 @@ APP_TITLE = "CEA HARO — Inicio"
 APP_W, APP_H = 1280, 780
 
 # -------- Paleta (light, dark) -------- #
+# Colores de marca
+WHITE   = "#FFFFFF"
+BLACK   = "#000000"
+RED     = "#E11D2E"   # rojo HARO
+YELLOW  = "#FACC15"   # amarillo HARO
+
+# -------- Paleta (light, dark) -------- #
 BG           = ("#0B1020", "#050915")   # fondo principal
 PANEL        = ("#0F162D", "#0A1124")   # paneles
 TEXT         = ("#EAF2FF", "#EAF2FF")
@@ -17,12 +24,12 @@ CARD_BG      = ("#0E142A", "#0A1022")
 
 # Acentos por tarjeta (color principal por opción)
 CARDS = [
-    ("Gestión de Estudiantes", "🎓", "#A855F7"),  # PLUM
-    ("Instructores",           "👩‍🏫", "#F59E0B"),  # GOLD
-    ("Vehículos",              "🚗",  "#38BDF8"),  # SKY
-    ("Clases",                 "📚",  "#10B981"),  # MINT
-    ("Estados de Cuenta",      "💳",  "#F43F5E"),  # ROSE
-    ("Reportes",               "📊",  "#6366F1"),  # INDIGO
+    ("Gestión de Estudiantes", "🎓", RED),
+    ("Instructores",           "👩‍🏫", YELLOW),
+    ("Vehículos",              "🚗",  RED),
+    ("Clases",                 "📚",  YELLOW),
+    ("Estados de Cuenta",      "💳",  RED),
+    ("Reportes",               "📊",  YELLOW),
 ]
 
 # ---------------------------------------------------------------------------
@@ -57,7 +64,7 @@ class HaroHome(ctk.CTk):
     # ---------------- Topbar ---------------- #
     def _build_topbar(self):
         # Banda superior decorativa
-        brand = ctk.CTkFrame(self, height=6, fg_color="#6EE7F9")
+        brand = ctk.CTkFrame(self, height=6, fg_color=YELLOW)
         brand.grid(row=0, column=0, sticky="new")
 
         top = ctk.CTkFrame(self, corner_radius=0, fg_color=PANEL)
@@ -78,7 +85,7 @@ class HaroHome(ctk.CTk):
         # Botón primario
         start_btn = ctk.CTkButton(
             top, text="Empezar",
-            fg_color="#22D3EE", hover_color="#06B6D4", text_color="black",
+            fg_color=WHITE, hover_color="#06B6D4", text_color="black",
             corner_radius=10, height=44, width=140,
             command=lambda: self._open("Gestión de Estudiantes"),
         )

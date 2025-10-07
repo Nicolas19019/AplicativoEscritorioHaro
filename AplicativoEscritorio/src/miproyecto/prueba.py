@@ -1,0 +1,888 @@
+# -*- coding: utf-8 -*-
+import sys
+import customtkinter as ctk
+from tkinter import messagebox
+from PIL import Image
+from pathlib import Path
+
+# ================================
+#  Formulario inline (Estudiantes)
+# ================================
+class StudentInlineForm(ctk.CTkFrame):
+    """
+    Formulario en línea (colapsable) para crear/editar estudiante.
+    Modo: show_create() / show_edit(data). on_submit(data, mode), on_cancel()
+    """
+    def __init__(self, master, app, on_submit, on_cancel):
+        # Borde definido para separar visualmente el form
+        super().__init__(
+            master,
+            fg_color=app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=app.COLOR_DIVIDER
+        )
+        self.app = app
+        self.on_submit = on_submit
+        self.on_cancel = on_cancel
+
+        self.grid_columnconfigure((0,1,2,3), weight=1)
+
+        # Helper para entries con borde
+        def BorderedEntry(parent, **kw):
+            return ctk.CTkEntry(
+                parent,
+                height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                **kw
+            )
+
+        # Fila 0: Documento
+        ctk.CTkLabel(self, text="Tipo Doc").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
+        self.cb_tipo = ctk.CTkComboBox(self, values=["CC","TI","CE","PA"], width=120)
+        self.cb_tipo.set("CC")
+        self.cb_tipo.grid(row=0, column=1, padx=12, pady=(12,6), sticky="w")
+
+        ctk.CTkLabel(self, text="Núm. Doc").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        self.en_doc = BorderedEntry(self, placeholder_text="1012345678")
+        self.en_doc.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+
+        # Fila 1: Nombres
+        ctk.CTkLabel(self, text="Nombres").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.en_nombres = BorderedEntry(self, placeholder_text="Nombres")
+        self.en_nombres.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Apellidos").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        self.en_apellidos = BorderedEntry(self, placeholder_text="Apellidos")
+        self.en_apellidos.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 2: Contacto
+        ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        self.en_tel = BorderedEntry(self, placeholder_text="3001234567")
+        self.en_tel.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Email").grid(row=2, column=2, padx=12, pady=6, sticky="w")
+        self.en_mail = BorderedEntry(self, placeholder_text="correo@dominio.com")
+        self.en_mail.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 3: Dirección / Fecha
+        ctk.CTkLabel(self, text="Dirección").grid(row=3, column=0, padx=12, pady=6, sticky="w")
+        self.en_dir = BorderedEntry(self, placeholder_text="Dirección")
+        self.en_dir.grid(row=3, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Fecha Nac. (YYYY-MM-DD)").grid(row=3, column=2, padx=12, pady=6, sticky="w")
+        self.en_fn = BorderedEntry(self, placeholder_text="2001-05-17")
+        self.en_fn.grid(row=3, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 4: Programa / Estado
+        ctk.CTkLabel(self, text="Categoría").grid(row=4, column=0, padx=12, pady=6, sticky="w")
+        self.cb_cat = ctk.CTkComboBox(self, values=["A1","A2","B1","B2","C1","C2"], width=120)
+        self.cb_cat.set("A2")
+        self.cb_cat.grid(row=4, column=1, padx=12, pady=6, sticky="w")
+
+        ctk.CTkLabel(self, text="Estado").grid(row=4, column=2, padx=12, pady=6, sticky="w")
+        self.cb_estado = ctk.CTkComboBox(self, values=["Activo","Inactivo","Suspendido"], width=140)
+        self.cb_estado.set("Activo")
+        self.cb_estado.grid(row=4, column=3, padx=12, pady=6, sticky="w")
+
+        # Fila 5: Observaciones
+        ctk.CTkLabel(self, text="Observaciones").grid(row=5, column=0, padx=12, pady=6, sticky="nw")
+        self.tx_obs = ctk.CTkTextbox(self, height=80, corner_radius=10,
+                                     fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                                     border_width=2, border_color=self.app.COLOR_DIVIDER)
+        self.tx_obs.grid(row=5, column=1, columnspan=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 6: Botones (rojos)
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=6, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd)
+
+        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
+        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+
+        self.mode = "create"
+
+    # API pública
+    def show_create(self):
+        self.mode = "create"
+        self._fill({})
+        self.grid()
+
+    def show_edit(self, data: dict):
+        self.mode = "edit"
+        self._fill(data or {})
+        self.grid()
+
+    def hide(self):
+        self.grid_remove()
+
+    # Internos
+    def _fill(self, d: dict):
+        for w in (self.en_doc, self.en_nombres, self.en_apellidos, self.en_tel, self.en_mail, self.en_dir, self.en_fn):
+            w.delete(0, "end")
+        self.tx_obs.delete("1.0", "end")
+
+        self.cb_tipo.set(d.get("tipo_documento", "CC"))
+        self.en_doc.insert(0, d.get("numero_documento", ""))
+        self.en_nombres.insert(0, d.get("nombres", ""))
+        self.en_apellidos.insert(0, d.get("apellidos", ""))
+        self.en_tel.insert(0, d.get("telefono", ""))
+        self.en_mail.insert(0, d.get("email", ""))
+        self.en_dir.insert(0, d.get("direccion", ""))
+        self.en_fn.insert(0, d.get("fecha_nacimiento", ""))
+        self.cb_cat.set(d.get("categoria_licencia", "A2"))
+        self.cb_estado.set(d.get("estado", "Activo"))
+        if d.get("observaciones"):
+            self.tx_obs.insert("1.0", d.get("observaciones"))
+
+    def _collect(self) -> dict:
+        return {
+            "tipo_documento": self.cb_tipo.get().strip(),
+            "numero_documento": self.en_doc.get().strip(),
+            "nombres": self.en_nombres.get().strip(),
+            "apellidos": self.en_apellidos.get().strip(),
+            "telefono": self.en_tel.get().strip(),
+            "email": self.en_mail.get().strip(),
+            "direccion": self.en_dir.get().strip(),
+            "fecha_nacimiento": self.en_fn.get().strip(),
+            "categoria_licencia": self.cb_cat.get().strip(),
+            "estado": self.cb_estado.get().strip(),
+            "observaciones": self.tx_obs.get("1.0", "end").strip(),
+        }
+
+    def _validate(self, d: dict) -> tuple[bool, str]:
+        req = ["tipo_documento","numero_documento","nombres","apellidos","telefono","email","categoria_licencia","estado"]
+        for k in req:
+            if not d.get(k):
+                return False, f"El campo '{k.replace('_',' ').title()}' es obligatorio."
+        if not d["numero_documento"].isdigit():
+            return False, "El Número de Documento debe ser numérico."
+        if d["telefono"] and not d["telefono"].isdigit():
+            return False, "El Teléfono debe ser numérico."
+        if "@" not in d["email"] or "." not in d["email"].split("@")[-1]:
+            return False, "Email no válido."
+        fn = d.get("fecha_nacimiento","")
+        if fn and (len(fn)!=10 or fn[4]!="-" or fn[7]!="-"):
+            return False, "Fecha de nacimiento inválida. Use YYYY-MM-DD."
+        return True, ""
+
+    def _save(self):
+        d = self._collect()
+        ok, msg = self._validate(d)
+        if not ok:
+            messagebox.showerror("Validación", msg, parent=self)
+            return
+        if self.on_submit:
+            self.on_submit(d, mode=self.mode)
+        self.hide()
+
+    def _cancel(self):
+        if self.on_cancel:
+            self.on_cancel()
+        self.hide()
+
+
+# ===================================
+#  Base para módulos (botones en rojo)
+# ===================================
+class BaseModuleFrame(ctk.CTkFrame):
+    def __init__(self, master, title: str, subtitle: str = ""):
+        app = self._find_app(master)
+        self.app = app
+        super().__init__(master, fg_color=getattr(app, "COLOR_BG", ("#FFFFFF", "#0f0f10")))
+        # filas: 0 header / 1 toolbar / 2 form / 3 filtros / 4 tabla
+        self.grid_rowconfigure(4, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        header = self._make_header_bar(title, subtitle)
+        header.grid(row=0, column=0, padx=16, pady=(16, 10), sticky="ew")
+
+    def _find_app(self, widget):
+        w = widget
+        while w is not None:
+            if hasattr(w, "APP_TITLE") and hasattr(w, "COLOR_BG"):
+                return w
+            w = getattr(w, "master", None)
+        return widget
+
+    def _make_header_bar(self, title: str, subtitle: str = ""):
+        bar = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=16)
+        bar.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(bar, text=title,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=self.app.COLOR_TEXT, anchor="w").grid(row=0, column=0, padx=16, pady=(14, 4), sticky="w")
+        if subtitle:
+            ctk.CTkLabel(bar, text=subtitle, font=ctk.CTkFont(size=12),
+                         text_color=self.app.COLOR_MUTED, anchor="w").grid(row=1, column=0, padx=16, pady=(0, 14), sticky="w")
+        return bar
+
+    def _make_toolbar(self, master, on_new, on_edit, on_delete, on_refresh):
+        tb = ctk.CTkFrame(master, fg_color="transparent")
+        tb.grid_columnconfigure((0,1,2,3), weight=0)
+        tb.grid_columnconfigure(4, weight=1)
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(
+                tb, text=text, height=40, corner_radius=18,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd, anchor="w"
+            )
+
+        red_btn("＋ Nuevo", on_new).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        red_btn("✎ Editar", on_edit).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn("🗑 Eliminar", on_delete).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn("↻ Refrescar", on_refresh).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        return tb
+
+    # --- versión simple (por compatibilidad con vistas que ya la llamaban)
+    def _make_filters(self, master, p1="Buscar…", p2="Filtro"):
+        bar = ctk.CTkFrame(master, fg_color="transparent")
+        bar.grid_columnconfigure((0,1,2,3), weight=0)
+        bar.grid_columnconfigure(4, weight=1)
+
+        e1 = ctk.CTkEntry(
+            bar, placeholder_text=p1, height=36, corner_radius=12,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT, border_width=0
+        )
+        e1.grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+
+        e2 = ctk.CTkEntry(
+            bar, placeholder_text=p2, height=36, corner_radius=12,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT, border_width=0
+        )
+        e2.grid(row=0, column=1, padx=8, pady=6, sticky="w")
+
+        def red_small(text, cmd):
+            return ctk.CTkButton(
+                bar, text=text, height=36, corner_radius=12,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd
+            )
+
+        red_small("Aplicar", lambda: self.app._info(f"Aplicar filtros: {e1.get()} / {e2.get()}"))\
+            .grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_small("Limpiar", lambda: (e1.delete(0, "end"), e2.delete(0, "end")))\
+            .grid(row=0, column=3, padx=8, pady=6, sticky="w")
+
+        return bar
+
+    # --- versión mejorada
+    def _make_filters_pro(self, master, campos=("Documento","Nombre","Apellidos"),
+                          estados=("Todos","Activo","Inactivo","Suspendido")):
+        panel = ctk.CTkFrame(
+            master,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=self.app.COLOR_DIVIDER
+        )
+        for c in range(8):
+            panel.grid_columnconfigure(c, weight=0)
+        panel.grid_columnconfigure(7, weight=1)
+
+        ctk.CTkLabel(
+            panel, text="Filtros", text_color=self.app.COLOR_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).grid(row=0, column=0, padx=12, pady=(12, 2), sticky="w")
+
+        r = 1
+        ctk.CTkLabel(panel, text="Buscar por").grid(row=r, column=0, padx=(12,8), pady=8, sticky="w")
+        cb_campo = ctk.CTkComboBox(panel, values=list(campos), width=140)
+        cb_campo.set(campos[0])
+        cb_campo.grid(row=r, column=1, padx=(0,12), pady=8, sticky="w")
+
+        ctk.CTkLabel(panel, text="Valor").grid(row=r, column=2, padx=(12,8), pady=8, sticky="w")
+        wrap = ctk.CTkFrame(panel, fg_color="transparent")
+        wrap.grid(row=r, column=3, padx=(0,12), pady=8, sticky="ew")
+        wrap.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(wrap, text="🔎", width=24, text_color=self.app.COLOR_MUTED)\
+            .grid(row=0, column=0, padx=(0,6), pady=0, sticky="w")
+        en_valor = ctk.CTkEntry(
+            wrap, height=36, corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+            border_width=2, border_color=self.app.COLOR_DIVIDER,
+            placeholder_text="Escribe aquí…"
+        )
+        en_valor.grid(row=0, column=1, sticky="ew")
+
+        ctk.CTkLabel(panel, text="Estado").grid(row=r, column=4, padx=(12,8), pady=8, sticky="w")
+        cb_estado = ctk.CTkComboBox(panel, values=list(estados), width=150)
+        cb_estado.set(estados[0])
+        cb_estado.grid(row=r, column=5, padx=(0,12), pady=8, sticky="w")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(
+                panel, text=text, height=36, corner_radius=12,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd
+            )
+
+        red_btn("Aplicar", lambda: self.app._info(
+            f"Filtrar: {cb_campo.get()} ~ '{en_valor.get()}' / Estado={cb_estado.get()}"
+        )).grid(row=r, column=6, padx=(0,8), pady=8, sticky="w")
+
+        red_btn("Limpiar", lambda: (cb_campo.set(campos[0]), en_valor.delete(0, "end"), cb_estado.set(estados[0])))\
+            .grid(row=r, column=7, padx=(0,12), pady=8, sticky="e")
+
+        return panel
+
+
+# ======================
+#  Vistas / Módulos
+# ======================
+class EstudiantesView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Estudiantes", "Gestione matrículas y datos del alumno")
+
+        # ----- Toolbar (sin eliminar global) -----
+        tb = ctk.CTkFrame(self, fg_color="transparent")
+        tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        tb.grid_columnconfigure((0,1,2), weight=0)
+        tb.grid_columnconfigure(3, weight=1)
+
+        def red_btn(parent, text, cmd):
+            return ctk.CTkButton(parent, text=text, height=40, corner_radius=18,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd, anchor="w")
+        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+
+        # ----- Form inline -----
+        self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
+        self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self.form.hide()
+
+        # ----- Filtros PRO -----
+        filters = self._make_filters_pro(self, campos=("Documento","Nombre","Apellidos"),
+                                         estados=("Todos","Activo","Inactivo","Suspendido"))
+        filters.grid(row=3, column=0, padx=16, pady=(0,10), sticky="ew")
+
+        # ----- Tabla -----
+        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=4, column=0, padx=16, pady=(0,16), sticky="nsew")
+        self.table.grid_columnconfigure(0, weight=1)
+
+        # Especificación de columnas (nombre, ancho mínimo, peso)
+        # Solo "Nombre" se estira (weight=1); las demás quedan fijas.
+        self._COLS = [
+            ("ID",          70,   0),
+            ("Documento",   140,  0),
+            ("Nombre",      320,  1),
+            ("Estado",      140,  0),
+            ("Actualizado", 140,  0),
+            ("Acciones",    120,  0),
+        ]
+
+        # Estado
+        self._data: list[dict] = []
+        self._rows: list[ctk.CTkFrame] = []
+        self._selected_idx: int | None = None
+
+        self._seed_data()
+        self._render_table()
+
+    # ----------------- Datos de ejemplo -----------------
+    def _seed_data(self):
+        self._data = [
+            {"id":1,"tipo_documento":"CC","numero_documento":"1001","nombres":"Laura","apellidos":"Gómez","estado":"Activo","actualizado":"hoy"},
+            {"id":2,"tipo_documento":"CC","numero_documento":"1002","nombres":"Mateo","apellidos":"Rojas","estado":"Inactivo","actualizado":"ayer"},
+            {"id":3,"tipo_documento":"TI","numero_documento":"2001","nombres":"Sara","apellidos":"Patiño","estado":"Activo","actualizado":"hace 2 días"},
+        ]
+
+    # ----------------- Util: aplicar specs de columnas -----------------
+    def _apply_colspecs(self, container):
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            container.grid_columnconfigure(i, minsize=minw, weight=weight)
+
+    # ----------------- Render de tabla alineada -----------------
+    def _render_table(self):
+        for w in self.table.winfo_children():
+            w.destroy()
+        self._rows.clear()
+        self._selected_idx = None
+
+        # Header
+        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
+        self._apply_colspecs(header)
+
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(
+                header, text=nombre, text_color=self.app.COLOR_MUTED,
+                anchor="w", justify="left"
+            ).grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        # Filas
+        for r, stu in enumerate(self._data, start=1):
+            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            self._apply_colspecs(row)
+
+            full_name = f"{stu.get('nombres','')} {stu.get('apellidos','')}".strip()
+            values = [
+                str(stu.get("id","")),
+                stu.get("numero_documento",""),
+                full_name,
+                stu.get("estado",""),
+                stu.get("actualizado",""),
+            ]
+
+            # Celdas de texto (alineadas a la izquierda y pegadas a la grilla)
+            for i, val in enumerate(values):
+                lbl = ctk.CTkLabel(
+                    row, text=val, text_color=self.app.COLOR_TEXT,
+                    anchor="w", justify="left"
+                )
+                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+                lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+
+            # Acciones con íconos (✎ y 🗑️)
+            actions = ctk.CTkFrame(row, fg_color="transparent")
+            actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+
+            def icon_btn(symbol, cmd):
+                # Botón compacto solo-ícono
+                return ctk.CTkButton(
+                    actions, text=symbol, width=36, height=32, corner_radius=10,
+                    fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                    text_color="#ffffff", command=cmd
+                )
+
+            icon_btn("✎", lambda idx=r-1: self._edit_row(idx)).grid(row=0, column=0, padx=4)
+            icon_btn("🗑️", lambda idx=r-1: self._delete_row(idx)).grid(row=0, column=1, padx=4)
+
+            row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+            self._rows.append(row)
+
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=99, column=0, padx=8, pady=12, sticky="w")
+
+    # ----------------- Selección visual -----------------
+    def _select_row(self, idx: int):
+        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
+            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+        if 0 <= idx < len(self._rows):
+            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            self._selected_idx = idx
+
+    # ----------------- Acciones por fila -----------------
+    def _edit_row(self, idx: int):
+        self._select_row(idx)
+        self.form.show_edit(self._data[idx])
+
+    def _delete_row(self, idx: int):
+        self._select_row(idx)
+        stu = self._data[idx]
+        full_name = f"{stu.get('nombres','')} {stu.get('apellidos','')}".strip()
+        doc = stu.get("numero_documento", "")
+        if messagebox.askyesno("Confirmar", f"¿Eliminar al estudiante:\n{full_name} (Doc: {doc})?"):
+            del self._data[idx]
+            self._render_table()
+            self.app._info("Estudiante eliminado.")
+        else:
+            self.app._info("Operación cancelada.")
+
+    # ----------------- Acciones toolbar -----------------
+    def _nuevo(self):
+        self.form.show_create()
+
+    def _editar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un estudiante en la tabla primero.")
+            return
+        self._edit_row(self._selected_idx)
+
+    def _refrescar(self):
+        self._render_table()
+
+    def _cancel_inline(self):
+        pass
+
+    def _submit_inline(self, data: dict, mode: str):
+        if mode == "create":
+            new_id = max([s["id"] for s in self._data], default=0) + 1
+            data = {**data, "id": new_id, "actualizado": "hoy"}
+            self._data.append(data)
+            self.app._info("Estudiante creado correctamente.")
+        else:
+            idx = self._selected_idx
+            if idx is None:
+                self.app._info("Selecciona un estudiante para actualizar.")
+                return
+            old = self._data[idx]
+            data = {**old, **data, "actualizado": "hoy"}
+            self._data[idx] = data
+            self.app._info("Estudiante actualizado correctamente.")
+        self._render_table()
+
+
+
+# --- Otras vistas (placeholders con botones rojos y filtros) ---
+class InstructoresView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Instructores", "Disponibilidad y asignaciones")
+        toolbar = self._make_toolbar(
+            self,
+            on_new=lambda: self.app._info("Nuevo instructor"),
+            on_edit=lambda: self.app._info("Editar instructor"),
+            on_delete=lambda: self.app._confirm_delete("instructor"),
+            on_refresh=lambda: self.app._info("Refrescar instructores")
+        )
+        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        filters = self._make_filters_pro(self, campos=("Nombre","Licencia"), estados=("Todos","Activo","Inactivo"))
+        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+
+
+class VehiculosView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Vehículos", "Documentación, mantenimiento y disponibilidad")
+        toolbar = self._make_toolbar(
+            self,
+            on_new=lambda: self.app._info("Nuevo vehículo"),
+            on_edit=lambda: self.app._info("Editar vehículo"),
+            on_delete=lambda: self.app._confirm_delete("vehículo"),
+            on_refresh=lambda: self.app._info("Refrescar vehículos")
+        )
+        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        filters = self._make_filters_pro(self, campos=("Placa","Tipo"), estados=("Todos","Activo","Baja"))
+        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+
+
+class ClasesView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Clases", "Agendamiento y control de asistencia")
+        toolbar = self._make_toolbar(
+            self,
+            on_new=lambda: self.app._info("Nueva clase"),
+            on_edit=lambda: self.app._info("Editar clase"),
+            on_delete=lambda: self.app._confirm_delete("clase"),
+            on_refresh=lambda: self.app._info("Refrescar clases")
+        )
+        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        filters = self._make_filters_pro(self, campos=("Alumno","Instructor"), estados=("Todos","Pendiente","Dictada","Cancelada"))
+        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+
+
+class EstadosView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Estados de Cuenta", "Pagos, saldos y cartera")
+        toolbar = self._make_toolbar(
+            self,
+            on_new=lambda: self.app._info("Registrar pago"),
+            on_edit=lambda: self.app._info("Editar pago"),
+            on_delete=lambda: self.app._confirm_delete("registro"),
+            on_refresh=lambda: self.app._info("Refrescar estados")
+        )
+        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        filters = self._make_filters_pro(self, campos=("Documento","Alumno"), estados=("Todos","Al día","Mora"))
+        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+
+
+class ReportesView(BaseModuleFrame):
+    def __init__(self, master):
+        super().__init__(master, "Reportes", "Indicadores y exportaciones")
+        controls = ctk.CTkFrame(self, fg_color="transparent")
+        controls.grid(row=1, column=0, padx=16, pady=(0,10), sticky="ew")
+        controls.grid_columnconfigure((0,1,2,3), weight=0)
+        controls.grid_columnconfigure(4, weight=1)
+
+        cmb = ctk.CTkComboBox(
+            controls, values=["Matrículas", "Clases", "Cartera", "Instructores", "Vehículos"],
+            height=36, corner_radius=12, fg_color=self.app.COLOR_INPUT_BG,
+            button_color=self.app.COLOR_DIVIDER, text_color=self.app.COLOR_TEXT
+        )
+        cmb.set("Matrículas")
+        cmb.grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+
+        def red_btn(text, cb):
+            return ctk.CTkButton(controls, text=text, height=36, corner_radius=12,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cb)
+
+        red_btn("Generar", lambda: self.app._info("Generar reporte")).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn("Exportar XLSX", lambda: self.app._info("Exportar XLSX")).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn("Exportar PDF",  lambda: self.app._info("Exportar PDF")).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+
+        card = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=16)
+        card.grid(row=2, column=0, padx=16, pady=(0,16), sticky="nsew")
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Resumen (placeholder)",
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=self.app.COLOR_TEXT, anchor="w").grid(row=0, column=0, padx=16, pady=(16,8), sticky="w")
+        ctk.CTkLabel(card, text="Aquí va el gráfico / KPI.",
+                     text_color=self.app.COLOR_MUTED, anchor="w").grid(row=1, column=0, padx=16, pady=(0,16), sticky="w")
+
+
+# ======================
+#  App principal
+# ======================
+class HaroDesktopApp(ctk.CTk):
+    # -------- Paleta (light, dark) -------- #
+    COLOR_BG          = ("#FFFFFF", "#0f0f10")
+    COLOR_PANEL       = ("#FFFFFF", "#151517")
+    COLOR_TEXT        = ("#111111", "#F5F7FA")
+    COLOR_MUTED       = ("#5A5F6A", "#AAB2C0")
+    COLOR_RED         = ("#E53935", "#ff4c4c")
+    COLOR_YELLOW      = ("#FFC107", "#FFD54F")
+    COLOR_DIVIDER     = ("#EFEFF2", "#24262b")
+    COLOR_INPUT_BG    = ("#F6F7F9", "#1b1d22")
+
+    APP_TITLE = "CEA HARO — Sistema de Información"
+    APP_W, APP_H = 1180, 720
+    SIDEBAR_W = 260
+    TOPBAR_H  = 64
+
+    # === Marca y logo (según tu indicación) ===
+    BRAND_TEXT = "CEA HARO"
+    LOGO_SIZE  = (50, 40)
+
+    # --- Ruta FIJA del logo: RELATIVA al archivo .py actual, no al cwd ---
+    _SCRIPT_DIR = Path(__file__).resolve().parent
+    _LOGO_PATH  = _SCRIPT_DIR / "media" / "LogoHARO.png"
+
+    def __init__(self):
+        super().__init__()
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("dark-blue")
+
+        self.title(self.APP_TITLE)
+        self.geometry(f"{self.APP_W}x{self.APP_H}")
+        self.minsize(1060, 640)
+        self.configure(fg_color=self.COLOR_BG)
+
+        # Estado UI
+        self.current_view = None
+        self.sidebar_visible = True
+        self.logo_image = None
+
+        # Atajos
+        self.bind_all("<Escape>", self._on_escape)
+        self.bind_all("<Control-f>", self._focus_search)
+        self.bind_all("<Control-F>", self._focus_search)
+
+        # Layout raíz
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=0)
+        self.grid_columnconfigure(1, weight=1)
+
+        # Construcción UI
+        self._build_topbar()
+        self._build_sidebar()
+        self._build_content_area()
+        self._register_views()
+        self.switch_view("Estudiantes")
+
+    # ----------------------- Helpers de recursos ----------------------- #
+    @staticmethod
+    def resource_path(p) -> Path:
+        p = Path(p)
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            return Path(base) / p.name if p.is_file() else Path(base) / p
+        return p
+
+    def _set_default_logo(self):
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        for x in range(64):
+            for y in range(64):
+            # círculo rojo
+                dx, dy = x-32, y-32
+                if dx*dx + dy*dy <= 30*30:
+                    img.putpixel((x, y), (229, 57, 53, 255))
+        self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+
+    def _load_fixed_logo(self):
+        try:
+            path = self.resource_path(self._LOGO_PATH)
+            if not path.exists():
+                print(f"[Logo] No existe: {path}")
+                self._set_default_logo()
+                return
+            img = Image.open(path)
+            w, h = img.size
+            side = min(w, h)
+            left, top = (w - side) // 2, (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+            self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+        except Exception as e:
+            print(f"[Logo] Error cargando: {e}")
+            self._set_default_logo()
+
+    # ----------------------- Topbar ----------------------- #
+    def _build_topbar(self):
+        self.topbar = ctk.CTkFrame(self, height=self.TOPBAR_H, fg_color=self.COLOR_PANEL, corner_radius=0)
+        self.topbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        for col in (0,1,2,3,4,5):
+            self.topbar.grid_columnconfigure(col, weight=0)
+        self.topbar.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkButton(self.topbar, text="☰", width=44, height=36, corner_radius=10,
+                      fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
+                      text_color=self.COLOR_TEXT, command=self._toggle_sidebar)\
+                      .grid(row=0, column=0, padx=(12, 6), pady=12, sticky="w")
+
+        self.brand_frame = ctk.CTkFrame(self.topbar, fg_color="transparent")
+        self.brand_frame.grid(row=0, column=1, padx=(6, 8), pady=0, sticky="w")
+        self.brand_frame.grid_columnconfigure(0, weight=0)
+        self.brand_frame.grid_columnconfigure(1, weight=0)
+
+        self._load_fixed_logo()
+        ctk.CTkLabel(self.brand_frame, image=self.logo_image, text="")\
+            .grid(row=0, column=0, padx=(0,8), pady=12, sticky="w")
+        ctk.CTkLabel(self.brand_frame, text=self.BRAND_TEXT,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=self.COLOR_TEXT)\
+            .grid(row=0, column=1, padx=(0,0), pady=12, sticky="w")
+
+        self.search_entry = ctk.CTkEntry(
+            self.topbar, placeholder_text="Buscar…  (Ctrl+F)",
+            height=36, corner_radius=12, fg_color=self.COLOR_INPUT_BG,
+            text_color=self.COLOR_TEXT, border_width=0
+        )
+        self.search_entry.grid(row=0, column=2, padx=(8,8), pady=12, sticky="ew")
+        self.search_entry.bind("<Return>", self._do_search)
+
+        ctk.CTkButton(self.topbar, text="⟳ Sincronizar", height=36, corner_radius=18,
+                      fg_color=self.COLOR_RED, hover_color=self.COLOR_YELLOW,
+                      text_color="#ffffff", command=self._sync)\
+            .grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
+        ctk.CTkButton(self.topbar, text="● Tema", height=36, corner_radius=12,
+                      fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
+                      text_color=self.COLOR_TEXT, command=self._toggle_theme)\
+            .grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
+
+    # ----------------------- Sidebar ----------------------- #
+    def _build_sidebar(self):
+        self.sidebar = ctk.CTkFrame(self, width=self.SIDEBAR_W, fg_color=self.COLOR_PANEL, corner_radius=0)
+        self.sidebar.grid(row=1, column=0, sticky="nsew")
+        for r in range(10):
+            self.sidebar.grid_rowconfigure(r, weight=0)
+        self.sidebar.grid_rowconfigure(9, weight=1)
+
+        ctk.CTkLabel(self.sidebar, text="Módulos", text_color=self.COLOR_MUTED,
+                     font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+        self.nav_buttons = {}
+        def add_nav(row, name, icon):
+            b = ctk.CTkButton(self.sidebar, text=f"{icon}  {name}", height=44, corner_radius=12,
+                              fg_color="transparent", hover_color=self.COLOR_DIVIDER,
+                              text_color=self.COLOR_TEXT, anchor="w",
+                              command=lambda n=name: self._nav_callback(n),
+                              font=ctk.CTkFont(size=14, weight="normal"))
+            b.grid(row=row, column=0, padx=10, pady=6, sticky="ew")
+            self.nav_buttons[name] = b
+
+        specs = [("Estudiantes","👤"),("Instructores","🧑‍🏫"),("Vehículos","🚗"),
+                 ("Clases","📅"),("Estados de Cuenta","💳"),("Reportes","📊")]
+        for i, (n, ic) in enumerate(specs, start=1):
+            add_nav(i, n, ic)
+
+        ctk.CTkFrame(self.sidebar, height=1, fg_color=self.COLOR_DIVIDER, corner_radius=0)\
+            .grid(row=len(specs)+1, column=0, padx=12, pady=(16, 8), sticky="ew")
+        ctk.CTkLabel(self.sidebar, text="© CEA HARO\nSistema de Información",
+                     justify="left", text_color=self.COLOR_MUTED, font=ctk.CTkFont(size=11))\
+                     .grid(row=len(specs)+2, column=0, padx=16, pady=(0, 12), sticky="sw")
+
+    # ----------------------- Content ----------------------- #
+    def _build_content_area(self):
+        self.content = ctk.CTkFrame(self, fg_color=self.COLOR_BG, corner_radius=0)
+        self.content.grid(row=1, column=1, sticky="nsew")
+        self.content.grid_rowconfigure(0, weight=1)
+        self.content.grid_columnconfigure(0, weight=1)
+
+    def _register_views(self):
+        self.views = {
+            "Estudiantes": EstudiantesView(self.content),
+            "Instructores": InstructoresView(self.content),
+            "Vehículos": VehiculosView(self.content),
+            "Clases": ClasesView(self.content),
+            "Estados de Cuenta": EstadosView(self.content),
+            "Reportes": ReportesView(self.content),
+        }
+
+    # ----------------------- Navegación ----------------------- #
+    def _nav_callback(self, name):
+        self.switch_view(name)
+
+    def switch_view(self, name: str):
+        if self.current_view is not None:
+            self.current_view.grid_remove()
+        for _, b in self.nav_buttons.items():
+            b.configure(fg_color="transparent", text_color=self.COLOR_TEXT)
+
+        btn = self.nav_buttons.get(name)
+        if btn:
+            btn.configure(fg_color=self.COLOR_DIVIDER, text_color=self.COLOR_TEXT)
+
+        view = self.views.get(name)
+        if view:
+            view.grid(row=0, column=0, sticky="nsew")
+            self.current_view = view
+        else:
+            self._info(f"Vista '{name}' no encontrada")
+
+    # ----------------------- Acciones genéricas ----------------------- #
+    def _on_escape(self, _event=None):
+        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación?"):
+            self.destroy()
+
+    def _focus_search(self, _event=None):
+        self.search_entry.focus_set()
+        self.search_entry.select_range(0, 'end')
+
+    def _do_search(self, _event=None):
+        q = self.search_entry.get().strip()
+        if q:
+            self._info(f"Buscar: {q}")
+
+    def _sync(self):
+        self._info("Sincronizando datos…")
+
+    def _toggle_theme(self):
+        current = ctk.get_appearance_mode()
+        ctk.set_appearance_mode("light" if current == "Dark" else "dark")
+
+    def _confirm_delete(self, what="registro"):
+        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}?"):
+            self._info(f"{what.capitalize()} eliminado.")
+        else:
+            self._info("Operación cancelada.")
+
+    def _toggle_sidebar(self):
+        if not hasattr(self, "sidebar"):
+            return
+        if getattr(self, "sidebar_visible", True):
+            self.sidebar.grid_remove()
+            self.grid_columnconfigure(0, minsize=0, weight=0)
+            self.grid_columnconfigure(1, weight=1)
+            self.sidebar_visible = False
+        else:
+            self.sidebar.grid(row=1, column=0, sticky="nsew")
+            self.grid_columnconfigure(0, minsize=self.SIDEBAR_W, weight=0)
+            self.grid_columnconfigure(1, weight=1)
+            self.sidebar_visible = True
+
+    # Util
+    def _info(self, msg: str):
+        messagebox.showinfo("Información", msg)
+
+
+# ----------------------- Ejecución ----------------------- #
+if __name__ == "__main__":
+    app = HaroDesktopApp()
+    app.mainloop()
