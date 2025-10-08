@@ -1,9 +1,199 @@
 # -*- coding: utf-8 -*-
 import sys
+import base64
+import json
 import customtkinter as ctk
 from tkinter import messagebox
 from PIL import Image
 from pathlib import Path
+
+try:
+    import requests  # opcional; si no está, usa urllib
+except Exception:
+    requests = None
+
+
+# ==========================================
+#  Cliente REST con Basic Auth (y JWT opc.)
+# ==========================================
+class ApiClient:
+    """
+    Cliente REST simple:
+      - auth_mode="basic": usa Authorization: Basic <base64(user:pass)>
+      - auth_mode="jwt": hace POST {jwt_login_path} y usa Bearer <token>
+    """
+    def __init__(self, app, base_url: str, user: str, password: str,
+                 auth_mode: str = "basic",
+                 jwt_login_path: str = "auth/login",
+                 user_field: str = "username",
+                 pass_field: str = "password",
+                 token_field: str = "token"):
+        self.app = app
+        self.base_url = base_url.rstrip("/")
+        self.user = user
+        self.password = password
+        self.auth_mode = auth_mode
+        self.jwt_login_path = jwt_login_path
+        self.user_field = user_field
+        self.pass_field = pass_field
+        self.token_field = token_field
+
+        self._basic_header = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+        self._bearer = None
+        if self.auth_mode == "jwt":
+            self._login_jwt()
+
+    def _login_jwt(self):
+        payload = {self.user_field: self.user, self.pass_field: self.password}
+        url = f"{self.base_url}/{self.jwt_login_path.lstrip('/')}"
+        def do_post(u, data):
+            if requests:
+                r = requests.post(u, json=data, timeout=15,
+                                  headers={"Accept":"application/json","Content-Type":"application/json"})
+                if r.status_code >= 400:
+                    raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
+                return r.json() if r.text else {}
+            else:
+                import urllib.request, json as _json
+                req = urllib.request.Request(u, data=_json.dumps(data).encode("utf-8"), method="POST")
+                req.add_header("Accept","application/json")
+                req.add_header("Content-Type","application/json")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    txt = resp.read().decode("utf-8")
+                    return _json.loads(txt) if txt else {}
+        resp = do_post(url, payload) or {}
+        token = resp.get(self.token_field)
+        if not token:
+            raise RuntimeError("No se recibió token JWT en la respuesta.")
+        self._bearer = f"Bearer {token}"
+
+    def _request(self, method, path, data=None, params=None):
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {"Accept":"application/json","Content-Type":"application/json"}
+        if self.auth_mode == "jwt":
+            headers["Authorization"] = self._bearer
+        else:
+            headers["Authorization"] = self._basic_header
+
+        if requests:
+            func = getattr(requests, method.lower())
+            resp = func(url, headers=headers, json=data, params=params, timeout=15)
+            if resp.status_code >= 400:
+                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+            if resp.text and resp.headers.get("Content-Type","").startswith("application/json"):
+                return resp.json()
+            return None
+        else:
+            # Fallback urllib
+            import urllib.request, urllib.error, json as _json
+            payload = None if data is None else _json.dumps(data).encode("utf-8")
+            if params:
+                from urllib.parse import urlencode
+                qs = urlencode(params)
+                url = url + ("&" if "?" in url else "?") + qs
+            req = urllib.request.Request(url, data=payload, method=method.upper())
+            for k,v in headers.items(): req.add_header(k, v)
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    content = resp.read().decode("utf-8")
+                    if content:
+                        try:
+                            return json.loads(content)
+                        except Exception:
+                            return content
+                    return None
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8")
+                raise RuntimeError(f"HTTP {e.code}: {body}")
+
+    # CRUD helpers
+    def get_all(self, resource, params=None): return self._request("GET", resource, params=params)
+    def get_by_id(self, resource, _id): return self._request("GET", f"{resource}/{_id}")
+    def create(self, resource, payload): return self._request("POST", resource, data=payload)
+    def update(self, resource, _id, payload): return self._request("PUT", f"{resource}/{_id}", data=payload)
+    def delete(self, resource, _id): return self._request("DELETE", f"{resource}/{_id}")
+
+
+# =============== LOGIN MODAL =================
+class LoginDialog(ctk.CTkToplevel):
+    def __init__(self, master, on_success, brand="CEA HARO"):
+        super().__init__(master)
+        self.title("Inicio de sesión")
+        self.geometry("380x260")
+        self.resizable(False, False)
+        self.transient(master)
+        self.grab_set()  # modal
+        self.focus_set()
+
+        # Estilos del master si existen
+        self.app = master
+        fg_panel = getattr(master, "COLOR_PANEL", "#151517")
+        fg_input = getattr(master, "COLOR_INPUT_BG", "#1b1d22")
+        txt_color = getattr(master, "COLOR_TEXT", "#F5F7FA")
+        div_color = getattr(master, "COLOR_DIVIDER", "#24262b")
+        red = getattr(master, "COLOR_RED", "#ff4c4c")
+        yellow = getattr(master, "COLOR_YELLOW", "#FFD54F")
+
+        self.configure(fg_color=fg_panel)
+
+        # Layout
+        self.grid_columnconfigure(0, weight=1)
+
+        title = ctk.CTkLabel(self, text=f"{brand} — Acceso",
+                             font=ctk.CTkFont(size=18, weight="bold"),
+                             text_color=txt_color)
+        title.grid(row=0, column=0, padx=16, pady=(16, 8), sticky="n")
+
+        card = ctk.CTkFrame(self, fg_color=fg_panel, corner_radius=16,
+                            border_width=2, border_color=div_color)
+        card.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="nsew")
+        for i in range(2): card.grid_columnconfigure(i, weight=1)
+
+        ctk.CTkLabel(card, text="Usuario", text_color=txt_color).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
+        self.en_user = ctk.CTkEntry(card, height=36, corner_radius=10,
+                                    fg_color=fg_input, text_color=txt_color,
+                                    border_width=2, border_color=div_color, placeholder_text="usuario")
+        self.en_user.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 10), sticky="ew")
+
+        ctk.CTkLabel(card, text="Contraseña", text_color=txt_color).grid(row=2, column=0, padx=12, pady=(0, 6), sticky="w")
+        self.en_pass = ctk.CTkEntry(card, height=36, corner_radius=10,
+                                    fg_color=fg_input, text_color=txt_color,
+                                    border_width=2, border_color=div_color, placeholder_text="********",
+                                    show="*")
+        self.en_pass.grid(row=3, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="ew")
+
+        btns = ctk.CTkFrame(card, fg_color="transparent")
+        btns.grid(row=4, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="e")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
+                                 fg_color=red, hover_color=yellow,
+                                 text_color="#ffffff", command=cmd)
+
+        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
+        red_btn("Ingresar", lambda: self._ok(on_success)).grid(row=0, column=1, padx=6)
+
+        # ENTER = Ingresar
+        self.bind("<Return>", lambda e: self._ok(on_success))
+        self.en_user.focus_set()
+
+    def _ok(self, cb):
+        u = self.en_user.get().strip()
+        p = self.en_pass.get().strip()
+        if not u or not p:
+            messagebox.showerror("Login", "Usuario y contraseña son obligatorios.", parent=self)
+            return
+        try:
+            cb(u, p)
+            self.grab_release()
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Login", f"Error de autenticación:\n{e}", parent=self)
+
+    def _cancel(self):
+        self.grab_release()
+        self.destroy()
+
 
 # ================================
 #  Formulario inline (Estudiantes)
@@ -14,7 +204,6 @@ class StudentInlineForm(ctk.CTkFrame):
     Modo: show_create() / show_edit(data). on_submit(data, mode), on_cancel()
     """
     def __init__(self, master, app, on_submit, on_cancel):
-        # Borde definido para separar visualmente el form
         super().__init__(
             master,
             fg_color=app.COLOR_PANEL,
@@ -28,7 +217,6 @@ class StudentInlineForm(ctk.CTkFrame):
 
         self.grid_columnconfigure((0,1,2,3), weight=1)
 
-        # Helper para entries con borde
         def BorderedEntry(parent, **kw):
             return ctk.CTkEntry(
                 parent,
@@ -118,8 +306,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self._fill(data or {})
         self.grid()
 
-    def hide(self):
-        self.grid_remove()
+    def hide(self): self.grid_remove()
 
     # Internos
     def _fill(self, d: dict):
@@ -239,7 +426,7 @@ class BaseModuleFrame(ctk.CTkFrame):
         red_btn("↻ Refrescar", on_refresh).grid(row=0, column=3, padx=8, pady=6, sticky="w")
         return tb
 
-    # --- versión simple (por compatibilidad con vistas que ya la llamaban)
+    # --- versión simple
     def _make_filters(self, master, p1="Buscar…", p2="Filtro"):
         bar = ctk.CTkFrame(master, fg_color="transparent")
         bar.grid_columnconfigure((0,1,2,3), weight=0)
@@ -339,7 +526,7 @@ class EstudiantesView(BaseModuleFrame):
     def __init__(self, master):
         super().__init__(master, "Estudiantes", "Gestione matrículas y datos del alumno")
 
-        # ----- Toolbar (sin eliminar global) -----
+        # Toolbar (sin eliminar global)
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
         tb.grid_columnconfigure((0,1,2), weight=0)
@@ -353,23 +540,21 @@ class EstudiantesView(BaseModuleFrame):
         red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
         red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
 
-        # ----- Form inline -----
+        # Form inline
         self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
         self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
         self.form.hide()
 
-        # ----- Filtros PRO -----
+        # Filtros
         filters = self._make_filters_pro(self, campos=("Documento","Nombre","Apellidos"),
                                          estados=("Todos","Activo","Inactivo","Suspendido"))
         filters.grid(row=3, column=0, padx=16, pady=(0,10), sticky="ew")
 
-        # ----- Tabla -----
+        # Tabla
         self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
         self.table.grid(row=4, column=0, padx=16, pady=(0,16), sticky="nsew")
         self.table.grid_columnconfigure(0, weight=1)
 
-        # Especificación de columnas (nombre, ancho mínimo, peso)
-        # Solo "Nombre" se estira (weight=1); las demás quedan fijas.
         self._COLS = [
             ("ID",          70,   0),
             ("Documento",   140,  0),
@@ -379,46 +564,32 @@ class EstudiantesView(BaseModuleFrame):
             ("Acciones",    120,  0),
         ]
 
-        # Estado
-        self._data: list[dict] = []
-        self._rows: list[ctk.CTkFrame] = []
-        self._selected_idx: int | None = None
-
-        self._seed_data()
+        self._data = []                       # sin datos demo
+        self._rows = []
+        self._selected_idx = None
         self._render_table()
 
-    # ----------------- Datos de ejemplo -----------------
-    def _seed_data(self):
-        self._data = [
-            {"id":1,"tipo_documento":"CC","numero_documento":"1001","nombres":"Laura","apellidos":"Gómez","estado":"Activo","actualizado":"hoy"},
-            {"id":2,"tipo_documento":"CC","numero_documento":"1002","nombres":"Mateo","apellidos":"Rojas","estado":"Inactivo","actualizado":"ayer"},
-            {"id":3,"tipo_documento":"TI","numero_documento":"2001","nombres":"Sara","apellidos":"Patiño","estado":"Activo","actualizado":"hace 2 días"},
-        ]
-
-    # ----------------- Util: aplicar specs de columnas -----------------
     def _apply_colspecs(self, container):
         for i, (_, minw, weight) in enumerate(self._COLS):
             container.grid_columnconfigure(i, minsize=minw, weight=weight)
 
-    # ----------------- Render de tabla alineada -----------------
     def _render_table(self):
-        for w in self.table.winfo_children():
-            w.destroy()
+        for w in self.table.winfo_children(): w.destroy()
         self._rows.clear()
         self._selected_idx = None
 
-        # Header
         header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
         header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
         self._apply_colspecs(header)
-
         for i, (nombre, _, _) in enumerate(self._COLS):
-            ctk.CTkLabel(
-                header, text=nombre, text_color=self.app.COLOR_MUTED,
-                anchor="w", justify="left"
-            ).grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
+                         anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
 
-        # Filas
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+            return
+
         for r, stu in enumerate(self._data, start=1):
             row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
             row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
@@ -433,38 +604,25 @@ class EstudiantesView(BaseModuleFrame):
                 stu.get("actualizado",""),
             ]
 
-            # Celdas de texto (alineadas a la izquierda y pegadas a la grilla)
             for i, val in enumerate(values):
-                lbl = ctk.CTkLabel(
-                    row, text=val, text_color=self.app.COLOR_TEXT,
-                    anchor="w", justify="left"
-                )
+                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
+                                   anchor="w", justify="left")
                 lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
                 lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
 
-            # Acciones con íconos (✎ y 🗑️)
             actions = ctk.CTkFrame(row, fg_color="transparent")
             actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
 
             def icon_btn(symbol, cmd):
-                # Botón compacto solo-ícono
-                return ctk.CTkButton(
-                    actions, text=symbol, width=36, height=32, corner_radius=10,
-                    fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                    text_color="#ffffff", command=cmd
-                )
-
+                return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=10,
+                                     fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                     text_color="#ffffff", command=cmd)
             icon_btn("✎", lambda idx=r-1: self._edit_row(idx)).grid(row=0, column=0, padx=4)
             icon_btn("🗑️", lambda idx=r-1: self._delete_row(idx)).grid(row=0, column=1, padx=4)
 
             row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
             self._rows.append(row)
 
-        if not self._data:
-            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
-                .grid(row=99, column=0, padx=8, pady=12, sticky="w")
-
-    # ----------------- Selección visual -----------------
     def _select_row(self, idx: int):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
             self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
@@ -472,7 +630,6 @@ class EstudiantesView(BaseModuleFrame):
             self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
             self._selected_idx = idx
 
-    # ----------------- Acciones por fila -----------------
     def _edit_row(self, idx: int):
         self._select_row(idx)
         self.form.show_edit(self._data[idx])
@@ -489,9 +646,7 @@ class EstudiantesView(BaseModuleFrame):
         else:
             self.app._info("Operación cancelada.")
 
-    # ----------------- Acciones toolbar -----------------
-    def _nuevo(self):
-        self.form.show_create()
+    def _nuevo(self): self.form.show_create()
 
     def _editar(self):
         if self._selected_idx is None:
@@ -500,17 +655,19 @@ class EstudiantesView(BaseModuleFrame):
         self._edit_row(self._selected_idx)
 
     def _refrescar(self):
+        # Aquí podrías llamar a tu API para estudiantes si ya la tienes:
+        # data = self.app.api.get_all("estudiantes") or []
+        # self._data = data
         self._render_table()
 
-    def _cancel_inline(self):
-        pass
+    def _cancel_inline(self): pass
 
     def _submit_inline(self, data: dict, mode: str):
         if mode == "create":
-            new_id = max([s["id"] for s in self._data], default=0) + 1
+            new_id = max([s.get("id",0) for s in self._data], default=0) + 1
             data = {**data, "id": new_id, "actualizado": "hoy"}
             self._data.append(data)
-            self.app._info("Estudiante creado correctamente.")
+            self.app._info("Estudiante creado (local).")
         else:
             idx = self._selected_idx
             if idx is None:
@@ -519,9 +676,8 @@ class EstudiantesView(BaseModuleFrame):
             old = self._data[idx]
             data = {**old, **data, "actualizado": "hoy"}
             self._data[idx] = data
-            self.app._info("Estudiante actualizado correctamente.")
+            self.app._info("Estudiante actualizado (local).")
         self._render_table()
-
 
 
 # --- Otras vistas (placeholders con botones rojos y filtros) ---
@@ -550,13 +706,75 @@ class VehiculosView(BaseModuleFrame):
             on_new=lambda: self.app._info("Nuevo vehículo"),
             on_edit=lambda: self.app._info("Editar vehículo"),
             on_delete=lambda: self.app._confirm_delete("vehículo"),
-            on_refresh=lambda: self.app._info("Refrescar vehículos")
+            on_refresh=self._refrescar
         )
         toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Placa","Tipo"), estados=("Todos","Activo","Baja"))
+        filters = self._make_filters_pro(self, campos=("Placa","Marca"), estados=("Todos","Activo","Baja"))
         filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
-        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+
+        # Tabla simple para lista de vehículos desde API (si hay)
+        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        self.table.grid_columnconfigure(0, weight=1)
+
+        self._COLS = [
+            ("Placa", 120, 0),
+            ("Marca", 160, 0),
+            ("Modelo", 160, 0),
+            ("Año",   100, 0),
+            ("Estado",140, 1),
+        ]
+        self._data = []
+        self._render_table()
+
+    def _apply_colspecs(self, container):
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            container.grid_columnconfigure(i, minsize=minw, weight=weight)
+
+    def _render_table(self):
+        for w in self.table.winfo_children(): w.destroy()
+
+        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
+        self._apply_colspecs(header)
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
+                         anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+            return
+
+        for r, v in enumerate(self._data, start=1):
+            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            self._apply_colspecs(row)
+
+            values = [v.get("placa",""), v.get("marca",""), v.get("modelo",""),
+                      str(v.get("anio","")), v.get("estado","")]
+            for i, val in enumerate(values):
+                ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
+                             anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+    def _refrescar(self):
+        try:
+            # GET /api/vehiculos
+            data = self.app.api.get_all("vehiculos") or []
+            # Asegurar lista
+            if isinstance(data, dict):  # por si backend devuelve {content:[...]} etc.
+                # Intenta extraer una lista
+                for key in ("content","items","vehiculos","data"):
+                    if isinstance(data.get(key), list):
+                        data = data[key]
+                        break
+                else:
+                    data = []
+            self._data = data
+            self._render_table()
+            self.app._info(f"Vehículos: {len(self._data)} registros.")
+        except Exception as e:
+            messagebox.showerror("Vehículos", f"No fue posible consultar la API:\n{e}", parent=self)
 
 
 class ClasesView(BaseModuleFrame):
@@ -570,7 +788,7 @@ class ClasesView(BaseModuleFrame):
             on_refresh=lambda: self.app._info("Refrescar clases")
         )
         toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Alumno","Instructor"), estados=("Todos","Pendiente","Dictada","Cancelada"))
+        filters = self._make_filters_pro(self, campos=("Alumno","Instructor"), estados=("Todos","Programada","Dictada","Cancelada"))
         filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
         table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
         table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
@@ -655,6 +873,18 @@ class HaroDesktopApp(ctk.CTk):
     _SCRIPT_DIR = Path(__file__).resolve().parent
     _LOGO_PATH  = _SCRIPT_DIR / "media" / "LogoHARO.png"
 
+    # API
+    API_BASE_URL = "http://localhost:8081/api"
+    AUTH_MODE = "basic"         # si usas JWT, cambia a "jwt"
+    JWT_LOGIN_PATH = "auth/login"
+    JWT_USER_FIELD = "username"
+    JWT_PASS_FIELD = "password"
+    JWT_TOKEN_FIELD = "token"
+
+    # No hardcodees credenciales:
+    API_USER_DEFAULT = ""   # opcional autollenar
+    API_PASS_DEFAULT = ""   # opcional
+
     def __init__(self):
         super().__init__()
         ctk.set_appearance_mode("dark")
@@ -665,10 +895,13 @@ class HaroDesktopApp(ctk.CTk):
         self.minsize(1060, 640)
         self.configure(fg_color=self.COLOR_BG)
 
-        # Estado UI
+        # Estado UI / credenciales
         self.current_view = None
         self.sidebar_visible = True
         self.logo_image = None
+        self.api_user = None
+        self.api_pass = None
+        self.api: ApiClient | None = None
 
         # Atajos
         self.bind_all("<Escape>", self._on_escape)
@@ -680,12 +913,14 @@ class HaroDesktopApp(ctk.CTk):
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
 
-        # Construcción UI
+        # Construcción UI fija
         self._build_topbar()
         self._build_sidebar()
         self._build_content_area()
-        self._register_views()
-        self.switch_view("Estudiantes")
+
+        # Mostrar login antes de todo
+        self.withdraw()
+        self.after(50, self._show_login)
 
     # ----------------------- Helpers de recursos ----------------------- #
     @staticmethod
@@ -700,7 +935,6 @@ class HaroDesktopApp(ctk.CTk):
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         for x in range(64):
             for y in range(64):
-            # círculo rojo
                 dx, dy = x-32, y-32
                 if dx*dx + dy*dy <= 30*30:
                     img.putpixel((x, y), (229, 57, 53, 255))
@@ -727,7 +961,7 @@ class HaroDesktopApp(ctk.CTk):
     def _build_topbar(self):
         self.topbar = ctk.CTkFrame(self, height=self.TOPBAR_H, fg_color=self.COLOR_PANEL, corner_radius=0)
         self.topbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        for col in (0,1,2,3,4,5):
+        for col in (0,1,2,3,4,5,6,7):
             self.topbar.grid_columnconfigure(col, weight=0)
         self.topbar.grid_columnconfigure(2, weight=1)
 
@@ -761,10 +995,17 @@ class HaroDesktopApp(ctk.CTk):
                       fg_color=self.COLOR_RED, hover_color=self.COLOR_YELLOW,
                       text_color="#ffffff", command=self._sync)\
             .grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
+
         ctk.CTkButton(self.topbar, text="● Tema", height=36, corner_radius=12,
                       fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
                       text_color=self.COLOR_TEXT, command=self._toggle_theme)\
             .grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
+
+        # Botón de sesión
+        ctk.CTkButton(self.topbar, text="Cerrar sesión", height=36, corner_radius=12,
+                      fg_color=self.COLOR_RED, hover_color=self.COLOR_YELLOW,
+                      text_color="#ffffff", command=self._logout)\
+            .grid(row=0, column=6, padx=(0, 12), pady=12, sticky="e")
 
     # ----------------------- Sidebar ----------------------- #
     def _build_sidebar(self):
@@ -815,11 +1056,53 @@ class HaroDesktopApp(ctk.CTk):
             "Reportes": ReportesView(self.content),
         }
 
+    # ----------------------- Login / Sesión ----------------------- #
+    def _show_login(self):
+        # Diálogo modal
+        dlg = LoginDialog(self, on_success=self._on_login_ok, brand=self.BRAND_TEXT)
+        # Autollenado opcional:
+        if self.API_USER_DEFAULT:
+            dlg.en_user.insert(0, self.API_USER_DEFAULT)
+        if self.API_PASS_DEFAULT:
+            dlg.en_pass.insert(0, self.API_PASS_DEFAULT)
+
+    def _on_login_ok(self, user, password):
+        # Construir cliente API según modo
+        self.api_user = user
+        self.api_pass = password
+        self.api = ApiClient(
+            self, self.API_BASE_URL, user, password,
+            auth_mode=self.AUTH_MODE,
+            jwt_login_path=self.JWT_LOGIN_PATH,
+            user_field=self.JWT_USER_FIELD,
+            pass_field=self.JWT_PASS_FIELD,
+            token_field=self.JWT_TOKEN_FIELD
+        )
+        # Si autenticó (o Basic), mostramos app y registramos vistas
+        if not hasattr(self, "views"):
+            self._register_views()
+        self.deiconify()
+        self.switch_view("Estudiantes")
+
+    def _logout(self):
+        if messagebox.askyesno("Sesión", "¿Cerrar sesión y volver a ingresar?"):
+            self.api = None
+            self.api_user = None
+            self.api_pass = None
+            # Oculta vistas actuales
+            if hasattr(self, "current_view") and self.current_view:
+                self.current_view.grid_remove()
+                self.current_view = None
+            self.withdraw()
+            self.after(50, self._show_login)
+
     # ----------------------- Navegación ----------------------- #
     def _nav_callback(self, name):
         self.switch_view(name)
 
     def switch_view(self, name: str):
+        if getattr(self, "views", None) is None:
+            return
         if self.current_view is not None:
             self.current_view.grid_remove()
         for _, b in self.nav_buttons.items():
