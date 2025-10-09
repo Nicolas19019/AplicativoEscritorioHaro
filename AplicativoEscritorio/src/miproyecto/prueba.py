@@ -12,6 +12,37 @@ try:
 except Exception:
     requests = None
 
+def centrar_ventana(win, ancho=None, alto=None):
+    """
+    Centra una ventana de CustomTkinter/Tkinter en cualquier resolución.
+    Compatible con escalado DPI y tamaños grandes (p. ej. 1180x720).
+    """
+    def _do_center(_=None):
+        win.update_idletasks()
+
+        # Usa el tamaño actual o el especificado
+        w = ancho or win.winfo_width()
+        h = alto or win.winfo_height()
+        sw = win.winfo_screenwidth()
+        sh = win.winfo_screenheight()
+
+        try:
+            # Ajuste DPI
+            scale = float(win.tk.call('tk', 'scaling'))
+            if scale and scale != 1.0:
+                sw = int(sw * (1 / scale))
+                sh = int(sh * (1 / scale))
+        except Exception:
+            pass
+
+        x = (sw // 2) - (w // 2)
+        y = (sh // 2) - (h // 2)
+        win.geometry(f"{w}x{h}+{x}+{y}")
+        win.update()
+
+    # Espera a que la ventana se "dibuje" realmente antes de centrar
+    win.bind("<Map>", _do_center)
+
 
 # ==========================================
 #  Cliente REST con Basic Auth (y JWT opc.)
@@ -119,7 +150,9 @@ class LoginDialog(ctk.CTkToplevel):
     def __init__(self, master, on_success, brand="CEA HARO"):
         super().__init__(master)
         self.title("Inicio de sesión")
-        self.geometry("380x260")
+        self.geometry("380x300")
+        centrar_ventana(self, 380, 300)
+
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()  # modal
@@ -201,7 +234,9 @@ class LoginDialog(ctk.CTkToplevel):
 class StudentInlineForm(ctk.CTkFrame):
     """
     Formulario en línea (colapsable) para crear/editar estudiante.
-    Modo: show_create() / show_edit(data). on_submit(data, mode), on_cancel()
+    Devuelve SIEMPRE campos en camelCase como los pide la API.
+    - on_submit(data: dict, mode: "create" | "edit")
+    - on_cancel()
     """
     def __init__(self, master, app, on_submit, on_cancel):
         super().__init__(
@@ -227,23 +262,23 @@ class StudentInlineForm(ctk.CTkFrame):
             )
 
         # Fila 0: Documento
-        ctk.CTkLabel(self, text="Tipo Doc").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
+        ctk.CTkLabel(self, text="Tipo Documento").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
         self.cb_tipo = ctk.CTkComboBox(self, values=["CC","TI","CE","PA"], width=120)
         self.cb_tipo.set("CC")
         self.cb_tipo.grid(row=0, column=1, padx=12, pady=(12,6), sticky="w")
 
-        ctk.CTkLabel(self, text="Núm. Doc").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        ctk.CTkLabel(self, text="Número Documento").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
         self.en_doc = BorderedEntry(self, placeholder_text="1012345678")
         self.en_doc.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
 
-        # Fila 1: Nombres
-        ctk.CTkLabel(self, text="Nombres").grid(row=1, column=0, padx=12, pady=6, sticky="w")
-        self.en_nombres = BorderedEntry(self, placeholder_text="Nombres")
-        self.en_nombres.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+        # Fila 1: Nombre / Apellido
+        ctk.CTkLabel(self, text="Nombre").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.en_nombre = BorderedEntry(self, placeholder_text="Nombre")
+        self.en_nombre.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
 
-        ctk.CTkLabel(self, text="Apellidos").grid(row=1, column=2, padx=12, pady=6, sticky="w")
-        self.en_apellidos = BorderedEntry(self, placeholder_text="Apellidos")
-        self.en_apellidos.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+        ctk.CTkLabel(self, text="Apellido").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        self.en_apellido = BorderedEntry(self, placeholder_text="Apellido")
+        self.en_apellido.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
 
         # Fila 2: Contacto
         ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=0, padx=12, pady=6, sticky="w")
@@ -254,36 +289,19 @@ class StudentInlineForm(ctk.CTkFrame):
         self.en_mail = BorderedEntry(self, placeholder_text="correo@dominio.com")
         self.en_mail.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
 
-        # Fila 3: Dirección / Fecha
+        # Fila 3: Dirección / Estado
         ctk.CTkLabel(self, text="Dirección").grid(row=3, column=0, padx=12, pady=6, sticky="w")
         self.en_dir = BorderedEntry(self, placeholder_text="Dirección")
         self.en_dir.grid(row=3, column=1, padx=12, pady=6, sticky="ew")
 
-        ctk.CTkLabel(self, text="Fecha Nac. (YYYY-MM-DD)").grid(row=3, column=2, padx=12, pady=6, sticky="w")
-        self.en_fn = BorderedEntry(self, placeholder_text="2001-05-17")
-        self.en_fn.grid(row=3, column=3, padx=12, pady=6, sticky="ew")
-
-        # Fila 4: Programa / Estado
-        ctk.CTkLabel(self, text="Categoría").grid(row=4, column=0, padx=12, pady=6, sticky="w")
-        self.cb_cat = ctk.CTkComboBox(self, values=["A1","A2","B1","B2","C1","C2"], width=120)
-        self.cb_cat.set("A2")
-        self.cb_cat.grid(row=4, column=1, padx=12, pady=6, sticky="w")
-
-        ctk.CTkLabel(self, text="Estado").grid(row=4, column=2, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Estado").grid(row=3, column=2, padx=12, pady=6, sticky="w")
         self.cb_estado = ctk.CTkComboBox(self, values=["Activo","Inactivo","Suspendido"], width=140)
         self.cb_estado.set("Activo")
-        self.cb_estado.grid(row=4, column=3, padx=12, pady=6, sticky="w")
+        self.cb_estado.grid(row=3, column=3, padx=12, pady=6, sticky="w")
 
-        # Fila 5: Observaciones
-        ctk.CTkLabel(self, text="Observaciones").grid(row=5, column=0, padx=12, pady=6, sticky="nw")
-        self.tx_obs = ctk.CTkTextbox(self, height=80, corner_radius=10,
-                                     fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
-                                     border_width=2, border_color=self.app.COLOR_DIVIDER)
-        self.tx_obs.grid(row=5, column=1, columnspan=3, padx=12, pady=6, sticky="ew")
-
-        # Fila 6: Botones (rojos)
+        # Fila 4: Botones
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=6, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+        btns.grid(row=4, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
 
         def red_btn(text, cmd):
             return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
@@ -301,7 +319,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self._fill({})
         self.grid()
 
-    def show_edit(self, data: dict):
+    def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
         self.grid()
@@ -309,53 +327,46 @@ class StudentInlineForm(ctk.CTkFrame):
     def hide(self): self.grid_remove()
 
     # Internos
-    def _fill(self, d: dict):
-        for w in (self.en_doc, self.en_nombres, self.en_apellidos, self.en_tel, self.en_mail, self.en_dir, self.en_fn):
+    def _fill(self, d):
+        for w in (self.en_doc, self.en_nombre, self.en_apellido, self.en_tel, self.en_mail, self.en_dir):
             w.delete(0, "end")
-        self.tx_obs.delete("1.0", "end")
-
-        self.cb_tipo.set(d.get("tipo_documento", "CC"))
-        self.en_doc.insert(0, d.get("numero_documento", ""))
-        self.en_nombres.insert(0, d.get("nombres", ""))
-        self.en_apellidos.insert(0, d.get("apellidos", ""))
+        self.cb_tipo.set(d.get("tipoDocumento", "CC"))
+        self.en_doc.insert(0, d.get("numeroDocumento", ""))
+        self.en_nombre.insert(0, d.get("nombre", ""))
+        self.en_apellido.insert(0, d.get("apellido", ""))
         self.en_tel.insert(0, d.get("telefono", ""))
         self.en_mail.insert(0, d.get("email", ""))
         self.en_dir.insert(0, d.get("direccion", ""))
-        self.en_fn.insert(0, d.get("fecha_nacimiento", ""))
-        self.cb_cat.set(d.get("categoria_licencia", "A2"))
         self.cb_estado.set(d.get("estado", "Activo"))
-        if d.get("observaciones"):
-            self.tx_obs.insert("1.0", d.get("observaciones"))
 
-    def _collect(self) -> dict:
+    def _collect(self):
+        # Devuelve CAMELCASE, exactamente como tu API
         return {
-            "tipo_documento": self.cb_tipo.get().strip(),
-            "numero_documento": self.en_doc.get().strip(),
-            "nombres": self.en_nombres.get().strip(),
-            "apellidos": self.en_apellidos.get().strip(),
+            "tipoDocumento": self.cb_tipo.get().strip(),
+            "numeroDocumento": self.en_doc.get().strip(),
+            "nombre": self.en_nombre.get().strip(),
+            "apellido": self.en_apellido.get().strip(),
             "telefono": self.en_tel.get().strip(),
             "email": self.en_mail.get().strip(),
             "direccion": self.en_dir.get().strip(),
-            "fecha_nacimiento": self.en_fn.get().strip(),
-            "categoria_licencia": self.cb_cat.get().strip(),
             "estado": self.cb_estado.get().strip(),
-            "observaciones": self.tx_obs.get("1.0", "end").strip(),
+            # si algún día quieres usarlos desde UI, agrega inputs;
+            # por ahora deben ir null según tu solicitud:
+            "usuario": None,
+            "contrasena": None,
         }
 
-    def _validate(self, d: dict) -> tuple[bool, str]:
-        req = ["tipo_documento","numero_documento","nombres","apellidos","telefono","email","categoria_licencia","estado"]
+    def _validate(self, d):
+        req = ["tipoDocumento","numeroDocumento","nombre","apellido","telefono","email","estado"]
         for k in req:
             if not d.get(k):
-                return False, f"El campo '{k.replace('_',' ').title()}' es obligatorio."
-        if not d["numero_documento"].isdigit():
+                return False, "El campo '{}' es obligatorio.".format(k)
+        if not d["numeroDocumento"].isdigit():
             return False, "El Número de Documento debe ser numérico."
         if d["telefono"] and not d["telefono"].isdigit():
             return False, "El Teléfono debe ser numérico."
         if "@" not in d["email"] or "." not in d["email"].split("@")[-1]:
             return False, "Email no válido."
-        fn = d.get("fecha_nacimiento","")
-        if fn and (len(fn)!=10 or fn[4]!="-" or fn[7]!="-"):
-            return False, "Fecha de nacimiento inválida. Use YYYY-MM-DD."
         return True, ""
 
     def _save(self):
@@ -372,6 +383,7 @@ class StudentInlineForm(ctk.CTkFrame):
         if self.on_cancel:
             self.on_cancel()
         self.hide()
+
 
 
 # ===================================
@@ -519,14 +531,11 @@ class BaseModuleFrame(ctk.CTkFrame):
         return panel
 
 
-# ======================
-#  Vistas / Módulos
-# ======================
 class EstudiantesView(BaseModuleFrame):
     def __init__(self, master):
         super().__init__(master, "Estudiantes", "Gestione matrículas y datos del alumno")
 
-        # Toolbar (sin eliminar global)
+        # Toolbar
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
         tb.grid_columnconfigure((0,1,2), weight=0)
@@ -540,7 +549,7 @@ class EstudiantesView(BaseModuleFrame):
         red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
         red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
 
-        # Form inline
+        # Form inline (ya devuelve CAMELCASE)
         self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
         self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
         self.form.hide()
@@ -556,19 +565,22 @@ class EstudiantesView(BaseModuleFrame):
         self.table.grid_columnconfigure(0, weight=1)
 
         self._COLS = [
-            ("ID",          70,   0),
-            ("Documento",   140,  0),
+            ("Documento",   160,  0),
             ("Nombre",      320,  1),
             ("Estado",      140,  0),
-            ("Actualizado", 140,  0),
+            ("Email",       220,  0),
             ("Acciones",    120,  0),
         ]
 
-        self._data = []                       # sin datos demo
+        # Los datos se mantienen en CAMELCASE (igual que la API)
+        self._data = []
         self._rows = []
         self._selected_idx = None
-        self._render_table()
 
+        self._render_table()
+        self.after(150, self._refrescar)
+
+    # -------- helpers de tabla --------
     def _apply_colspecs(self, container):
         for i, (_, minw, weight) in enumerate(self._COLS):
             container.grid_columnconfigure(i, minsize=minw, weight=weight)
@@ -595,13 +607,12 @@ class EstudiantesView(BaseModuleFrame):
             row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
             self._apply_colspecs(row)
 
-            full_name = f"{stu.get('nombres','')} {stu.get('apellidos','')}".strip()
+            full_name = "{} {}".format(stu.get("nombre",""), stu.get("apellido","")).strip()
             values = [
-                str(stu.get("id","")),
-                stu.get("numero_documento",""),
+                stu.get("numeroDocumento",""),
                 full_name,
                 stu.get("estado",""),
-                stu.get("actualizado",""),
+                stu.get("email",""),
             ]
 
             for i, val in enumerate(values):
@@ -611,7 +622,7 @@ class EstudiantesView(BaseModuleFrame):
                 lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
 
             actions = ctk.CTkFrame(row, fg_color="transparent")
-            actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+            actions.grid(row=0, column=4, padx=8, pady=6, sticky="e")
 
             def icon_btn(symbol, cmd):
                 return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=10,
@@ -623,30 +634,16 @@ class EstudiantesView(BaseModuleFrame):
             row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
             self._rows.append(row)
 
-    def _select_row(self, idx: int):
+    def _select_row(self, idx):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
             self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
         if 0 <= idx < len(self._rows):
             self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
             self._selected_idx = idx
 
-    def _edit_row(self, idx: int):
-        self._select_row(idx)
-        self.form.show_edit(self._data[idx])
-
-    def _delete_row(self, idx: int):
-        self._select_row(idx)
-        stu = self._data[idx]
-        full_name = f"{stu.get('nombres','')} {stu.get('apellidos','')}".strip()
-        doc = stu.get("numero_documento", "")
-        if messagebox.askyesno("Confirmar", f"¿Eliminar al estudiante:\n{full_name} (Doc: {doc})?"):
-            del self._data[idx]
-            self._render_table()
-            self.app._info("Estudiante eliminado.")
-        else:
-            self.app._info("Operación cancelada.")
-
-    def _nuevo(self): self.form.show_create()
+    # -------- acciones UI --------
+    def _nuevo(self):
+        self.form.show_create()
 
     def _editar(self):
         if self._selected_idx is None:
@@ -654,31 +651,105 @@ class EstudiantesView(BaseModuleFrame):
             return
         self._edit_row(self._selected_idx)
 
+    def _edit_row(self, idx):
+        self._select_row(idx)
+        self.form.show_edit(self._data[idx])  # el form espera camelCase
+
+    def _cancel_inline(self):
+        pass
+
+    # -------- API: listar / crear / actualizar / eliminar --------
     def _refrescar(self):
-        # Aquí podrías llamar a tu API para estudiantes si ya la tienes:
-        # data = self.app.api.get_all("estudiantes") or []
-        # self._data = data
-        self._render_table()
-
-    def _cancel_inline(self): pass
-
-    def _submit_inline(self, data: dict, mode: str):
-        if mode == "create":
-            new_id = max([s.get("id",0) for s in self._data], default=0) + 1
-            data = {**data, "id": new_id, "actualizado": "hoy"}
-            self._data.append(data)
-            self.app._info("Estudiante creado (local).")
-        else:
-            idx = self._selected_idx
-            if idx is None:
-                self.app._info("Selecciona un estudiante para actualizar.")
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
                 return
-            old = self._data[idx]
-            data = {**old, **data, "actualizado": "hoy"}
-            self._data[idx] = data
-            self.app._info("Estudiante actualizado (local).")
-        self._render_table()
+            raw = self.app.api.get_all("estudiantes") or []
+            if isinstance(raw, dict):
+                for key in ("content","items","estudiantes","data","results"):
+                    lst = raw.get(key)
+                    if isinstance(lst, list):
+                        raw = lst
+                        break
+                else:
+                    raw = []
+            self._data = raw or []
+            self._render_table()
+            self.app._info("Estudiantes: {} registros.".format(len(self._data)))
+        except Exception as e:
+            messagebox.showerror("Estudiantes", "No fue posible consultar la API:\n{}".format(e), parent=self)
 
+    def _submit_inline(self, payload, mode):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+
+            payload = dict(payload)
+
+            # --- FIX RÁPIDO: si son None, genera valores no nulos ---
+            doc = (payload.get("numeroDocumento") or "").strip()
+            if not doc:
+                messagebox.showerror("Validación", "El Número de Documento es obligatorio.", parent=self)
+                return
+
+            if payload.get("usuario") in (None, ""):
+                payload["usuario"] = doc  # p.ej. "1128962248"
+            if payload.get("contrasena") in (None, ""):
+                payload["contrasena"] = doc  # temporal (o "Temp"+doc[-4:])
+
+            if mode == "create":
+                self.app.api.create("estudiantes", payload)
+                self.app._info("Estudiante creado.")
+            else:
+                idx = self._selected_idx
+                if idx is None:
+                    self.app._info("Selecciona un estudiante para actualizar.")
+                    return
+                original_doc = self._data[idx].get("numeroDocumento", "")
+                if not original_doc:
+                    self.app._info("No se pudo determinar el número de documento original.")
+                    return
+                # 🔧 CAMBIO AQUÍ: usa la ruta con /documento/
+                student_id = self._data[idx].get("id") or self._data[idx].get("idEstudiante")
+                if not student_id:
+                    self.app._info("No se encontró el ID del estudiante.")
+                    return
+                self.app.api.update("estudiantes", student_id, payload)
+                self.app._info("Estudiante actualizado.")
+            self._refrescar()
+
+        except Exception as e:
+            messagebox.showerror("Estudiantes", f"Operación fallida:\n{e}", parent=self)
+
+
+    def _delete_row(self, idx):
+        self._select_row(idx)
+        stu = self._data[idx]
+        full_name = "{} {}".format(stu.get("nombre",""), stu.get("apellido","")).strip()
+        doc = stu.get("numeroDocumento", "")
+        if not doc:
+            self.app._info("El registro no tiene 'numeroDocumento'.")
+            return
+        if not messagebox.askyesno("Confirmar", "¿Eliminar al estudiante:\n{} (Doc: {})?".format(full_name, doc)):
+            self.app._info("Operación cancelada.")
+            return
+
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            # 🔧 CAMBIO AQUÍ: usa la ruta con /documento/
+            student_id = stu.get("id") or stu.get("idEstudiante")
+            if not student_id:
+                self.app._info("No se encontró el ID del estudiante.")
+                return
+            self.app.api.delete("estudiantes", student_id)
+
+            self.app._info("Estudiante eliminado.")
+            self._refrescar()
+        except Exception as e:
+            messagebox.showerror("Estudiantes", "No fue posible eliminar:\n{}".format(e), parent=self)
 
 # --- Otras vistas (placeholders con botones rojos y filtros) ---
 class InstructoresView(BaseModuleFrame):
@@ -892,6 +963,8 @@ class HaroDesktopApp(ctk.CTk):
 
         self.title(self.APP_TITLE)
         self.geometry(f"{self.APP_W}x{self.APP_H}")
+        centrar_ventana(self, self.APP_W, self.APP_H)
+
         self.minsize(1060, 640)
         self.configure(fg_color=self.COLOR_BG)
 
