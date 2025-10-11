@@ -43,6 +43,10 @@ def centrar_ventana(win, ancho=None, alto=None):
     # Espera a que la ventana se "dibuje" realmente antes de centrar
     win.bind("<Map>", _do_center)
 
+class AuthError(RuntimeError):
+    pass
+
+
 
 # ==========================================
 #  Cliente REST con Basic Auth (y JWT opc.)
@@ -77,31 +81,52 @@ class ApiClient:
     def _login_jwt(self):
         payload = {self.user_field: self.user, self.pass_field: self.password}
         url = f"{self.base_url}/{self.jwt_login_path.lstrip('/')}"
+
         def do_post(u, data):
             if requests:
-                r = requests.post(u, json=data, timeout=15,
-                                  headers={"Accept":"application/json","Content-Type":"application/json"})
+                r = requests.post(
+                    u, json=data, timeout=15,
+                    headers={"Accept": "application/json", "Content-Type": "application/json"}
+                )
+                # 401/403 => credenciales inválidas o sin permisos
+                if r.status_code in (401, 403):
+                    raise AuthError(f"Credenciales inválidas (HTTP {r.status_code}).")
                 if r.status_code >= 400:
                     raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
                 return r.json() if r.text else {}
             else:
-                import urllib.request, json as _json
-                req = urllib.request.Request(u, data=_json.dumps(data).encode("utf-8"), method="POST")
-                req.add_header("Accept","application/json")
-                req.add_header("Content-Type","application/json")
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    txt = resp.read().decode("utf-8")
-                    return _json.loads(txt) if txt else {}
+                import urllib.request, urllib.error, json as _json
+                req = urllib.request.Request(
+                    u, data=_json.dumps(data).encode("utf-8"), method="POST"
+                )
+                req.add_header("Accept", "application/json")
+                req.add_header("Content-Type", "application/json")
+                try:
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        txt = resp.read().decode("utf-8")
+                        return _json.loads(txt) if txt else {}
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode("utf-8")
+                    if e.code in (401, 403):
+                        raise AuthError(f"Credenciales inválidas (HTTP {e.code}): {body}")
+                    raise RuntimeError(f"HTTP {e.code}: {body}")
+
         resp = do_post(url, payload) or {}
         token = resp.get(self.token_field)
         if not token:
-            raise RuntimeError("No se recibió token JWT en la respuesta.")
+            # Tratamos ausencia de token como fallo de autenticación
+            raise AuthError("No se recibió token JWT en la respuesta.")
         self._bearer = f"Bearer {token}"
+
 
     def _request(self, method, path, data=None, params=None):
         url = f"{self.base_url}/{path.lstrip('/')}"
-        headers = {"Accept":"application/json","Content-Type":"application/json"}
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
         if self.auth_mode == "jwt":
+            if not self._bearer:
+                # No se ha autenticado correctamente
+                raise AuthError("No autenticado: falta Bearer token.")
             headers["Authorization"] = self._bearer
         else:
             headers["Authorization"] = self._basic_header
@@ -109,9 +134,13 @@ class ApiClient:
         if requests:
             func = getattr(requests, method.lower())
             resp = func(url, headers=headers, json=data, params=params, timeout=15)
+
+            if resp.status_code in (401, 403):
+                raise AuthError(f"No autorizado (HTTP {resp.status_code}).")
             if resp.status_code >= 400:
                 raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
-            if resp.text and resp.headers.get("Content-Type","").startswith("application/json"):
+
+            if resp.text and resp.headers.get("Content-Type", "").startswith("application/json"):
                 return resp.json()
             return None
         else:
@@ -123,7 +152,8 @@ class ApiClient:
                 qs = urlencode(params)
                 url = url + ("&" if "?" in url else "?") + qs
             req = urllib.request.Request(url, data=payload, method=method.upper())
-            for k,v in headers.items(): req.add_header(k, v)
+            for k, v in headers.items():
+                req.add_header(k, v)
             try:
                 with urllib.request.urlopen(req, timeout=15) as resp:
                     content = resp.read().decode("utf-8")
@@ -135,7 +165,10 @@ class ApiClient:
                     return None
             except urllib.error.HTTPError as e:
                 body = e.read().decode("utf-8")
+                if e.code in (401, 403):
+                    raise AuthError(f"No autorizado (HTTP {e.code}): {body}")
                 raise RuntimeError(f"HTTP {e.code}: {body}")
+
 
     # CRUD helpers
     def get_all(self, resource, params=None): return self._request("GET", resource, params=params)
@@ -152,7 +185,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.title("Inicio de sesión")
         self.geometry("380x300")
         centrar_ventana(self, 380, 300)
-
+        self._busy = False 
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()  # modal
@@ -216,12 +249,29 @@ class LoginDialog(ctk.CTkToplevel):
         if not u or not p:
             messagebox.showerror("Login", "Usuario y contraseña son obligatorios.", parent=self)
             return
+
+        # ✅ evita múltiples envíos con Enter/click
+        if getattr(self, "_busy", False):
+            return
+        self._busy = True
         try:
-            cb(u, p)
-            self.grab_release()
-            self.destroy()
+            cb(u, p)  # debe lanzar AuthError en credenciales inválidas
+        except AuthError as e:
+            messagebox.showerror("Login", str(e), parent=self)
+            self._busy = False
+            return
         except Exception as e:
             messagebox.showerror("Login", f"Error de autenticación:\n{e}", parent=self)
+            self._busy = False
+            return
+
+        # éxito
+        self._busy = False
+        self.grab_release()
+        self.destroy()
+
+
+
 
     def _cancel(self):
         self.grab_release()
@@ -384,7 +434,468 @@ class StudentInlineForm(ctk.CTkFrame):
             self.on_cancel()
         self.hide()
 
+class InstructorInlineForm(ctk.CTkFrame):
+    """
+    Formulario en línea para crear/editar instructor.
+    Usa las claves EXACTAS del JSON del backend:
+    { "id", "cedula", "nombre", "apellido", "especialidad", "telefono", "email" }
+    """
+    def __init__(self, master, app, on_submit, on_cancel):
+        super().__init__(
+            master,
+            fg_color=app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=app.COLOR_DIVIDER
+        )
+        self.app = app
+        self.on_submit = on_submit
+        self.on_cancel = on_cancel
 
+        self.grid_columnconfigure((0,1,2,3), weight=1)
+
+        def BorderedEntry(parent, **kw):
+            return ctk.CTkEntry(
+                parent,
+                height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                **kw
+            )
+
+        # Fila 0: Cédula
+        ctk.CTkLabel(self, text="Cédula").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
+        self.en_ced = BorderedEntry(self, placeholder_text="1012345678")
+        self.en_ced.grid(row=0, column=1, padx=12, pady=(12,6), sticky="ew")
+
+        # Fila 0b: Especialidad
+        ctk.CTkLabel(self, text="Especialidad").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        self.en_esp = BorderedEntry(self, placeholder_text="Categoría B1 / Teoría / etc.")
+        self.en_esp.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+
+        # Fila 1: Nombre / Apellido
+        ctk.CTkLabel(self, text="Nombre").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.en_nom = BorderedEntry(self, placeholder_text="Nombre")
+        self.en_nom.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Apellido").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        self.en_ape = BorderedEntry(self, placeholder_text="Apellido")
+        self.en_ape.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 2: Teléfono / Email
+        ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        self.en_tel = BorderedEntry(self, placeholder_text="3001234567")
+        self.en_tel.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Email").grid(row=2, column=2, padx=12, pady=6, sticky="w")
+        self.en_mail = BorderedEntry(self, placeholder_text="correo@dominio.com")
+        self.en_mail.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 3: Botones
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=3, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd)
+
+        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
+        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+
+        self.mode = "create"
+
+    # API pública
+    def show_create(self):
+        self.mode = "create"
+        self._fill({})
+        self.grid()
+
+    def show_edit(self, data):
+        self.mode = "edit"
+        self._fill(data or {})
+        self.grid()
+
+    def hide(self):
+        self.grid_remove()
+
+    # Internos
+    def _fill(self, d):
+        for w in (self.en_ced, self.en_nom, self.en_ape, self.en_esp, self.en_tel, self.en_mail):
+            w.delete(0, "end")
+        self.en_ced.insert(0, d.get("cedula", ""))
+        self.en_nom.insert(0, d.get("nombre", ""))
+        self.en_ape.insert(0, d.get("apellido", ""))
+        self.en_esp.insert(0, d.get("especialidad", ""))
+        self.en_tel.insert(0, d.get("telefono", ""))
+        self.en_mail.insert(0, d.get("email", ""))
+
+    def _collect(self):
+        # EXACTAMENTE las claves del backend
+        return {
+            "cedula": self.en_ced.get().strip(),
+            "nombre": self.en_nom.get().strip(),
+            "apellido": self.en_ape.get().strip(),
+            "especialidad": self.en_esp.get().strip(),
+            "telefono": self.en_tel.get().strip(),
+            "email": self.en_mail.get().strip(),
+        }
+
+    def _validate(self, d):
+        req = ["cedula","nombre","apellido","telefono","email"]
+        for k in req:
+            if not d.get(k):
+                return False, f"El campo '{k}' es obligatorio."
+        if not d["cedula"].isdigit():
+            return False, "La Cédula debe ser numérica."
+        if d["telefono"] and not d["telefono"].isdigit():
+            return False, "El Teléfono debe ser numérico."
+        if "@" not in d["email"] or "." not in d["email"].split("@")[-1]:
+            return False, "Email no válido."
+        return True, ""
+
+    def _save(self):
+        d = self._collect()
+        ok, msg = self._validate(d)
+        if not ok:
+            messagebox.showerror("Validación", msg, parent=self)
+            return
+        if self.on_submit:
+            self.on_submit(d, mode=self.mode)
+        self.hide()
+
+    def _cancel(self):
+        if self.on_cancel:
+            self.on_cancel()
+        self.hide()
+
+class VehiculoInlineForm(ctk.CTkFrame):
+    """
+    Formulario en línea para crear/editar vehículo.
+    Claves EXACTAS del backend:
+    { "placa", "marca", "modelo", "anio", "estado" }
+    """
+    def __init__(self, master, app, on_submit, on_cancel):
+        super().__init__(
+            master,
+            fg_color=app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=app.COLOR_DIVIDER
+        )
+        self.app = app
+        self.on_submit = on_submit
+        self.on_cancel = on_cancel
+
+        self.grid_columnconfigure((0,1,2,3), weight=1)
+
+        def BorderedEntry(parent, **kw):
+            return ctk.CTkEntry(
+                parent,
+                height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                **kw
+            )
+
+        # Fila 0: Placa / Marca
+        ctk.CTkLabel(self, text="Placa").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
+        self.en_placa = BorderedEntry(self, placeholder_text="ABC123")
+        self.en_placa.grid(row=0, column=1, padx=12, pady=(12,6), sticky="ew")
+
+        ctk.CTkLabel(self, text="Marca").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        self.en_marca = BorderedEntry(self, placeholder_text="Chevrolet / Renault / etc.")
+        self.en_marca.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+
+        # Fila 1: Modelo / Año
+        ctk.CTkLabel(self, text="Modelo").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.en_modelo = BorderedEntry(self, placeholder_text="Spark / Logan / etc.")
+        self.en_modelo.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Año").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        self.en_anio = BorderedEntry(self, placeholder_text="2021")
+        self.en_anio.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 2: Estado
+        ctk.CTkLabel(self, text="Estado").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        self.cb_estado = ctk.CTkComboBox(self, values=["Activo","Mantenimiento","Baja"], width=180)
+        self.cb_estado.set("Activo")
+        self.cb_estado.grid(row=2, column=1, padx=12, pady=6, sticky="w")
+
+        # Fila 3: Botones
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=3, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd)
+
+        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
+        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+
+        self.mode = "create"
+
+    # API pública
+    def show_create(self):
+        self.mode = "create"
+        self._fill({})
+        self.grid()
+
+    def show_edit(self, data):
+        self.mode = "edit"
+        self._fill(data or {})
+        self.grid()
+
+    def hide(self): self.grid_remove()
+
+    # Internos
+    def _fill(self, d):
+        for w in (self.en_placa, self.en_marca, self.en_modelo, self.en_anio):
+            w.delete(0, "end")
+        self.en_placa.insert(0, d.get("placa", ""))
+        self.en_marca.insert(0, d.get("marca", ""))
+        self.en_modelo.insert(0, d.get("modelo", ""))
+        self.en_anio.insert(0, str(d.get("anio","") or ""))
+        self.cb_estado.set(d.get("estado","Activo") or "Activo")
+
+    def _collect(self):
+        # EXACTAMENTE las claves del backend
+        anio_raw = (self.en_anio.get() or "").strip()
+        return {
+            "placa": (self.en_placa.get() or "").strip(),
+            "marca": (self.en_marca.get() or "").strip(),
+            "modelo": (self.en_modelo.get() or "").strip(),
+            "anio": int(anio_raw) if anio_raw.isdigit() else anio_raw,
+            "estado": (self.cb_estado.get() or "").strip(),
+        }
+
+    def _validate(self, d):
+        req = ["placa","marca","modelo","anio","estado"]
+        for k in req:
+            if d.get(k) in ("", None):
+                return False, f"El campo '{k}' es obligatorio."
+        if not isinstance(d["anio"], int):
+            return False, "El campo 'anio' debe ser un número entero."
+        if not (1970 <= d["anio"] <= 2100):
+            return False, "El campo 'anio' debe estar entre 1970 y 2100."
+        return True, ""
+
+    def _save(self):
+        d = self._collect()
+        ok, msg = self._validate(d)
+        if not ok:
+            messagebox.showerror("Validación", msg, parent=self)
+            return
+        if self.on_submit:
+            self.on_submit(d, mode=self.mode)
+        self.hide()
+
+    def _cancel(self):
+        if self.on_cancel:
+            self.on_cancel()
+        self.hide()
+
+
+class ClaseInlineForm(ctk.CTkFrame):
+    """
+    Formulario en línea para crear/editar clases.
+    UI muestra nombres; payload EXACTO para backend:
+    { id_estudiante, id_profesor, placa_vehiculo, fecha, horaInicio, horaFin, estado }
+    """
+    def __init__(self, master, app, on_submit, on_cancel):
+        super().__init__(
+            master,
+            fg_color=app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=app.COLOR_DIVIDER
+        )
+        self.app = app
+        self.on_submit = on_submit
+        self.on_cancel = on_cancel
+
+        # catálogos
+        self._est_opts = []   # [(id, "Nombre Apellido")]
+        self._prof_opts = []  # [(id, "Nombre Apellido")] (API: profesores)
+        self._veh_opts  = []  # [("ABC123","ABC123")]
+
+        self.grid_columnconfigure((0,1,2,3), weight=1)
+
+        def L(t): return ctk.CTkLabel(self, text=t, text_color=self.app.COLOR_TEXT)
+        def E(ph=""): 
+            return ctk.CTkEntry(self, height=36, corner_radius=10,
+                                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                                placeholder_text=ph)
+
+        # Fila 0: Estudiante / Profesor
+        L("Estudiante").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
+        self.cb_est = ctk.CTkComboBox(self, values=[], width=280)
+        self.cb_est.grid(row=0, column=1, padx=12, pady=(12,6), sticky="ew")
+
+        L("Instructor").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        self.cb_prof = ctk.CTkComboBox(self, values=[], width=280)
+        self.cb_prof.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+
+        # Fila 1: Vehículo / Fecha
+        L("Vehículo (placa)").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.cb_veh = ctk.CTkComboBox(self, values=[], width=180)
+        self.cb_veh.grid(row=1, column=1, padx=12, pady=6, sticky="w")
+
+        L("Fecha (YYYY-MM-DD)").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        self.en_fecha = E("2025-10-01")
+        self.en_fecha.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+
+        # Fila 2: Horas / Estado
+        L("Hora inicio (HH:mm)").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        self.en_hi = E("08:00")
+        self.en_hi.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+
+        L("Hora fin (HH:mm)").grid(row=2, column=2, padx=12, pady=6, sticky="w")
+        self.en_hf = E("10:00")
+        self.en_hf.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
+
+        L("Estado").grid(row=3, column=0, padx=12, pady=6, sticky="w")
+        self.cb_estado = ctk.CTkComboBox(self, values=["Programada","Dictada","Cancelada"], width=180)
+        self.cb_estado.set("Programada")
+        self.cb_estado.grid(row=3, column=1, padx=12, pady=6, sticky="w")
+
+        # Botones
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=4, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+        def red_btn(text, cmd):
+            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd)
+        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
+        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+
+        self.mode = "create"
+
+    # Cargar catálogos desde la vista
+    def set_options(self, estudiantes, profesores, vehiculos):
+        # estudiantes: list[{"id"/"idEstudiante","nombre","apellido"}]
+        self._est_opts = []
+        for e in estudiantes or []:
+            _id = e.get("id") or e.get("idEstudiante")
+            if _id is not None:
+                self._est_opts.append((str(_id), f"{e.get('nombre','')} {e.get('apellido','')}".strip()))
+        # profesores: list[{"id","nombre","apellido"}]
+        self._prof_opts = []
+        for p in profesores or []:
+            _id = p.get("id") or p.get("idProfesor")
+            if _id is not None:
+                self._prof_opts.append((str(_id), f"{p.get('nombre','')} {p.get('apellido','')}".strip()))
+        # vehículos: list[{"placa",...}]
+        self._veh_opts = []
+        for v in vehiculos or []:
+            placa = v.get("placa")
+            if placa:
+                self._veh_opts.append((placa, placa))
+
+        # Poblar combos (solo los textos visibles)
+        self.cb_est.configure(values=[txt for _, txt in self._est_opts])
+        self.cb_prof.configure(values=[txt for _, txt in self._prof_opts])
+        self.cb_veh.configure(values=[txt for _, txt in self._veh_opts])
+
+    # Público
+    def show_create(self):
+        self.mode = "create"
+        self._fill({})
+        self.grid()
+
+    def show_edit(self, d):
+        self.mode = "edit"
+        self._fill(d or {})
+        self.grid()
+
+    def hide(self): self.grid_remove()
+
+    # Internos
+    def _fill(self, d):
+        # reset
+        for w in (self.en_fecha, self.en_hi, self.en_hf):
+            w.delete(0, "end")
+        self.cb_estado.set(d.get("estado","Programada") or "Programada")
+
+        # seleccionar combos por valor
+        def _sel(cb, opts, key, is_id=True):
+            val = d.get(key)
+            if val is None: 
+                return
+            wanted = str(val) if is_id else val
+            texts = [txt for v, txt in opts if str(v) == wanted]
+            if texts: cb.set(texts[0])
+
+        _sel(self.cb_est,  self._est_opts, "id_estudiante", True)
+        _sel(self.cb_prof, self._prof_opts, "id_profesor",   True)
+        _sel(self.cb_veh,  self._veh_opts,  "placa_vehiculo", False)
+
+        self.en_fecha.insert(0, d.get("fecha","") or "")
+        self.en_hi.insert(0,   d.get("horaInicio","") or "")
+        self.en_hf.insert(0,   d.get("horaFin","") or "")
+
+    def _collect(self):
+        # mapear selección → ids/placa
+        def _val(cb, opts):
+            txt = cb.get()
+            for v, t in opts:
+                if t == txt:
+                    return v
+            return None
+
+        return {
+            "id_estudiante":  int(_val(self.cb_est,  self._est_opts)) if _val(self.cb_est,  self._est_opts) else None,
+            "id_profesor":    int(_val(self.cb_prof, self._prof_opts)) if _val(self.cb_prof, self._prof_opts) else None,
+            "placa_vehiculo": _val(self.cb_veh, self._veh_opts),
+            "fecha":          (self.en_fecha.get() or "").strip(),
+            "horaInicio":     (self.en_hi.get() or "").strip(),
+            "horaFin":        (self.en_hf.get() or "").strip(),
+            "estado":         (self.cb_estado.get() or "").strip(),
+        }
+
+    def _validate(self, d):
+        req = ["id_estudiante","id_profesor","placa_vehiculo","fecha","horaInicio","horaFin","estado"]
+        for k in req:
+            if not d.get(k):
+                return False, f"El campo '{k}' es obligatorio."
+
+        # validaciones simples
+        import re
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d["fecha"]):
+            return False, "La fecha debe tener formato YYYY-MM-DD."
+        if not re.fullmatch(r"\d{2}:\d{2}", d["horaInicio"]):
+            return False, "Hora inicio debe ser HH:mm."
+        if not re.fullmatch(r"\d{2}:\d{2}", d["horaFin"]):
+            return False, "Hora fin debe ser HH:mm."
+
+        # horaFin > horaInicio
+        hi = d["horaInicio"]; hf = d["horaFin"]
+        try:
+            h1 = int(hi[:2]) * 60 + int(hi[3:])
+            h2 = int(hf[:2]) * 60 + int(hf[3:])
+            if h2 <= h1:
+                return False, "La hora de fin debe ser mayor que la hora de inicio."
+        except:
+            return False, "Horas inválidas."
+
+        return True, ""
+
+    def _save(self):
+        d = self._collect()
+        ok, msg = self._validate(d)
+        if not ok:
+            messagebox.showerror("Validación", msg, parent=self)
+            return
+        if self.on_submit:
+            self.on_submit(d, mode=self.mode)
+        self.hide()
+
+    def _cancel(self):
+        if self.on_cancel:
+            self.on_cancel()
+        self.hide()
 
 # ===================================
 #  Base para módulos (botones en rojo)
@@ -675,7 +1186,7 @@ class EstudiantesView(BaseModuleFrame):
                     raw = []
             self._data = raw or []
             self._render_table()
-            self.app._info("Estudiantes: {} registros.".format(len(self._data)))
+            
         except Exception as e:
             messagebox.showerror("Estudiantes", "No fue posible consultar la API:\n{}".format(e), parent=self)
 
@@ -751,39 +1262,250 @@ class EstudiantesView(BaseModuleFrame):
         except Exception as e:
             messagebox.showerror("Estudiantes", "No fue posible eliminar:\n{}".format(e), parent=self)
 
-# --- Otras vistas (placeholders con botones rojos y filtros) ---
 class InstructoresView(BaseModuleFrame):
     def __init__(self, master):
-        super().__init__(master, "Instructores", "Disponibilidad y asignaciones")
-        toolbar = self._make_toolbar(
-            self,
-            on_new=lambda: self.app._info("Nuevo instructor"),
-            on_edit=lambda: self.app._info("Editar instructor"),
-            on_delete=lambda: self.app._confirm_delete("instructor"),
-            on_refresh=lambda: self.app._info("Refrescar instructores")
-        )
-        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Nombre","Licencia"), estados=("Todos","Activo","Inactivo"))
-        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
-        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        super().__init__(master, "Instructores", "Gestione los datos del instructor")
 
+        # Toolbar completa
+        tb = ctk.CTkFrame(self, fg_color="transparent")
+        tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        for c in (0,1,2,3,4): tb.grid_columnconfigure(c, weight=0)
+        tb.grid_columnconfigure(5, weight=1)
+
+        def red_btn(parent, text, cmd):
+            return ctk.CTkButton(parent, text=text, height=40, corner_radius=18,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd, anchor="w")
+        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn(tb, "👁 Ver", self._ver).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn(tb, "🗑 Eliminar", self._eliminar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=4, padx=8, pady=6, sticky="w")
+
+        # Formulario inline (mismo patrón que Estudiantes)
+        self.form = InstructorInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
+        self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self.form.hide()
+
+        # Tabla
+        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        self.table.grid_columnconfigure(0, weight=1)
+
+        self._COLS = [
+            ("Cédula",       140, 0),
+            ("Nombre",       300, 1),
+            ("Especialidad", 200, 0),
+            ("Teléfono",     160, 0),
+            ("Email",        240, 0),
+            ("Acciones",     120, 0),
+        ]
+
+        self._data = []
+        self._rows = []
+        self._selected_idx = None
+
+        self._render_table()
+        self.after(150, self._refrescar)
+
+    # -------- helpers de tabla --------
+    def _apply_colspecs(self, container):
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            container.grid_columnconfigure(i, minsize=minw, weight=weight)
+
+    def _render_table(self):
+        for w in self.table.winfo_children(): w.destroy()
+        self._rows.clear()
+        self._selected_idx = None
+
+        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
+        self._apply_colspecs(header)
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
+                         anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+            return
+
+        for r, inst in enumerate(self._data, start=1):
+            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            self._apply_colspecs(row)
+
+            full_name = "{} {}".format(inst.get("nombre",""), inst.get("apellido","")).strip()
+            values = [
+                inst.get("cedula",""),
+                full_name,
+                inst.get("especialidad",""),
+                inst.get("telefono",""),
+                inst.get("email",""),
+            ]
+
+            for i, val in enumerate(values):
+                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
+                                   anchor="w", justify="left")
+                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+                lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+
+            actions = ctk.CTkFrame(row, fg_color="transparent")
+            actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+
+            def icon_btn(symbol, cmd):
+                return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=10,
+                                     fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                     text_color="#ffffff", command=cmd)
+            icon_btn("✎", lambda idx=r-1: self._edit_row(idx)).grid(row=0, column=0, padx=4)
+            icon_btn("🗑️", lambda idx=r-1: self._delete_row(idx)).grid(row=0, column=1, padx=4)
+
+            row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+            self._rows.append(row)
+
+    def _select_row(self, idx):
+        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
+            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+        if 0 <= idx < len(self._rows):
+            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            self._selected_idx = idx
+
+    # -------- acciones UI --------
+    def _nuevo(self):
+        self.form.show_create()
+
+    def _editar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un instructor en la tabla primero.")
+            return
+        self._edit_row(self._selected_idx)
+
+    def _edit_row(self, idx):
+        self._select_row(idx)
+        self.form.show_edit(self._data[idx])
+
+    def _ver(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un instructor para ver.")
+            return
+        inst = self._data[self._selected_idx]
+        info = (
+            f"Cédula: {inst.get('cedula','')}\n"
+            f"Nombre: {inst.get('nombre','')} {inst.get('apellido','')}\n"
+            f"Especialidad: {inst.get('especialidad','')}\n"
+            f"Teléfono: {inst.get('telefono','')}\n"
+            f"Email: {inst.get('email','')}"
+        )
+        messagebox.showinfo("Detalle del Instructor", info, parent=self)
+
+    def _eliminar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un instructor para eliminar.")
+            return
+        self._delete_row(self._selected_idx)
+
+    def _cancel_inline(self):
+        pass
+
+    # -------- API: listar / crear / actualizar / eliminar --------
+    def _refrescar(self):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            raw = self.app.api.get_all("profesores") or []
+            if isinstance(raw, dict):
+                for key in ("content","items","profesores","data","results"):
+                    lst = raw.get(key)
+                    if isinstance(lst, list):
+                        raw = lst
+                        break
+                else:
+                    raw = []
+            self._data = raw or []
+            self._render_table()
+            
+        except Exception as e:
+            messagebox.showerror("Instructores", "No fue posible consultar la API:\n{}".format(e), parent=self)
+
+    def _submit_inline(self, payload, mode):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+
+            payload = dict(payload)  # {"cedula","nombre","apellido","especialidad","telefono","email"}
+
+            if mode == "create":
+                # POST /instructores
+                self.app.api.create("profesores", payload)
+                self.app._info("Instructor creado.")
+            else:
+                idx = self._selected_idx
+                if idx is None:
+                    self.app._info("Selecciona un instructor para actualizar.")
+                    return
+                _id = self._data[idx].get("id")
+                if not _id:
+                    self.app._info("No se encontró el ID del instructor.")
+                    return
+                # PUT /instructores/{id}
+                self.app.api.update("instructores", _id, payload)
+                self.app._info("Instructor actualizado.")
+            self._refrescar()
+
+        except Exception as e:
+            messagebox.showerror("Instructores", f"Operación fallida:\n{e}", parent=self)
+
+    def _delete_row(self, idx):
+        self._select_row(idx)
+        inst = self._data[idx]
+        full_name = "{} {}".format(inst.get("nombre",""), inst.get("apellido","")).strip()
+        ced = inst.get("cedula", "")
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar al instructor:\n{full_name} (Cédula: {ced})?"):
+            self.app._info("Operación cancelada.")
+            return
+
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            _id = inst.get("id")
+            if not _id:
+                self.app._info("No se encontró el ID del instructor.")
+                return
+            # DELETE /instructores/{id}
+            self.app.api.delete("profesores", _id)
+            self.app._info("Instructor eliminado.")
+            self._refrescar()
+        except Exception as e:
+            messagebox.showerror("Instructores", "No fue posible eliminar:\n{}".format(e), parent=self)
 
 class VehiculosView(BaseModuleFrame):
     def __init__(self, master):
         super().__init__(master, "Vehículos", "Documentación, mantenimiento y disponibilidad")
-        toolbar = self._make_toolbar(
-            self,
-            on_new=lambda: self.app._info("Nuevo vehículo"),
-            on_edit=lambda: self.app._info("Editar vehículo"),
-            on_delete=lambda: self.app._confirm_delete("vehículo"),
-            on_refresh=self._refrescar
-        )
-        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Placa","Marca"), estados=("Todos","Activo","Baja"))
-        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
 
-        # Tabla simple para lista de vehículos desde API (si hay)
+        # Toolbar (sin acciones en la tabla; todo por botones)
+        tb = ctk.CTkFrame(self, fg_color="transparent")
+        tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        for c in (0,1,2,3): tb.grid_columnconfigure(c, weight=0)
+        tb.grid_columnconfigure(4, weight=1)
+
+        def red_btn(parent, text, cmd):
+            return ctk.CTkButton(parent, text=text, height=40, corner_radius=18,
+                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                 text_color="#ffffff", command=cmd, anchor="w")
+        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn(tb, "🗑 Eliminar", self._eliminar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+
+        # Formulario inline
+        self.form = VehiculoInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
+        self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self.form.hide()
+
+        # Tabla (SIN columna "Acciones")
         self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
         self.table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
         self.table.grid_columnconfigure(0, weight=1)
@@ -795,15 +1517,23 @@ class VehiculosView(BaseModuleFrame):
             ("Año",   100, 0),
             ("Estado",140, 1),
         ]
-        self._data = []
-        self._render_table()
 
+        self._data = []
+        self._rows = []
+        self._selected_idx = None
+
+        self._render_table()
+        self.after(150, self._refrescar)
+
+    # Helpers de tabla
     def _apply_colspecs(self, container):
         for i, (_, minw, weight) in enumerate(self._COLS):
             container.grid_columnconfigure(i, minsize=minw, weight=weight)
 
     def _render_table(self):
         for w in self.table.winfo_children(): w.destroy()
+        self._rows.clear()
+        self._selected_idx = None
 
         header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
         header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
@@ -822,20 +1552,61 @@ class VehiculosView(BaseModuleFrame):
             row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
             self._apply_colspecs(row)
 
-            values = [v.get("placa",""), v.get("marca",""), v.get("modelo",""),
-                      str(v.get("anio","")), v.get("estado","")]
+            values = [
+                v.get("placa",""),
+                v.get("marca",""),
+                v.get("modelo",""),
+                str(v.get("anio","")),
+                v.get("estado",""),
+            ]
             for i, val in enumerate(values):
-                ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
-                             anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
+                                   anchor="w", justify="left")
+                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+                lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
 
+            row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+            self._rows.append(row)
+
+    def _select_row(self, idx):
+        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
+            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+        if 0 <= idx < len(self._rows):
+            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            self._selected_idx = idx
+
+    # Acciones UI
+    def _nuevo(self):
+        self.form.show_create()
+
+    def _editar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un vehículo en la tabla primero.")
+            return
+        self._edit_row(self._selected_idx)
+
+    def _edit_row(self, idx):
+        self._select_row(idx)
+        self.form.show_edit(self._data[idx])
+
+    def _eliminar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un vehículo para eliminar.")
+            return
+        self._delete_row(self._selected_idx)
+
+    def _cancel_inline(self):
+        pass
+
+    # API: listar / crear / actualizar / eliminar
     def _refrescar(self):
         try:
-            # GET /api/vehiculos
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
             data = self.app.api.get_all("vehiculos") or []
-            # Asegurar lista
-            if isinstance(data, dict):  # por si backend devuelve {content:[...]} etc.
-                # Intenta extraer una lista
-                for key in ("content","items","vehiculos","data"):
+            if isinstance(data, dict):
+                for key in ("content","items","vehiculos","data","results"):
                     if isinstance(data.get(key), list):
                         data = data[key]
                         break
@@ -843,43 +1614,548 @@ class VehiculosView(BaseModuleFrame):
                     data = []
             self._data = data
             self._render_table()
-            self.app._info(f"Vehículos: {len(self._data)} registros.")
+         
         except Exception as e:
             messagebox.showerror("Vehículos", f"No fue posible consultar la API:\n{e}", parent=self)
 
+    def _submit_inline(self, payload, mode):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+
+            payload = dict(payload)  # {"placa","marca","modelo","anio","estado"}
+
+            if mode == "create":
+                # POST /vehiculos  (SIN id en el body)
+                self.app.api.create("vehiculos", payload)
+                self.app._info("Vehículo creado.")
+            else:
+                idx = self._selected_idx
+                if idx is None:
+                    self.app._info("Selecciona un vehículo para actualizar.")
+                    return
+                _id = self._data[idx].get("id") or self._data[idx].get("idVehiculo")
+                if not _id:
+                    self.app._info("No se encontró el ID del vehículo.")
+                    return
+                # PUT /vehiculos/{id}
+                self.app.api.update("vehiculos", _id, payload)
+                self.app._info("Vehículo actualizado.")
+            self._refrescar()
+
+        except Exception as e:
+            messagebox.showerror("Vehículos", f"Operación fallida:\n{e}", parent=self)
+
+    def _delete_row(self, idx):
+        self._select_row(idx)
+        v = self._data[idx]
+        placa = v.get("placa","")
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar el vehículo con placa: {placa}?"):
+            self.app._info("Operación cancelada.")
+            return
+
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            _id = v.get("id") or v.get("idVehiculo")
+            if not _id:
+                self.app._info("No se encontró el ID del vehículo.")
+                return
+            # DELETE /vehiculos/{id}
+            self.app.api.delete("vehiculos", _id)
+            self.app._info("Vehículo eliminado.")
+            self._refrescar()
+        except Exception as e:
+            messagebox.showerror("Vehículos", f"No fue posible eliminar:\n{e}", parent=self)
+
 
 class ClasesView(BaseModuleFrame):
+    """
+    Vista de Clases:
+    - Lista clases mostrando nombres (alumno/instructor).
+    - Formulario para crear/editar envía id_profesor e id_instructor (mismo valor).
+    - Normaliza horas HH:mm.
+    Endpoints usados:
+      GET  /estudiantes
+      GET  /profesores
+      GET  /clases
+      POST /clases
+      PUT  /clases/{id}
+      DELETE /clases/{id}
+    JSON esperado por backend:
+      {
+        "id_estudiante": 1,
+        "id_profesor": 2,
+        "id_instructor": 2,       # agregado para satisfacer columna NOT NULL
+        "placa_vehiculo": "ABC123",
+        "fecha": "2025-10-01",
+        "horaInicio": "08:00",
+        "horaFin": "10:00",
+        "estado": "Programada"
+      }
+    """
     def __init__(self, master):
         super().__init__(master, "Clases", "Agendamiento y control de asistencia")
-        toolbar = self._make_toolbar(
-            self,
-            on_new=lambda: self.app._info("Nueva clase"),
-            on_edit=lambda: self.app._info("Editar clase"),
-            on_delete=lambda: self.app._confirm_delete("clase"),
-            on_refresh=lambda: self.app._info("Refrescar clases")
+
+        # Toolbar
+        tb = ctk.CTkFrame(self, fg_color="transparent")
+        tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+        for c in (0,1,2,3,4): tb.grid_columnconfigure(c, weight=0)
+        tb.grid_columnconfigure(5, weight=1)
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(
+                tb, text=text, height=40, corner_radius=18,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd, anchor="w"
+            )
+        red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        red_btn("✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn("🗑 Eliminar", self._eliminar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+
+        # Formulario (encima de la tabla)
+        self._build_form()
+        self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self._hide_form()
+
+        # Tabla
+        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        self.table.grid_columnconfigure(0, weight=1)
+
+        self._COLS = [
+            ("Estudiante",    260, 1),
+            ("Instructor",    260, 1),
+            ("Placa",         120, 0),
+            ("Fecha",         130, 0),
+            ("Hora inicio",   120, 0),
+            ("Hora fin",      120, 0),
+            ("Estado",        150, 0),
+            ("Acciones",      120, 0),
+        ]
+
+        # Data/mapeos
+        self._data = []          # lista de clases crudas
+        self._rows = []
+        self._selected_idx = None
+
+        # catálogos
+        self.estudiantes = []    # lista estudiantes
+        self.profesores = []     # lista profesores (API) = instructores (UI)
+
+        # mapas id <-> nombre completo
+        self.estudiantes_id_to_name = {}
+        self.estudiantes_name_to_id = {}
+        self.profesores_id_to_name = {}
+        self.profesores_name_to_id = {}
+
+        self._render_table()
+        self.after(150, self._cargar_catalogos_y_listar)
+
+    # ============ Formulario ============
+
+    def _build_form(self):
+        self.form = ctk.CTkFrame(
+            self, fg_color=self.app.COLOR_PANEL,
+            corner_radius=16, border_width=2, border_color=self.app.COLOR_DIVIDER
         )
-        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Alumno","Instructor"), estados=("Todos","Programada","Dictada","Cancelada"))
-        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
-        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        for c in range(8):
+            self.form.grid_columnconfigure(c, weight=1)
+
+        def label(r, c, text):
+            ctk.CTkLabel(self.form, text=text, text_color=self.app.COLOR_TEXT)\
+                .grid(row=r, column=c, padx=12, pady=(12,6), sticky="w")
+
+        def entry(ph=""):
+            return ctk.CTkEntry(
+                self.form, height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                placeholder_text=ph
+            )
+
+        # Fila 0: Estudiante / Instructor
+        label(0, 0, "Estudiante")
+        self.cb_estudiante = ctk.CTkComboBox(self.form, values=[], width=280)
+        self.cb_estudiante.grid(row=1, column=0, padx=12, pady=(0,8), sticky="w")
+
+        label(0, 1, "Instructor")
+        self.cb_profesor = ctk.CTkComboBox(self.form, values=[], width=280)
+        self.cb_profesor.grid(row=1, column=1, padx=12, pady=(0,8), sticky="w")
+
+        # Fila 1: Placa / Fecha
+        label(2, 0, "Placa vehículo")
+        self.en_placa = entry("ABC123")
+        self.en_placa.grid(row=3, column=0, padx=12, pady=(0,8), sticky="ew")
+
+        label(2, 1, "Fecha (YYYY-MM-DD)")
+        self.en_fecha = entry("2025-10-01")
+        self.en_fecha.grid(row=3, column=1, padx=12, pady=(0,8), sticky="ew")
+
+        # Fila 2: Horas / Estado
+        label(4, 0, "Hora inicio (HH:mm)")
+        self.en_hora_ini = entry("07:00")
+        self.en_hora_ini.grid(row=5, column=0, padx=12, pady=(0,8), sticky="ew")
+
+        label(4, 1, "Hora fin (HH:mm)")
+        self.en_hora_fin = entry("09:00")
+        self.en_hora_fin.grid(row=5, column=1, padx=12, pady=(0,8), sticky="ew")
+
+        label(4, 2, "Estado")
+        self.cb_estado = ctk.CTkComboBox(self.form, values=["Programada","Dictada","Cancelada"], width=180)
+        self.cb_estado.set("Programada")
+        self.cb_estado.grid(row=5, column=2, padx=12, pady=(0,8), sticky="w")
+
+        # Botones
+        btns = ctk.CTkFrame(self.form, fg_color="transparent")
+        btns.grid(row=6, column=0, columnspan=8, padx=12, pady=(4,12), sticky="e")
+
+        def red_btn(text, cb):
+            return ctk.CTkButton(
+                btns, text=text, height=36, corner_radius=12,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cb
+            )
+        red_btn("Cancelar", self._cancelar).grid(row=0, column=0, padx=6)
+        red_btn("Guardar", self._guardar).grid(row=0, column=1, padx=6)
+
+        self._form_mode = "create"
+        self._editing_idx = None
+
+    def _show_form(self, mode="create", data=None):
+        self._form_mode = mode
+        if mode == "edit" and data:
+            self._fill_form(data)
+        elif mode == "create":
+            self._fill_form({})
+        self.form.grid()
+
+    def _hide_form(self):
+        self.form.grid_remove()
+
+    def _fill_form(self, d: dict):
+        # Selección estudiante
+        est_id = d.get("id_estudiante")
+        est_name = self.estudiantes_id_to_name.get(est_id, "")
+        self.cb_estudiante.set(est_name if est_name else (self.cb_estudiante.cget("values")[0] if self.cb_estudiante.cget("values") else ""))
+
+        # Selección instructor (acepta id_profesor o id_instructor)
+        pro_id = d.get("id_profesor") or d.get("id_instructor")
+        pro_name = self.profesores_id_to_name.get(pro_id, "")
+        self.cb_profesor.set(pro_name if pro_name else (self.cb_profesor.cget("values")[0] if self.cb_profesor.cget("values") else ""))
+
+        # Entrys
+        def set_entry(widget, value):
+            widget.delete(0, "end")
+            widget.insert(0, value or "")
+
+        set_entry(self.en_placa, d.get("placa_vehiculo", ""))
+        set_entry(self.en_fecha, d.get("fecha", ""))
+        set_entry(self.en_hora_ini, d.get("horaInicio", ""))
+        set_entry(self.en_hora_fin, d.get("horaFin", ""))
+        self.cb_estado.set(d.get("estado", "Programada") or "Programada")
+
+    def _collect_form(self) -> dict:
+        def norm_time(s: str) -> str:
+            s = (s or "").strip()
+            if not s:
+                return s
+            parts = s.split(":")
+            if len(parts) >= 2:
+                h = parts[0].zfill(2)
+                m = parts[1].zfill(2)
+                return f"{h}:{m}"
+            return s
+
+        nombre_est = self.cb_estudiante.get().strip()
+        nombre_prof = self.cb_profesor.get().strip()
+
+        id_est = self.estudiantes_name_to_id.get(nombre_est)
+        id_prof = self.profesores_name_to_id.get(nombre_prof)
+
+        payload = {
+            "id_estudiante": id_est,
+            "id_profesor":   id_prof,                    # compatibilidad API
+            "id_instructor": id_prof,                    # <- requerido por DB (NOT NULL)
+            "placa_vehiculo": self.en_placa.get().strip(),
+            "fecha":         self.en_fecha.get().strip(),
+            "horaInicio":    norm_time(self.en_hora_ini.get()),
+            "horaFin":       norm_time(self.en_hora_fin.get()),
+            "estado":        self.cb_estado.get().strip(),
+        }
+        return payload
+
+    def _validate(self, d: dict):
+        # requeridos base
+        base_req = ["id_estudiante", "fecha", "horaInicio", "horaFin", "estado"]
+        for k in base_req:
+            if not d.get(k):
+                return False, f"El campo '{k}' es obligatorio."
+        # profesor/instructor (acepta cualquiera), pero nosotros enviamos ambos
+        if not (d.get("id_profesor") or d.get("id_instructor")):
+            return False, "Debe seleccionar un instructor."
+        import re
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d["fecha"]):
+            return False, "La fecha debe tener formato YYYY-MM-DD (ej. 2025-10-01)."
+        if not re.fullmatch(r"\d{2}:\d{2}", d["horaInicio"]):
+            return False, "Hora inicio inválida. Usa HH:mm (ej. 07:00)."
+        if not re.fullmatch(r"\d{2}:\d{2}", d["horaFin"]):
+            return False, "Hora fin inválida. Usa HH:mm (ej. 09:00)."
+        return True, ""
+
+    # ============ Acciones UI ============
+
+    def _nuevo(self):
+        self._editing_idx = None
+        self._show_form("create", {})
+
+    def _editar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona una clase en la tabla primero.")
+            return
+        self._editing_idx = self._selected_idx
+        self._show_form("edit", self._data[self._editing_idx])
+
+    def _eliminar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona una clase para eliminar.")
+            return
+        self._delete_row(self._selected_idx)
+
+    def _cancelar(self):
+        self._hide_form()
+
+    def _guardar(self):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            payload = self._collect_form()
+            ok, msg = self._validate(payload)
+            if not ok:
+                messagebox.showerror("Validación", msg, parent=self)
+                return
+
+            if self._form_mode == "create":
+                self.app.api.create("clases", payload)
+                self.app._info("Clase creada.")
+            else:
+                if self._editing_idx is None:
+                    self.app._info("No se seleccionó clase para actualizar.")
+                    return
+                _id = self._data[self._editing_idx].get("id")
+                if not _id:
+                    self.app._info("No se encontró el ID de la clase.")
+                    return
+                self.app.api.update("clases", _id, payload)
+                self.app._info("Clase actualizada.")
+
+            self._hide_form()
+            self._refrescar()
+
+        except Exception as e:
+            messagebox.showerror("Clases", f"Operación fallida:\n{e}", parent=self)
+
+    # ============ Catálogos y lista ============
+
+    def _cargar_catalogos_y_listar(self):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+
+            # Estudiantes
+            raw_est = self.app.api.get_all("estudiantes") or []
+            if isinstance(raw_est, dict):
+                for key in ("content","items","estudiantes","data","results"):
+                    if isinstance(raw_est.get(key), list):
+                        raw_est = raw_est[key]
+                        break
+                else:
+                    raw_est = []
+            self.estudiantes = raw_est
+
+            self.estudiantes_id_to_name = {}
+            self.estudiantes_name_to_id = {}
+            for e in self.estudiantes:
+                eid = e.get("id") or e.get("idEstudiante")
+                full = "{} {}".format(e.get("nombre",""), e.get("apellido","")).strip()
+                if eid and full:
+                    self.estudiantes_id_to_name[eid] = full
+                    self.estudiantes_name_to_id[full] = eid
+
+            # Profesores (instructores)
+            raw_prof = self.app.api.get_all("profesores") or []
+            if isinstance(raw_prof, dict):
+                for key in ("content","items","profesores","data","results"):
+                    if isinstance(raw_prof.get(key), list):
+                        raw_prof = raw_prof[key]
+                        break
+                else:
+                    raw_prof = []
+            self.profesores = raw_prof
+
+            self.profesores_id_to_name = {}
+            self.profesores_name_to_id = {}
+            for p in self.profesores:
+                pid = p.get("id")
+                full = "{} {}".format(p.get("nombre",""), p.get("apellido","")).strip()
+                if pid and full:
+                    self.profesores_id_to_name[pid] = full
+                    self.profesores_name_to_id[full] = pid
+
+            # Cargar combos con nombres legibles
+            self.cb_estudiante.configure(values=sorted(list(self.estudiantes_name_to_id.keys())))
+            self.cb_profesor.configure(values=sorted(list(self.profesores_name_to_id.keys())))
+
+            # Lista de clases
+            self._refrescar()
+
+        except Exception as e:
+            messagebox.showerror("Clases", f"No fue posible cargar catálogos:\n{e}", parent=self)
+
+    def _refrescar(self):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            raw = self.app.api.get_all("clases") or []
+            if isinstance(raw, dict):
+                for key in ("content","items","clases","data","results"):
+                    lst = raw.get(key)
+                    if isinstance(lst, list):
+                        raw = lst
+                        break
+                else:
+                    raw = []
+            self._data = raw or []
+            self._render_table()
+            self.app._info("Clases: {} registros.".format(len(self._data)))
+        except Exception as e:
+            messagebox.showerror("Clases", f"No fue posible consultar la API:\n{e}", parent=self)
+
+    # ============ Tabla ============
+
+    def _apply_colspecs(self, container):
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            container.grid_columnconfigure(i, minsize=minw, weight=weight)
+
+    def _render_table(self):
+        for w in self.table.winfo_children(): w.destroy()
+        self._rows.clear()
+        self._selected_idx = None
+
+        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
+        self._apply_colspecs(header)
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
+                         anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+            return
+
+        for r, c in enumerate(self._data, start=1):
+            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            self._apply_colspecs(row)
+
+            est_name = self.estudiantes_id_to_name.get(c.get("id_estudiante"), str(c.get("id_estudiante") or ""))
+            pro_id   = c.get("id_profesor") or c.get("id_instructor")
+            pro_name = self.profesores_id_to_name.get(pro_id, str(pro_id or ""))
+
+            values = [
+                est_name,
+                pro_name,
+                c.get("placa_vehiculo",""),
+                c.get("fecha",""),
+                c.get("horaInicio",""),
+                c.get("horaFin",""),
+                c.get("estado",""),
+            ]
+
+            for i, val in enumerate(values):
+                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
+                                   anchor="w", justify="left")
+                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+                lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+
+            actions = ctk.CTkFrame(row, fg_color="transparent")
+            actions.grid(row=0, column=7, padx=8, pady=6, sticky="e")
+
+            def icon_btn(symbol, cmd):
+                return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=10,
+                                     fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                                     text_color="#ffffff", command=cmd)
+            icon_btn("✎", lambda idx=r-1: self._edit_row(idx)).grid(row=0, column=0, padx=4)
+            icon_btn("🗑️", lambda idx=r-1: self._delete_row(idx)).grid(row=0, column=1, padx=4)
+
+            row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+            self._rows.append(row)
+
+    def _select_row(self, idx):
+        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
+            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+        if 0 <= idx < len(self._rows):
+            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            self._selected_idx = idx
+
+    def _edit_row(self, idx):
+        self._select_row(idx)
+        self._editing_idx = idx
+        self._show_form("edit", self._data[idx])
+
+    def _delete_row(self, idx):
+        self._select_row(idx)
+        d = self._data[idx]
+        est_name = self.estudiantes_id_to_name.get(d.get("id_estudiante"), "¿?")
+        pro_id   = d.get("id_profesor") or d.get("id_instructor")
+        pro_name = self.profesores_id_to_name.get(pro_id, "¿?")
+
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar la clase?\nEstudiante: {est_name}\nInstructor: {pro_name}\nFecha: {d.get('fecha','')}"):
+            self.app._info("Operación cancelada.")
+            return
+
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            _id = d.get("id")
+            if not _id:
+                self.app._info("No se encontró el ID de la clase.")
+                return
+            self.app.api.delete("clases", _id)
+            self.app._info("Clase eliminada.")
+            self._refrescar()
+        except Exception as e:
+            messagebox.showerror("Clases", f"No fue posible eliminar:\n{e}", parent=self)
 
 
-class EstadosView(BaseModuleFrame):
-    def __init__(self, master):
-        super().__init__(master, "Estados de Cuenta", "Pagos, saldos y cartera")
-        toolbar = self._make_toolbar(
-            self,
-            on_new=lambda: self.app._info("Registrar pago"),
-            on_edit=lambda: self.app._info("Editar pago"),
-            on_delete=lambda: self.app._confirm_delete("registro"),
-            on_refresh=lambda: self.app._info("Refrescar estados")
-        )
-        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        filters = self._make_filters_pro(self, campos=("Documento","Alumno"), estados=("Todos","Al día","Mora"))
-        filters.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
-        table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+    # ----------------- API: listar -----------------
+    def _refrescar(self):
+        try:
+            if not self.app.api:
+                self.app._info("No hay cliente API activo. Inicia sesión.")
+                return
+            raw = self.app.api.get_all("clases") or []
+            if isinstance(raw, dict):
+                for key in ("content","items","clases","data","results"):
+                    lst = raw.get(key)
+                    if isinstance(lst, list):
+                        raw = lst
+                        break
+                else:
+                    raw = []
+            self._data = raw or []
+            self._render_table()
+            self.app._info(f"Clases: {len(self._data)} registros.")
+        except Exception as e:
+            messagebox.showerror("Clases", f"No fue posible consultar la API:\n{e}", parent=self)
 
 
 class ReportesView(BaseModuleFrame):
@@ -916,6 +2192,170 @@ class ReportesView(BaseModuleFrame):
         ctk.CTkLabel(card, text="Aquí va el gráfico / KPI.",
                      text_color=self.app.COLOR_MUTED, anchor="w").grid(row=1, column=0, padx=16, pady=(0,16), sticky="w")
 
+class EstadosView(BaseModuleFrame):
+    """
+    Vista de prueba para Estados de Cuenta:
+    - Muestra datos mock (documento, alumno, plan, valor, pagado, saldo, estado)
+    - Filtro simple por estado
+    - Totales de Valor / Pagado / Saldo al final
+    """
+    def __init__(self, master):
+        super().__init__(master, "Estados de Cuenta", "Demo — pagos, saldos y cartera")
+
+        # Toolbar (sin acciones que llamen API)
+        toolbar = self._make_toolbar(
+            self,
+            on_new=lambda: None,
+            on_edit=lambda: None,
+            on_delete=lambda: None,
+            on_refresh=self._refrescar
+        )
+        toolbar.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
+
+        # Panel de filtros (solo Estado)
+        self.filters_panel = ctk.CTkFrame(
+            self, fg_color=self.app.COLOR_PANEL, corner_radius=16,
+            border_width=2, border_color=self.app.COLOR_DIVIDER
+        )
+        self.filters_panel.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self.filters_panel.grid_columnconfigure(0, weight=0)
+        self.filters_panel.grid_columnconfigure(1, weight=0)
+        self.filters_panel.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkLabel(self.filters_panel, text="Estado", text_color=self.app.COLOR_TEXT).grid(
+            row=0, column=0, padx=(12,8), pady=10, sticky="w"
+        )
+        self.cb_estado = ctk.CTkComboBox(self.filters_panel, values=["Todos","Al día","Mora","Pendiente"])
+        self.cb_estado.set("Todos")
+        self.cb_estado.grid(row=0, column=1, padx=(0,12), pady=10, sticky="w")
+
+        def red_btn(text, cmd):
+            return ctk.CTkButton(
+                self.filters_panel, text=text, height=36, corner_radius=12,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd
+            )
+        red_btn("Aplicar", self._aplicar_filtros).grid(row=0, column=2, padx=(0,12), pady=10, sticky="e")
+
+        # Tabla
+        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=3, column=0, padx=16, pady=(0,16), sticky="nsew")
+        self.table.grid_columnconfigure(0, weight=1)
+
+        # Definición de columnas (sin "Acciones")
+        self._COLS = [
+            ("Documento", 140, 0),
+            ("Alumno",    260, 1),
+            ("Plan",      160, 0),
+            ("Valor",     120, 0),
+            ("Pagado",    120, 0),
+            ("Saldo",     120, 0),
+            ("Estado",    140, 0),
+        ]
+
+        # Datos MOCK (de prueba)
+        self._all_data = [
+            {"documento":"1012345678","alumno":"Ana Pérez","plan":"B1 Teórico","valor":800000,"pagado":800000,"saldo":0,"estado":"Al día"},
+            {"documento":"1019988776","alumno":"Luis Gómez","plan":"B1 Completo","valor":1500000,"pagado":900000,"saldo":600000,"estado":"Pendiente"},
+            {"documento":"1001122233","alumno":"Carla Ríos","plan":"A2 Práctico","valor":600000,"pagado":300000,"saldo":300000,"estado":"Mora"},
+            {"documento":"1022334455","alumno":"Pedro Díaz","plan":"C1 Teórico","valor":1000000,"pagado":1000000,"saldo":0,"estado":"Al día"},
+            {"documento":"1098765432","alumno":"Sofía Luna","plan":"A2 Completo","valor":900000,"pagado":500000,"saldo":400000,"estado":"Pendiente"},
+        ]
+        self._data = list(self._all_data)  # vista filtrada
+
+        self._render_table()
+
+    # ---------- helpers ----------
+    def _apply_colspecs(self, container):
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            container.grid_columnconfigure(i, minsize=minw, weight=weight)
+
+    def _money(self, n):
+        try:
+            return "${:,.0f}".format(float(n)).replace(",", ".")
+        except Exception:
+            return str(n)
+
+    # ---------- render ----------
+    def _render_table(self):
+        for w in self.table.winfo_children():
+            w.destroy()
+
+        # Header
+        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        header.grid(row=0, column=0, padx=8, pady=(8,4), sticky="ew")
+        self._apply_colspecs(header)
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
+                         anchor="w").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        if not self._data:
+            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
+                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+            return
+
+        total_valor = 0
+        total_pagado = 0
+        total_saldo = 0
+
+        # Filas
+        for r, row in enumerate(self._data, start=1):
+            total_valor += row.get("valor", 0) or 0
+            total_pagado += row.get("pagado", 0) or 0
+            total_saldo += row.get("saldo", 0) or 0
+
+            fr = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            fr.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            self._apply_colspecs(fr)
+
+            values = [
+                row.get("documento",""),
+                row.get("alumno",""),
+                row.get("plan",""),
+                self._money(row.get("valor",0)),
+                self._money(row.get("pagado",0)),
+                self._money(row.get("saldo",0)),
+                row.get("estado",""),
+            ]
+            for i, val in enumerate(values):
+                ctk.CTkLabel(fr, text=val, text_color=self.app.COLOR_TEXT, anchor="w")\
+                    .grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+
+        # Totales (footer)
+        footer = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        footer.grid(row=len(self._data)+1, column=0, padx=8, pady=(6,10), sticky="ew")
+        self._apply_colspecs(footer)
+
+        ctk.CTkLabel(footer, text="Totales", text_color=self.app.COLOR_TEXT, anchor="w",
+                     font=ctk.CTkFont(size=12, weight="bold"))\
+            .grid(row=0, column=0, padx=12, pady=10, sticky="w")
+
+        # columnas vacías intermedias
+        ctk.CTkLabel(footer, text="", text_color=self.app.COLOR_TEXT).grid(row=0, column=1, sticky="ew")
+        ctk.CTkLabel(footer, text="", text_color=self.app.COLOR_TEXT).grid(row=0, column=2, sticky="ew")
+
+        ctk.CTkLabel(footer, text=self._money(total_valor), text_color=self.app.COLOR_TEXT, anchor="w",
+                     font=ctk.CTkFont(size=12, weight="bold"))\
+            .grid(row=0, column=3, padx=12, pady=10, sticky="w")
+        ctk.CTkLabel(footer, text=self._money(total_pagado), text_color=self.app.COLOR_TEXT, anchor="w",
+                     font=ctk.CTkFont(size=12, weight="bold"))\
+            .grid(row=0, column=4, padx=12, pady=10, sticky="w")
+        ctk.CTkLabel(footer, text=self._money(total_saldo), text_color=self.app.COLOR_TEXT, anchor="w",
+                     font=ctk.CTkFont(size=12, weight="bold"))\
+            .grid(row=0, column=5, padx=12, pady=10, sticky="w")
+
+    # ---------- acciones ----------
+    def _aplicar_filtros(self):
+        estado = (self.cb_estado.get() or "Todos").strip()
+        if estado == "Todos":
+            self._data = list(self._all_data)
+        else:
+            self._data = [r for r in self._all_data if r.get("estado") == estado]
+        self._render_table()
+
+    def _refrescar(self):
+        # En la demo no hay API; simplemente re-renderizar
+        self._render_table()
 
 # ======================
 #  App principal
@@ -1140,7 +2580,7 @@ class HaroDesktopApp(ctk.CTk):
             dlg.en_pass.insert(0, self.API_PASS_DEFAULT)
 
     def _on_login_ok(self, user, password):
-        # Construir cliente API según modo
+        # Si ApiClient falla, deja que la excepción suba al modal
         self.api_user = user
         self.api_pass = password
         self.api = ApiClient(
@@ -1151,11 +2591,11 @@ class HaroDesktopApp(ctk.CTk):
             pass_field=self.JWT_PASS_FIELD,
             token_field=self.JWT_TOKEN_FIELD
         )
-        # Si autenticó (o Basic), mostramos app y registramos vistas
         if not hasattr(self, "views"):
             self._register_views()
         self.deiconify()
         self.switch_view("Estudiantes")
+
 
     def _logout(self):
         if messagebox.askyesno("Sesión", "¿Cerrar sesión y volver a ingresar?"):
@@ -1235,7 +2675,9 @@ class HaroDesktopApp(ctk.CTk):
 
     # Util
     def _info(self, msg: str):
-        messagebox.showinfo("Información", msg)
+        # Reemplaza messagebox por un log silencioso o una etiqueta de estado
+        print(msg)  # o actualiza una status bar si tienes una
+
 
 
 # ----------------------- Ejecución ----------------------- #
