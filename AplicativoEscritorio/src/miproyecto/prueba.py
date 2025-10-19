@@ -1533,6 +1533,7 @@ class InstructoresView(BaseModuleFrame):
                 # POST /instructores
                 self.app.api.create("profesores", payload)
                 self.app._info("Instructor creado.")
+                print(payload)
             else:
                 idx = self._selected_idx
                 if idx is None:
@@ -1543,7 +1544,7 @@ class InstructoresView(BaseModuleFrame):
                     self.app._info("No se encontró el ID del instructor.")
                     return
                 # PUT /instructores/{id}
-                self.app.api.update("instructores", _id, payload)
+                self.app.api.update("profesores", _id, payload)
                 self.app._info("Instructor actualizado.")
             self._refrescar()
 
