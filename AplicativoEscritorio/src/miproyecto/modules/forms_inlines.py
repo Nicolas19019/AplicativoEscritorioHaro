@@ -1,8 +1,10 @@
-import calendar
+import calendar as _cal
 from datetime import date, datetime
 import re
 import customtkinter as ctk
 from tkinter import messagebox
+import tkinter as tk
+import datetime as _dt
 
 
 # ================= INSTRUCTOR FORM =================
@@ -400,7 +402,7 @@ class MiniCalendarDialog(ctk.CTkFrame):
             ctk.CTkLabel(self.body, text=n, text_color=self.COLOR_MUTED)\
                 .grid(row=0, column=i, padx=3, pady=(0, 6), sticky="ew")
 
-        cal = calendar.Calendar(firstweekday=0)
+        cal = _cal.Calendar(firstweekday=0)
         y, m = self.current.year, self.current.month
         row = 1
         today = date.today()
@@ -427,10 +429,11 @@ class MiniCalendarDialog(ctk.CTkFrame):
 
 
 # =============== Formulario de Clases (con calendario) ===============
+# =============== Formulario de Clases (con calendario embebido) ===============
+
 class ClaseInlineForm(ctk.CTkFrame):
     """
-    Formulario en línea para crear/editar clases.
-    { id_estudiante, id_profesor, placa_vehiculo, fecha, horaInicio, horaFin, estado }
+    Formulario para crear/editar clases.
     """
     def __init__(self, master, app, on_submit, on_cancel):
         super().__init__(
@@ -444,66 +447,90 @@ class ClaseInlineForm(ctk.CTkFrame):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
 
-        # catálogos
-        self._est_opts = []   # [(id, "Nombre Apellido")]
-        self._prof_opts = []  # [(id, "Nombre Apellido")]
-        self._veh_opts  = []  # [(placa, placa)]
+        self.mode = "create"
+        self._est_opts = []
+        self._prof_opts = []
+        self._veh_opts = []
 
+        # --- Layout base ---
         self.grid_columnconfigure((0,1,2,3), weight=1)
 
-        def L(t): return ctk.CTkLabel(self, text=t, text_color=self.app.COLOR_TEXT)
+        def L(t): 
+            return ctk.CTkLabel(self, text=t, text_color=self.app.COLOR_TEXT)
+
         def E(ph=""):
             return ctk.CTkEntry(
                 self, height=36, corner_radius=10,
-                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                fg_color=self.app.COLOR_INPUT_BG,
+                text_color=self.app.COLOR_TEXT,
                 border_width=2, border_color=self.app.COLOR_DIVIDER,
                 placeholder_text=ph
             )
 
-        # Fila 0: Estudiante / Instructor
-        L("Estudiante").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
-        self.cb_est = ctk.CTkComboBox(self, values=[], width=280)
-        self.cb_est.grid(row=0, column=1, padx=12, pady=(12,6), sticky="ew")
+        # === FILA 0 ===
+        L("Estudiante").grid(row=0, column=0, padx=12, pady=(10,6), sticky="w")
+        self.cb_est = ctk.CTkComboBox(self, values=[], width=280, state="readonly")
+        self.cb_est.set("Seleccione un estudiante")
+        self.cb_est.grid(row=0, column=1, padx=12, pady=(10,6), sticky="ew")
 
-        L("Instructor").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
-        self.cb_prof = ctk.CTkComboBox(self, values=[], width=280)
-        self.cb_prof.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+        L("Instructor").grid(row=0, column=2, padx=12, pady=(10,6), sticky="w")
+        self.cb_prof = ctk.CTkComboBox(self, values=[], width=280, state="readonly")
+        self.cb_prof.set("Seleccione un instructor")
+        self.cb_prof.grid(row=0, column=3, padx=12, pady=(10,6), sticky="ew")
 
-        # Fila 1: Vehículo / Fecha (con botón calendario)
+        # === FILA 1 ===
         L("Vehículo (placa)").grid(row=1, column=0, padx=12, pady=6, sticky="w")
-        self.cb_veh = ctk.CTkComboBox(self, values=[], width=180)
-        self.cb_veh.grid(row=1, column=1, padx=12, pady=6, sticky="w")
+        self.cb_veh = ctk.CTkComboBox(self, values=[], width=180, state="readonly")
+        self.cb_veh.set("Seleccione vehículo")
+        self.cb_veh.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
 
         L("Fecha (YYYY-MM-DD)").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+
         fecha_wrap = ctk.CTkFrame(self, fg_color="transparent")
         fecha_wrap.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
         fecha_wrap.grid_columnconfigure(0, weight=1)
 
-        self.en_fecha = E("2025-10-18")
-        self.en_fecha.grid(row=0, column=0, padx=(0,6), sticky="ew")
+        # Variable que guarda la fecha seleccionada
+        self.fecha_var = tk.StringVar(value="Seleccionar fecha")
 
+        # Campo de texto (solo lectura)
+        self.lb_fecha = ctk.CTkLabel(
+            fecha_wrap, textvariable=self.fecha_var,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+            corner_radius=10, height=36, anchor="w", padx=12
+        )
+        self.lb_fecha.grid(row=0, column=0, padx=(0,6), sticky="ew")
+
+        # Botón de calendario
         ctk.CTkButton(
             fecha_wrap, text="📅", width=42, height=36, corner_radius=10,
             fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
             text_color=self.app.COLOR_TEXT, command=self._open_calendar
         ).grid(row=0, column=1, sticky="e")
 
-        # Fila 2: Horas
+        # === FILA 2 ===
         L("Hora inicio (HH:mm)").grid(row=2, column=0, padx=12, pady=6, sticky="w")
-        self.en_hi = E("08:00")
-        self.en_hi.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+        self.cb_hi = ctk.CTkComboBox(
+            self, values=["06:00","08:00","10:00","12:00","14:00","16:00","18:00"],
+            width=180, state="readonly", command=self._auto_set_hf
+        )
+        self.cb_hi.set("Seleccione hora")
+        self.cb_hi.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
 
         L("Hora fin (HH:mm)").grid(row=2, column=2, padx=12, pady=6, sticky="w")
-        self.en_hf = E("10:00")
+        self.en_hf = E("Calculado automáticamente")
+        self.en_hf.configure(state="readonly")
         self.en_hf.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
 
-        # Fila 3: Estado
+        # === FILA 3 ===
         L("Estado").grid(row=3, column=0, padx=12, pady=6, sticky="w")
-        self.cb_estado = ctk.CTkComboBox(self, values=["Programada","Dictada","Cancelada"], width=180)
+        self.cb_estado = ctk.CTkComboBox(
+            self, values=["Programada","Dictada","Cancelada"], width=180, state="readonly"
+        )
         self.cb_estado.set("Programada")
         self.cb_estado.grid(row=3, column=1, padx=12, pady=6, sticky="w")
 
-        # Botones
+        # === BOTONES ===
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=4, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
 
@@ -513,133 +540,236 @@ class ClaseInlineForm(ctk.CTkFrame):
                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
                 text_color="#ffffff", command=cmd
             )
-
+        
         red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
         red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
 
-        self.mode = "create"
-
-    # ---------- Calendario ----------
-    def _open_calendar(self):
-        initial = (self.en_fecha.get() or "").strip() or None
-        MiniCalendarDialog(self, on_pick=self._set_fecha_from_calendar, start_date=initial)
-
-    def _set_fecha_from_calendar(self, yyyymmdd: str):
+    def _has_class_on(self, date_obj):
+        """
+        Devuelve True si existe alguna clase programada en la fecha dada.
+        Usa la API del app si está disponible, o los datos ya cargados en memoria.
+        """
         try:
-            self.en_fecha.delete(0, "end")
-            self.en_fecha.insert(0, yyyymmdd)
+            # Verificar si la app y los datos existen
+            if hasattr(self.app, "_data_clases"):
+                for c in self.app._data_clases:
+                    if str(c.get("fecha")) == date_obj.strftime("%Y-%m-%d"):
+                        return True
+
+            # Si no hay cache local, intentar con la API (opcional)
+            if getattr(self.app, "api", None):
+                clases = self.app.api.get_all("clases") or []
+                for c in clases:
+                    if str(c.get("fecha")) == date_obj.strftime("%Y-%m-%d"):
+                        return True
         except Exception:
             pass
 
-    # ---------- API pública ----------
-    def set_options(self, estudiantes, profesores, vehiculos):
-        self._est_opts = []
-        for e in (estudiantes or []):
-            _id = e.get("id") or e.get("idEstudiante")
-            if _id is not None:
-                self._est_opts.append((str(_id), f"{e.get('nombre','')} {e.get('apellido','')}".strip()))
-        self._prof_opts = []
-        for p in (profesores or []):
-            _id = p.get("id") or p.get("idProfesor")
-            if _id is not None:
-                self._prof_opts.append((str(_id), f"{p.get('nombre','')} {p.get('apellido','')}".strip()))
-        self._veh_opts = []
-        for v in (vehiculos or []):
-            placa = v.get("placa")
-            if placa:
-                self._veh_opts.append((placa, placa))
+        return False
 
-        self.cb_est.configure(values=[txt for _, txt in self._est_opts])
-        self.cb_prof.configure(values=[txt for _, txt in self._prof_opts])
-        self.cb_veh.configure(values=[txt for _, txt in self._veh_opts])
 
-    # ---------- Mostrar/Ocultar ----------
-    def show_create(self):
-        self.mode = "create"
-        self._fill({})
-        self.grid()
-
-    def show_edit(self, d):
-        self.mode = "edit"
-        self._fill(d or {})
-        self.grid()
-
-    def hide(self): self.grid_remove()
-
-    # ---------- Internos ----------
-    def _fill(self, d):
-        for w in (self.en_fecha, self.en_hi, self.en_hf):
-            w.delete(0, "end")
-        self.cb_estado.set(d.get("estado","Programada") or "Programada")
-
-        def _sel(cb, opts, key, is_id=True):
-            val = d.get(key)
-            if val is None: 
-                return
-            wanted = str(val) if is_id else val
-            texts = [txt for v, txt in opts if str(v) == wanted]
-            if texts: cb.set(texts[0])
-
-        _sel(self.cb_est,  self._est_opts, "id_estudiante", True)
-        _sel(self.cb_prof, self._prof_opts, "id_profesor",   True)
-        _sel(self.cb_veh,  self._veh_opts,  "placa_vehiculo", False)
-
-        self.en_fecha.insert(0, d.get("fecha","") or "")
-        self.en_hi.insert(0,   d.get("horaInicio","") or "")
-        self.en_hf.insert(0,   d.get("horaFin","") or "")
-
-    def _collect(self):
-        def _val(cb, opts):
-            txt = cb.get()
-            for v, t in opts:
-                if t == txt:
-                    return v
-            return None
-
-        return {
-            "id_estudiante":  int(_val(self.cb_est,  self._est_opts)) if _val(self.cb_est,  self._est_opts) else None,
-            "id_profesor":    int(_val(self.cb_prof, self._prof_opts)) if _val(self.cb_prof, self._prof_opts) else None,
-            "placa_vehiculo": _val(self.cb_veh, self._veh_opts),
-            "fecha":          (self.en_fecha.get() or "").strip(),
-            "horaInicio":     (self.en_hi.get() or "").strip(),
-            "horaFin":        (self.en_hf.get() or "").strip(),
-            "estado":         (self.cb_estado.get() or "").strip(),
-        }
-
-    def _validate(self, d):
-        req = ["id_estudiante","id_profesor","placa_vehiculo","fecha","horaInicio","horaFin","estado"]
-        for k in req:
-            if not d.get(k):
-                return False, f"El campo '{k}' es obligatorio."
-
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d["fecha"]):
-            return False, "La fecha debe tener formato YYYY-MM-DD."
-        if not re.fullmatch(r"\d{2}:\d{2}", d["horaInicio"]):
-            return False, "Hora inicio debe ser HH:mm."
-        if not re.fullmatch(r"\d{2}:\d{2}", d["horaFin"]):
-            return False, "Hora fin debe ser HH:mm."
+    # === Calendario ===
+    def _open_calendar(self):
+        """Abre el calendario en una ventana emergente centrada."""
+        import datetime, calendar
+        from tkinter import messagebox
 
         try:
-            h1 = int(d["horaInicio"][:2]) * 60 + int(d["horaInicio"][3:])
-            h2 = int(d["horaFin"][:2]) * 60 + int(d["horaFin"][3:])
-            if h2 <= h1:
-                return False, "La hora de fin debe ser mayor que la de inicio."
-        except:
-            return False, "Horas inválidas."
+            top = ctk.CTkToplevel(self)
+            top.title("Seleccionar fecha")
+            top.transient(self.winfo_toplevel())
+            top.grab_set()
 
-        return True, ""
+            # Centrar la ventana
+            w, h = 360, 360
+            sw, sh = top.winfo_screenwidth(), top.winfo_screenheight()
+            x, y = int((sw - w) / 2), int((sh - h) / 2)
+            top.geometry(f"{w}x{h}+{x}+{y}")
+
+            # ---- CONFIGURAR FECHA BASE ----
+            today = datetime.date.today()
+            try:
+                selected_date = datetime.datetime.strptime(self.fecha_var.get(), "%Y-%m-%d").date()
+                year, month = selected_date.year, selected_date.month
+            except Exception:
+                year, month = today.year, today.month
+
+            # ---- CONTENEDOR PRINCIPAL ----
+            frame = ctk.CTkFrame(top, fg_color=self.app.COLOR_BG)
+            frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+            lbl_month = ctk.CTkLabel(frame, text="", font=ctk.CTkFont(size=18, weight="bold"))
+            lbl_month.pack(pady=(5, 10))
+
+            grid = ctk.CTkFrame(frame, fg_color="transparent")
+            grid.pack(fill="both", expand=True)
+
+            # ---- FUNCIONES INTERNAS ----
+            def draw_calendar():
+                """Dibuja los días del mes."""
+                for w in grid.winfo_children():
+                    w.destroy()
+
+                lbl_month.configure(text=f"{calendar.month_name[month]} {year}")
+
+                days = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+                for i, d in enumerate(days):
+                    ctk.CTkLabel(grid, text=d, text_color=self.app.COLOR_MUTED)\
+                        .grid(row=0, column=i, padx=4, pady=4)
+
+                cal = calendar.Calendar(firstweekday=0)
+                weeks = cal.monthdayscalendar(year, month)
+
+                for r, week in enumerate(weeks, start=1):
+                    for c, day in enumerate(week):
+                        if day == 0:
+                            ctk.CTkLabel(grid, text=" ").grid(row=r, column=c)
+                            continue
+
+                        date_obj = datetime.date(year, month, day)
+                        # Colores según estado
+                        fg = self.app.COLOR_RED if self._has_class_on(date_obj) else self.app.COLOR_PANEL
+                        if date_obj == today:
+                            fg = self.app.COLOR_YELLOW
+                        elif self.fecha_var.get() == date_obj.strftime("%Y-%m-%d"):
+                            fg = self.app.COLOR_YELLOW
+
+                        btn = ctk.CTkButton(
+                            grid, text=str(day), width=42, height=36, corner_radius=8,
+                            fg_color=fg, hover_color=self.app.COLOR_RED,
+                            command=lambda d=date_obj: select_date(d)
+                        )
+                        btn.grid(row=r, column=c, padx=3, pady=3, sticky="nsew")
+
+            def select_date(dia):
+                """Selecciona la fecha y cierra la ventana."""
+                self.fecha_var.set(dia.strftime("%Y-%m-%d"))
+                top.destroy()
+
+            def prev_month():
+                nonlocal year, month
+                month -= 1
+                if month < 1:
+                    month, year = 12, year - 1
+                draw_calendar()
+
+            def next_month():
+                nonlocal year, month
+                month += 1
+                if month > 12:
+                    month, year = 1, year + 1
+                draw_calendar()
+
+            # ---- BOTONES DE NAVEGACIÓN ----
+            nav = ctk.CTkFrame(frame, fg_color="transparent")
+            nav.pack(fill="x", pady=(0, 8))
+            ctk.CTkButton(nav, text="◀", width=36, height=28, command=prev_month).pack(side="left", padx=6)
+            ctk.CTkButton(nav, text="▶", width=36, height=28, command=next_month).pack(side="right", padx=6)
+
+            draw_calendar()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el calendario:\n{e}", parent=self)
+
+
+
+    def _set_fecha_from_calendar(self, yyyymmdd: str):
+        """Recibe la fecha del calendario existente."""
+        self.fecha_seleccionada = yyyymmdd
+        messagebox.showinfo("Fecha seleccionada", f"Has seleccionado: {yyyymmdd}")
+
+    # === Lógica de horas ===
+    def _auto_set_hf(self, selected):
+        try:
+            if not selected or "hora" in selected.lower(): return
+            h, m = map(int, selected.split(":"))
+            h2 = (h + 2) % 24
+            self.en_hf.configure(state="normal")
+            self.en_hf.delete(0, "end")
+            self.en_hf.insert(0, f"{h2:02d}:{m:02d}")
+            self.en_hf.configure(state="readonly")
+        except Exception as e:
+            print("[WARN] cálculo hora fin:", e)
+
+    # === API pública ===
+    def set_options(self, estudiantes, profesores, vehiculos):
+        self._est_opts = [(str(e.get("id")), f"{e.get('nombre','')} {e.get('apellido','')}".strip())
+                          for e in (estudiantes or []) if e.get("id")]
+        self._prof_opts = [(str(p.get("id")), f"{p.get('nombre','')} {p.get('apellido','')}".strip())
+                           for p in (profesores or []) if p.get("id")]
+        self._veh_opts = [(v.get("placa"), v.get("placa")) for v in (vehiculos or []) if v.get("placa")]
+
+        self.cb_est.configure(values=[t for _, t in self._est_opts])
+        self.cb_prof.configure(values=[t for _, t in self._prof_opts])
+        self.cb_veh.configure(values=[t for _, t in self._veh_opts])
 
     def _save(self):
-        d = self._collect()
-        ok, msg = self._validate(d)
+        data = self._collect()
+        ok, msg = self._validate(data)
         if not ok:
-            messagebox.showerror("Validación", msg, parent=self)
+            messagebox.showerror("Error", msg, parent=self)
             return
         if self.on_submit:
-            self.on_submit(d, mode=self.mode)
+            self.on_submit(data, self.mode)
         self.hide()
 
     def _cancel(self):
         if self.on_cancel:
             self.on_cancel()
         self.hide()
+
+    def _collect(self):
+        def val(cb, opts):
+            txt = cb.get()
+            for v, t in opts:
+                if t == txt:
+                    return v
+            return None
+        
+        return {
+            "id_estudiante":  int(val(self.cb_est,  self._est_opts)) if val(self.cb_est,  self._est_opts) else None,
+            "id_profesor":    int(val(self.cb_prof, self._prof_opts)) if val(self.cb_prof, self._prof_opts) else None,
+            "placa_vehiculo": val(self.cb_veh, self._veh_opts),
+            "fecha":          (self.fecha_var.get() or "").strip(),
+            "horaInicio":     (self.cb_hi.get() or "").strip(),
+            "horaFin":        (self.en_hf.get() or "").strip(),
+            "estado":         (self.cb_estado.get() or "").strip(),
+        }
+
+    def _validate(self, d):
+        for k in ("id_estudiante","id_profesor","placa_vehiculo","fecha","horaInicio","horaFin","estado"):
+            if not d.get(k):
+                return False, f"El campo '{k}' es obligatorio."
+        
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d["fecha"]):
+            return False, "La fecha debe tener formato YYYY-MM-DD."
+        
+        return True, ""
+
+    def show_create(self):
+        self.mode = "create"
+        self.fecha_seleccionada = None
+        self.cb_est.set("Seleccione un estudiante")
+        self.cb_prof.set("Seleccione un instructor")
+        self.cb_veh.set("Seleccione vehículo")
+        self.cb_hi.set("Seleccione hora")
+        self.cb_estado.set("Programada")
+        self.en_hf.configure(state="normal"); self.en_hf.delete(0,"end"); self.en_hf.configure(state="readonly")
+        self.grid()
+
+    def show_edit(self, d):
+        self.mode = "edit"
+        try:
+            self.cb_est.set(next((t for v,t in self._est_opts if str(v)==str(d.get("id_estudiante"))),"Seleccione un estudiante"))
+            self.cb_prof.set(next((t for v,t in self._prof_opts if str(v)==str(d.get("id_profesor"))),"Seleccione un instructor"))
+            self.cb_veh.set(d.get("placa_vehiculo","Seleccione vehículo"))
+            self.fecha_seleccionada = d.get("fecha","")
+            self.cb_hi.set(d.get("horaInicio","Seleccione hora"))
+            self._auto_set_hf(self.cb_hi.get())
+            self.cb_estado.set(d.get("estado","Programada"))
+        except Exception as e:
+            print("[WARN] show_edit:", e)
+        self.grid()
+
+    def hide(self): 
+        self.grid_remove()

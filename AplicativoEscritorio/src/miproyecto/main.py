@@ -59,6 +59,19 @@ class HaroDesktopApp(ctk.CTk):
         self.geometry(f"{self.APP_W}x{self.APP_H}")
         centrar_ventana(self, self.APP_W, self.APP_H)
 
+        # --- Ícono de la ventana / barra de tareas ---
+        try:
+            import tkinter as tk
+            ico_path = self.resource_path(self._SCRIPT_DIR / "media" / "LogoHARO.ico")
+            if ico_path.exists():
+                self.iconbitmap(str(ico_path))
+                print("[OK] Icono de ventana establecido correctamente.")
+            else:
+                print(f"[Icono] No se encontró el archivo: {ico_path}")
+        except Exception as e:
+            print(f"[Icono] Error al establecer ícono: {e}")
+
+ 
         self.minsize(1060, 640)
         self.configure(fg_color=self.COLOR_BG)
 
