@@ -55,6 +55,9 @@ class HaroDesktopApp(ctk.CTk):
     # Ruta del logo (resuelta desde este archivo)
     _SCRIPT_DIR = Path(__file__).resolve().parent
     _LOGO_PATH  = _SCRIPT_DIR / "media" / "LogoHARO.png"
+    _ICON_ICO_PATH = _SCRIPT_DIR / "media" / "LogoHARO.ico"
+    _ICON_PNG_PATH = _SCRIPT_DIR / "media" / "LogoHARO.png"
+
 
     # API
     API_BASE_URL = "http://localhost:8081/api"
@@ -76,17 +79,9 @@ class HaroDesktopApp(ctk.CTk):
         self.geometry(f"{self.APP_W}x{self.APP_H}")
         centrar_ventana(self, self.APP_W, self.APP_H)
 
-        # --- Ícono de la ventana / barra de tareas ---
-        try:
-            import tkinter as tk
-            ico_path = self.resource_path(self._SCRIPT_DIR / "media" / "LogoHARO.ico")
-            if ico_path.exists():
-                self.iconbitmap(str(ico_path))
-                print("[OK] Icono de ventana establecido correctamente.")
-            else:
-                print(f"[Icono] No se encontró el archivo: {ico_path}")
-        except Exception as e:
-            print(f"[Icono] Error al establecer ícono: {e}")
+        # --- Ícono de la ventana / barra de tareas (cross-platform con fallback) ---
+        self.set_window_icon(self)
+
 
         self.minsize(1060, 640)
         self.configure(fg_color=self.COLOR_BG)
@@ -126,6 +121,55 @@ class HaroDesktopApp(ctk.CTk):
         if base:
             return Path(base) / p.name if p.is_file() else Path(base) / p
         return p
+
+    def _resolve_existing_path(self, p: Path) -> Path:
+        """Busca el recurso respetando PyInstaller (_MEIPASS) y retorna un Path existente o Path('') si no existe."""
+        try:
+            rp = self.resource_path(p)
+            if Path(rp).exists():
+                return Path(rp)
+        except Exception:
+            pass
+        return Path("")  # inexistente
+
+    def set_window_icon(self, window=None):
+        """
+        Aplica ícono a la ventana dada (o a self si no se pasa).
+        1) En Windows: intenta .ico con iconbitmap (mejor integracion barra de tareas).
+        2) En cualquier SO: usa iconphoto con PNG como fallback.
+        """
+        import tkinter as tk
+        win = window or self
+
+        ico = self._resolve_existing_path(self._ICON_ICO_PATH)
+        png = self._resolve_existing_path(self._ICON_PNG_PATH)
+
+        # 1) Windows: iconbitmap con .ico si existe
+        try:
+            if sys.platform.startswith("win") and ico:
+                win.iconbitmap(str(ico))
+                print("[OK] Icono .ico aplicado con iconbitmap")
+                return
+        except Exception as e:
+            print(f"[Icono] iconbitmap falló: {e}")
+
+        # 2) Fallback universal: iconphoto con PNG
+        try:
+            if png:
+                from PIL import Image, ImageTk
+                img = Image.open(png)
+                photo = ImageTk.PhotoImage(img)
+                # en Tk hay que mantener una referencia para que no lo recolecte GC
+                if not hasattr(self, "_icon_refs"):
+                    self._icon_refs = []
+                self._icon_refs.append(photo)
+                win.iconphoto(True, photo)
+                print("[OK] Icono PNG aplicado con iconphoto")
+            else:
+                print("[Icono] No se encontró PNG de icono")
+        except Exception as e:
+            print(f"[Icono] iconphoto falló: {e}")
+
 
     def _set_default_logo(self):
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))

@@ -11,6 +11,14 @@ class LoginDialog(ctk.CTkToplevel):
         self.app = master
         self.title("Inicio de sesión")
 
+        # Ícono del Toplevel (usa el helper de la app si está disponible)
+        try:
+            if hasattr(self.app, "set_window_icon"):
+                self.app.set_window_icon(self)  # reaprovecha .ico/.png según plataforma
+        except Exception as e:
+            print(f"[Login] No se pudo aplicar icono: {e}")
+
+
         # Tamaño y posición
         W, H = 720, 460
         self.geometry(f"{W}x{H}")

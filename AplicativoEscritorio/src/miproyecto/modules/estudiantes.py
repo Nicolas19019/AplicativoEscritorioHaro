@@ -162,10 +162,7 @@ class StudentInlineForm(ctk.CTkFrame):
             "usuario": None,
             "contrasena": None,
         }
-        # Si tu backend usa otra clave, descomenta una de estas líneas:
-        # data["categoriaLicencia"] = categoria
-        # data["licenciaCategoria"] = categoria
-        # data["programa"] = categoria
+
         return data
 
     def _validate(self, d):
@@ -565,12 +562,38 @@ class EstudiantesView(BaseModuleFrame):
                 if idx is None:
                     self.app._info("Selecciona un estudiante para actualizar.")
                     return
+
+                # id del estudiante
                 student_id = self._data[idx].get("id") or self._data[idx].get("idEstudiante")
                 if not student_id:
                     self.app._info("No se encontró el ID del estudiante.")
                     return
-                self.app.api.update("estudiantes", student_id, payload)
+
+                # --- MUY IMPORTANTE ---
+                # Algunos backends esperan el objeto completo. Mergeamos el registro original + payload nuevo
+                merged = dict(self._data[idx])   # copia del registro actual
+                merged.update(payload)           # aplica cambios del form
+
+                # Asegurar que categoria va en el body (por si el form no la trae por alguna razón)
+                cat = (payload.get("categoria") or merged.get("categoria") or "").strip().upper()
+                if not cat:
+                    # intenta leer de aliases del registro existente
+                    cat = str(merged.get("categoriaLicencia") or merged.get("licenciaCategoria")
+                            or merged.get("tipoLicencia") or "").strip().upper()
+                if cat:
+                    merged["categoria"] = cat
+                    # también replicas de cortesía
+                    merged["categoriaLicencia"] = cat
+                    merged["licenciaCategoria"] = cat
+                    merged["tipoLicencia"] = cat
+
+                # No mandes el id en el cuerpo si tu backend no lo necesita
+                body = {k: v for k, v in merged.items() if k not in ("id", "idEstudiante")}
+
+                # PUT /api/estudiantes/{id}
+                self.app.api.update("estudiantes", student_id, body)
                 self.app._info("Estudiante actualizado.")
+
 
             self._refrescar()  # refrescar conservando filtros
 
