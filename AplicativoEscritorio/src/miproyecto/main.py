@@ -17,14 +17,31 @@ from modules.reportes import ReportesView
 
 class HaroDesktopApp(ctk.CTk):
     # -------- Paleta (light, dark) -------- #
-    COLOR_BG          = ("#FFFFFF", "#0f0f10")
-    COLOR_PANEL       = ("#FFFFFF", "#151517")
-    COLOR_TEXT        = ("#111111", "#F5F7FA")
-    COLOR_MUTED       = ("#5A5F6A", "#AAB2C0")
-    COLOR_RED         = ("#E53935", "#ff4c4c")
-    COLOR_YELLOW      = ("#FFC107", "#FFD54F")
-    COLOR_DIVIDER     = ("#EFEFF2", "#24262b")
-    COLOR_INPUT_BG    = ("#F6F7F9", "#1b1d22")
+    # Blancos y grises base
+    COLOR_BG          = ("#FAFBFC", "#0f0f10")   # fondo app (blanco muy suave / casi negro)
+    COLOR_PANEL       = ("#FFFFFF", "#151517")   # paneles (sidebar/topbar)
+    COLOR_DIVIDER     = ("#EFF1F5", "#23262b")   # divisores / líneas
+    COLOR_INPUT_BG    = ("#F6F7F9", "#1b1d22")   # campos de búsqueda
+    COLOR_TEXT        = ("#111111", "#F5F7FA")   # texto principal
+    COLOR_MUTED       = ("#5A5F6A", "#AAB2C0")   # texto atenuado
+
+    # Rojos (suaves + acción)
+    RED_SOFT_BG       = ("#FEF2F2", "#2a1515")   # fondo/hover sutil
+    RED_SOFT_BORDER   = ("#FDE3E3", "#3a1f1f")
+    COLOR_RED         = ("#E53935", "#ff4c4c")   # acción/danger
+    RED_HOVER         = ("#D7322F", "#ff5f5f")
+
+   # Mostaza (sutil, no chillón)
+    MUSTARD_SOFT_BG     = ("#FFF8E1", "#2a2618")
+    MUSTARD_SOFT_BORDER = ("#F7EAC1", "#3a3420")
+    MUSTARD_MAIN        = ("#D4A017", "#E0B43F")
+    MUSTARD_HOVER       = ("#C29113", "#D1A737")
+
+    # --- COMPATIBILIDAD LEGADA ---
+    # Algunos módulos usan COLOR_YELLOW como hover de botones.
+    # Alias al mostaza principal para no tocar esos módulos:
+    COLOR_YELLOW = MUSTARD_MAIN
+
 
     APP_TITLE = "CEA HARO — Sistema de Información"
     APP_W, APP_H = 1180, 720
@@ -52,7 +69,7 @@ class HaroDesktopApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        ctk.set_appearance_mode("dark")
+        ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("dark-blue")
 
         self.title(self.APP_TITLE)
@@ -71,7 +88,6 @@ class HaroDesktopApp(ctk.CTk):
         except Exception as e:
             print(f"[Icono] Error al establecer ícono: {e}")
 
- 
         self.minsize(1060, 640)
         self.configure(fg_color=self.COLOR_BG)
 
@@ -141,14 +157,15 @@ class HaroDesktopApp(ctk.CTk):
     def _build_topbar(self):
         self.topbar = ctk.CTkFrame(self, height=self.TOPBAR_H, fg_color=self.COLOR_PANEL, corner_radius=0)
         self.topbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        for col in (0,1,2,3,4,5,6,7):
+        for col in (0, 1, 2, 3, 4, 5, 6, 7):
             self.topbar.grid_columnconfigure(col, weight=0)
         self.topbar.grid_columnconfigure(2, weight=1)
 
-        ctk.CTkButton(self.topbar, text="☰", width=44, height=36, corner_radius=10,
-                      fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
-                      text_color=self.COLOR_TEXT, command=self._toggle_sidebar)\
-                      .grid(row=0, column=0, padx=(12, 6), pady=12, sticky="w")
+        ctk.CTkButton(
+            self.topbar, text="☰", width=44, height=36, corner_radius=10,
+            fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
+            text_color=self.COLOR_TEXT, command=self._toggle_sidebar
+        ).grid(row=0, column=0, padx=(12, 6), pady=12, sticky="w")
 
         self.brand_frame = ctk.CTkFrame(self.topbar, fg_color="transparent")
         self.brand_frame.grid(row=0, column=1, padx=(6, 8), pady=0, sticky="w")
@@ -156,35 +173,50 @@ class HaroDesktopApp(ctk.CTk):
         self.brand_frame.grid_columnconfigure(1, weight=0)
 
         self._load_fixed_logo()
-        ctk.CTkLabel(self.brand_frame, image=self.logo_image, text="")\
-            .grid(row=0, column=0, padx=(0,8), pady=12, sticky="w")
-        ctk.CTkLabel(self.brand_frame, text=self.BRAND_TEXT,
-                     font=ctk.CTkFont(size=18, weight="bold"),
-                     text_color=self.COLOR_TEXT)\
-            .grid(row=0, column=1, padx=(0,0), pady=12, sticky="w")
+        ctk.CTkLabel(self.brand_frame, image=self.logo_image, text="") \
+            .grid(row=0, column=0, padx=(0, 8), pady=12, sticky="w")
+        ctk.CTkLabel(
+            self.brand_frame, text=self.BRAND_TEXT,
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=self.COLOR_TEXT
+        ).grid(row=0, column=1, padx=(0, 0), pady=12, sticky="w")
 
+        # Entry de búsqueda con borde sutil y efecto focus mostaza
         self.search_entry = ctk.CTkEntry(
             self.topbar, placeholder_text="Buscar…  (Ctrl+F)",
             height=36, corner_radius=12, fg_color=self.COLOR_INPUT_BG,
-            text_color=self.COLOR_TEXT, border_width=0
+            text_color=self.COLOR_TEXT, border_width=1, border_color=self.COLOR_DIVIDER
         )
-        self.search_entry.grid(row=0, column=2, padx=(8,8), pady=12, sticky="ew")
+        self.search_entry.grid(row=0, column=2, padx=(8, 8), pady=12, sticky="ew")
         self.search_entry.bind("<Return>", self._do_search)
 
-        ctk.CTkButton(self.topbar, text="⟳ Sincronizar", height=36, corner_radius=18,
-                      fg_color=self.COLOR_RED, hover_color=self.COLOR_YELLOW,
-                      text_color="#ffffff", command=self._sync)\
-            .grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
+        def _on_focus_in(_):
+            self.search_entry.configure(border_color=self.MUSTARD_SOFT_BORDER)
+        def _on_focus_out(_):
+            self.search_entry.configure(border_color=self.COLOR_DIVIDER)
+        self.search_entry.bind("<FocusIn>", _on_focus_in)
+        self.search_entry.bind("<FocusOut>", _on_focus_out)
 
-        ctk.CTkButton(self.topbar, text="● Tema", height=36, corner_radius=12,
-                      fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
-                      text_color=self.COLOR_TEXT, command=self._toggle_theme)\
-            .grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
+        # Botón primario (mostaza)
+        ctk.CTkButton(
+            self.topbar, text="⟳ Sincronizar", height=36, corner_radius=18,
+            fg_color=self.MUSTARD_MAIN, hover_color=self.MUSTARD_HOVER,
+            text_color="#111111"
+        ).grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
 
-        ctk.CTkButton(self.topbar, text="Cerrar sesión", height=36, corner_radius=12,
-                      fg_color=self.COLOR_RED, hover_color=self.COLOR_YELLOW,
-                      text_color="#ffffff", command=self._logout)\
-            .grid(row=0, column=6, padx=(0, 12), pady=12, sticky="e")
+        # Neutro
+        ctk.CTkButton(
+            self.topbar, text="● Tema", height=36, corner_radius=12,
+            fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
+            text_color=self.COLOR_TEXT, command=self._toggle_theme
+        ).grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
+
+        # Peligro (rojo)
+        ctk.CTkButton(
+            self.topbar, text="Cerrar sesión", height=36, corner_radius=12,
+            fg_color=self.COLOR_RED, hover_color=self.RED_HOVER,
+            text_color="#ffffff", command=self._logout
+        ).grid(row=0, column=6, padx=(0, 12), pady=12, sticky="e")
 
     # ----------------------- Sidebar ----------------------- #
     def _build_sidebar(self):
@@ -194,29 +226,44 @@ class HaroDesktopApp(ctk.CTk):
             self.sidebar.grid_rowconfigure(r, weight=0)
         self.sidebar.grid_rowconfigure(9, weight=1)
 
-        ctk.CTkLabel(self.sidebar, text="Módulos", text_color=self.COLOR_MUTED,
-                     font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+        ctk.CTkLabel(
+            self.sidebar, text="Módulos", text_color=self.COLOR_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
         self.nav_buttons = {}
+
         def add_nav(row, name, icon):
-            b = ctk.CTkButton(self.sidebar, text=f"{icon}  {name}", height=44, corner_radius=12,
-                              fg_color="transparent", hover_color=self.COLOR_DIVIDER,
-                              text_color=self.COLOR_TEXT, anchor="w",
-                              command=lambda n=name: self._nav_callback(n),
-                              font=ctk.CTkFont(size=14, weight="normal"))
+            b = ctk.CTkButton(
+                self.sidebar, text=f"{icon}  {name}", height=44, corner_radius=12,
+                fg_color="transparent",
+                hover_color=self.MUSTARD_SOFT_BG,
+                text_color=self.COLOR_TEXT, anchor="w",
+                border_color=self.MUSTARD_SOFT_BORDER,
+                border_width=0,
+                command=lambda n=name: self._nav_callback(n),
+                font=ctk.CTkFont(size=14, weight="normal")
+            )
             b.grid(row=row, column=0, padx=10, pady=6, sticky="ew")
             self.nav_buttons[name] = b
 
-        specs = [("Estudiantes","👤"),("Instructores","🧑‍🏫"),("Vehículos","🚗"),
-                 ("Clases","📅"),("Estados de Cuenta","💳"),("Reportes","📊")]
+        specs = [
+            ("Estudiantes", "👤"),
+            ("Instructores", "🧑‍🏫"),
+            ("Vehículos", "🚗"),
+            ("Clases", "📅"),
+            ("Estados de Cuenta", "💳"),
+            ("Reportes", "📊"),
+        ]
         for i, (n, ic) in enumerate(specs, start=1):
             add_nav(i, n, ic)
 
-        ctk.CTkFrame(self.sidebar, height=1, fg_color=self.COLOR_DIVIDER, corner_radius=0)\
-            .grid(row=len(specs)+1, column=0, padx=12, pady=(16, 8), sticky="ew")
-        ctk.CTkLabel(self.sidebar, text="© CEA HARO\nSistema de Información",
-                     justify="left", text_color=self.COLOR_MUTED, font=ctk.CTkFont(size=11))\
-                     .grid(row=len(specs)+2, column=0, padx=16, pady=(0, 12), sticky="sw")
+        ctk.CTkFrame(self.sidebar, height=1, fg_color=self.COLOR_DIVIDER, corner_radius=0) \
+            .grid(row=len(specs) + 1, column=0, padx=12, pady=(16, 8), sticky="ew")
+        ctk.CTkLabel(
+            self.sidebar, text="© CEA HARO\nSistema de Información",
+            justify="left", text_color=self.COLOR_MUTED, font=ctk.CTkFont(size=11)
+        ).grid(row=len(specs) + 2, column=0, padx=16, pady=(0, 12), sticky="sw")
 
     # ----------------------- Content ----------------------- #
     def _build_content_area(self):
@@ -234,7 +281,6 @@ class HaroDesktopApp(ctk.CTk):
             "Estados de Cuenta": EstadosCuentaView(self.content),
             "Reportes": ReportesView(self.content),
         }
-
 
     # ----------------------- Login / Sesión ----------------------- #
     def _show_login(self):
@@ -280,12 +326,20 @@ class HaroDesktopApp(ctk.CTk):
             return
         if self.current_view is not None:
             self.current_view.grid_remove()
-        for _, b in self.nav_buttons.items():
-            b.configure(fg_color="transparent", text_color=self.COLOR_TEXT)
 
+        # limpiar estilo de todos
+        for _, b in self.nav_buttons.items():
+            b.configure(fg_color="transparent", text_color=self.COLOR_TEXT, border_width=0)
+
+        # resaltar activo (suave mostaza)
         btn = self.nav_buttons.get(name)
         if btn:
-            btn.configure(fg_color=self.COLOR_DIVIDER, text_color=self.COLOR_TEXT)
+            btn.configure(
+                fg_color=self.MUSTARD_SOFT_BG,
+                text_color=self.COLOR_TEXT,
+                border_color=self.MUSTARD_SOFT_BORDER,
+                border_width=1
+            )
 
         view = self.views.get(name)
         if view:
