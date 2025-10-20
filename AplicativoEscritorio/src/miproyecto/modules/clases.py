@@ -19,6 +19,12 @@ class ClasesView(BaseModuleFrame):
     ROW_BATCH_DELAY = 5
     MIN_REFRESH_INTERVAL = 500  # ms
 
+    # ===== Compactación de tabla =====
+    ROW_HEIGHT = 34          # alto fijo por fila
+    ROW_PADY   = (0, 0)      # separación vertical entre filas
+    CELL_PADY  = (1, 1)      # padding vertical dentro de cada celda
+    HEADER_PADY = (2, 0)     # padding del header
+
     def __init__(self, master):
         super().__init__(master, "Clases", "Gestión de clases teóricas y prácticas")
         self.app = self.winfo_toplevel()
@@ -122,28 +128,24 @@ class ClasesView(BaseModuleFrame):
         )
         self.table.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
-        # 🔧 Ajuste universal: si existe el atributo interno, úsalo; si no, prueba el nuevo API
-        try:
-            inner = getattr(self.table, "_scrollable_frame", None) or getattr(self.table, "scrollable_frame", None)
-            if inner:
-                inner.grid_propagate(False)
-        except Exception:
-            pass
-
-
         self.table.grid_columnconfigure(0, weight=1)
+
+        inner = getattr(self.table, "_scrollable_frame", None) or getattr(self.table, "scrollable_frame", None)
+        if inner:
+            inner.grid_columnconfigure(0, weight=1)   # <— AÑADE ESTO 
 
         # --- Cabeceras y columnas ---
         self._COLS = [
-            ("Estudiante", 200, 1),
-            ("Instructor", 200, 1),
-            ("Placa", 100, 0),
-            ("Fecha", 120, 0),
-            ("Inicio", 90, 0),
-            ("Fin", 90, 0),
-            ("Estado", 120, 0),
-            ("Acciones", 120, 0)
+            ("Estudiante", 220, 2),
+            ("Instructor", 200, 2),
+            ("Placa",     100, 1),
+            ("Fecha",     120, 1),
+            ("Inicio",     80, 1),
+            ("Fin",        80, 1),
+            ("Estado",    120, 1),
+            ("Acciones",  120, 0),  # sin expandir
         ]
+
 
         self._rows = []
         self._selected_id = None
@@ -153,32 +155,44 @@ class ClasesView(BaseModuleFrame):
         self.table.bind("<Configure>", lambda e: self._resize_columns())
 
     def _render_table(self):
-        """Dibuja la tabla de clases (vista normal)."""
+        """Tabla de clases con estilo idéntico a Estudiantes."""
         for w in self.table.winfo_children():
             w.destroy()
-        self._rows.clear()
+        self._rows = []
 
-        # --- Encabezado ---
+        # ===== ENCABEZADO =====
         header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
-        for i, (_, minw, weight) in enumerate(self._COLS):
-            header.grid_columnconfigure(i, minsize=minw, weight=weight)
-        for i, (nombre, _, _) in enumerate(self._COLS):
-            ctk.CTkLabel(header, text=nombre, text_color=self.app.COLOR_MUTED,
-                        anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+        header.grid(row=0, column=0, padx=8, pady=self.HEADER_PADY, sticky="ew")
 
+        for i, (_, minw, weight) in enumerate(self._COLS):
+            header.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
+
+        for i, (nombre, _, _) in enumerate(self._COLS):
+            ctk.CTkLabel(
+                header,
+                text=nombre,
+                text_color=self.app.COLOR_MUTED,
+                anchor="w",
+                justify="left"
+            ).grid(row=0, column=i, padx=12, pady=8, sticky="ew")
+
+        # ===== SIN DATOS =====
         if not self._data:
             ctk.CTkLabel(self.table, text="Sin registros de clases", text_color=self.app.COLOR_MUTED)\
-                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+                .grid(row=1, column=0, padx=8, pady=8, sticky="w")
             return
 
-        # --- Filas ---
+        # ===== FILAS =====
         for r, rec in enumerate(self._data, start=1):
-            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
-            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
-            for i, (_, minw, weight) in enumerate(self._COLS):
-                row.grid_columnconfigure(i, minsize=minw, weight=weight)
+            rid = self._row_key(rec)
 
+            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+            row.grid(row=r, column=0, padx=8, pady=self.ROW_PADY, sticky="ew")
+
+            for i, (_, minw, weight) in enumerate(self._COLS):
+                row.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
+
+            # Datos
             values = [
                 rec.get("nombre_estudiante", ""),
                 rec.get("nombre_instructor", ""),
@@ -186,29 +200,44 @@ class ClasesView(BaseModuleFrame):
                 rec.get("fecha", ""),
                 rec.get("horaInicio", ""),
                 rec.get("horaFin", ""),
-                rec.get("estado", "")
+                rec.get("estado", ""),
             ]
 
             for i, val in enumerate(values):
-                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
-                                anchor="w", justify="left")
-                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-                lbl.bind("<Button-1>", lambda e, rid=r-1: self._select_row(rid))
+                lbl = ctk.CTkLabel(
+                    row,
+                    text=val,
+                    text_color=self.app.COLOR_TEXT,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=13)
+                )
+                lbl.grid(row=0, column=i, padx=12, pady=self.CELL_PADY, sticky="ew")
+                lbl.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
 
-            # Acciones
+            # ===== ACCIONES =====
             actions = ctk.CTkFrame(row, fg_color="transparent")
-            actions.grid(row=0, column=len(values), padx=8, pady=6, sticky="e")
+            actions.grid(row=0, column=len(self._COLS) - 1, padx=6, pady=0, sticky="e")
 
             def icon_btn(symbol, cmd):
-                return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=10,
-                                    fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                                    text_color="#ffffff", command=cmd)
+                return ctk.CTkButton(
+                    actions,
+                    text=symbol,
+                    width=34,
+                    height=28,
+                    corner_radius=8,
+                    fg_color=self.app.COLOR_RED,
+                    hover_color=self.app.COLOR_YELLOW,
+                    text_color="#ffffff",
+                    command=cmd,
+                )
 
-            icon_btn("✎", lambda rid=r-1: self._edit_row(rid)).grid(row=0, column=0, padx=4)
-            icon_btn("🗑️", lambda rid=r-1: self._delete_row(rid)).grid(row=0, column=1, padx=4)
+            icon_btn("✎", lambda r_id=rid: (self._select_row(r_id), self._editar())).grid(row=0, column=0, padx=3)
+            icon_btn("🗑️", lambda r_id=rid: (self._select_row(r_id), self._eliminar())).grid(row=0, column=1, padx=3)
 
-            row.bind("<Button-1>", lambda e, rid=r-1: self._select_row(rid))
+            row.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
             self._rows.append(row)
+
 
     def _resize_columns(self):
         """Mantiene proporción de columnas al redimensionar."""
@@ -254,6 +283,10 @@ class ClasesView(BaseModuleFrame):
         self.table_right.grid(row=0, column=0, sticky="nsew")
         self.table_right.grid_columnconfigure(0, weight=1)
 
+        inner_r = getattr(self.table_right, "_scrollable_frame", None) or getattr(self.table_right, "scrollable_frame", None)
+        if inner_r:
+            inner_r.grid_columnconfigure(0, weight=1)  # <— AÑADE ESTO 
+
         self._render_table_header(self.table_right, is_right=True)
 
         self.table_right._parent_canvas.bind("<Configure>", self._check_scroll_needed)
@@ -262,22 +295,39 @@ class ClasesView(BaseModuleFrame):
 
     def _render_table_header(self, parent, is_right=False):
         header = ctk.CTkFrame(parent, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        header.grid(row=0, column=0, padx=8, pady=(0, 0), sticky="ew")
-        header.configure(corner_radius=0)  # para que se fusione visualmente con la primera fila
+        header.grid(row=0, column=0, padx=8, pady=self.HEADER_PADY, sticky="ew")
 
         for i, (_, minw, weight) in enumerate(self._COLS):
-            header.grid_columnconfigure(i, minsize=minw, weight=weight)
+            header.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
 
         for i, (title, _, _) in enumerate(self._COLS):
-            ctk.CTkLabel(header, text=title, text_color=self.app.COLOR_MUTED,
-                         anchor="w", justify="left").grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+            ctk.CTkLabel(
+                header, text=title, text_color=self.app.COLOR_MUTED,
+                anchor="w", justify="left"
+            ).grid(row=0, column=i, padx=12, pady=4, sticky="ew")
 
+        # Contenedor real de filas debajo del header
         if is_right:
+            # crea/limpia contenedor derecho
+            try:
+                self.rows_container_right.destroy()
+            except Exception:
+                pass
             self.rows_container_right = ctk.CTkFrame(parent, fg_color="transparent")
             self.rows_container_right.grid(row=1, column=0, sticky="nsew")
+            parent.grid_rowconfigure(1, weight=1)
+            self.rows_container_right.grid_columnconfigure(0, weight=1)
         else:
+            # crea/limpia contenedor superior (vista normal)
+            try:
+                self.rows_container.destroy()
+            except Exception:
+                pass
             self.rows_container = ctk.CTkFrame(parent, fg_color="transparent")
             self.rows_container.grid(row=1, column=0, sticky="nsew")
+            parent.grid_rowconfigure(1, weight=1)
+            self.rows_container.grid_columnconfigure(0, weight=1)
+
 
     def _check_scroll_needed(self, event):
         """Muestra u oculta scroll horizontal si es necesario."""
@@ -317,7 +367,7 @@ class ClasesView(BaseModuleFrame):
 
     def _build_table_header(self, parent, is_right=False):
         header = ctk.CTkFrame(parent, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
+        header.grid(row=0, column=0, padx=8, pady=(2, 0), sticky="ew")
 
         for i, (_, minw, weight) in enumerate(self._COLS):
             header.grid_columnconfigure(i, minsize=minw, weight=weight)
@@ -459,6 +509,7 @@ class ClasesView(BaseModuleFrame):
             else:
                 self._data = [d for d in self._data if self._row_key(d) != self._selected_id]
                 self.app._info("Clase eliminada (local).")
+            self._selected_id = None
             self._set_data(self._data)
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
@@ -536,137 +587,114 @@ class ClasesView(BaseModuleFrame):
         data = self._apply_current_filters(self._data)
         self._set_data(data)
 
+    
+    
     def _set_data(self, new_data):
-        """Actualiza las filas de la tabla de manera segura y sincronizada."""
-        # Verificar que la vista aún existe
+        
         if not hasattr(self, "main") or not self.main.winfo_exists():
             return
 
-        # Contenedor activo
+        
         cont = self.table if not self._calendar_mode else getattr(self, "table_right", None)
         if not cont or not cont.winfo_exists():
             return
 
-        current_ids = set(self._row_order)
-        new_ids = [self._row_key(r) for r in new_data]
-        new_set = set(new_ids)
-
-        # Eliminar filas que ya no están
-        for removed_id in list(current_ids - new_set):
-            fr = self._row_frames.pop(removed_id, None)
-            if fr and fr.winfo_exists():
-                try:
-                    fr.destroy()
-                except Exception:
-                    pass
-            self._rows_widgets.pop(removed_id, None)
-            if removed_id in self._row_order:
-                self._row_order.remove(removed_id)
-            if self._selected_id == removed_id:
-                self._selected_id = None
-
-        # Vaciar contenedor antes de repintar
+        # Limpia completamente la tabla visible y crea header + contenedor de filas.
         for w in cont.winfo_children():
-            try:
-                w.destroy()
-            except Exception:
-                pass
+            try: w.destroy()
+            except Exception: pass
 
-        # Reiniciar el orden de filas
-        self._row_order.clear()
-        # Volver a crear encabezado antes de las filas
+        
         self._render_table_header(cont, is_right=self._calendar_mode)
 
+        # Contenedor real de filas (debajo del header)
+        rows_parent = self.rows_container_right if self._calendar_mode else self.rows_container
+        if not rows_parent or not rows_parent.winfo_exists():
+            rows_parent = cont  # fallback
 
-        if not cont:
-            print("[WARN] Contenedor de tabla no encontrado.")
-            return
+        # Limpia las filas anteriores y referencias obsoletas
+        for w in rows_parent.winfo_children():
+            try: w.destroy()
+            except Exception: pass
+        self._row_frames = {}         # <- evita apuntar a widgets destruidos
+        self._rows_widgets = {}
+        self._row_order = []
 
+        data = list(new_data)  # por si nos pasan un generador
+        new_ids = [self._row_key(r) for r in data]
 
         def paint_batch(start=0):
-            """Pinta las filas por lotes, verificando la existencia del contenedor."""
-            if not cont or not cont.winfo_exists():
-                return  # si se destruyó la vista, no seguimos
-
-            end = min(start + self.ROW_BATCH_SIZE, len(new_data))
+            if not rows_parent or not rows_parent.winfo_exists():
+                return
+            end = min(start + self.ROW_BATCH_SIZE, len(data))
             for i in range(start, end):
-                rec = new_data[i]
+                rec = data[i]
                 rid = new_ids[i]
                 zebra = self._ROW_2 if ((i + 1) % 2 == 0) else self._ROW_1
 
-                if rid in self._row_frames and self._row_frames[rid].winfo_exists():
-                    self._update_row_widgets(rid, rec, zebra)
-                else:
-                    try:
-                        self._create_row_widgets(i, rid, rec, zebra, cont)
-                    except Exception:
-                        continue
-
-                if rid not in self._row_order:
-                    self._row_order.append(rid)
-
-                # Posicionar visualmente
+                # Siempre crea de cero porque acabamos de limpiar contenedor y dicts
+                self._create_row_widgets(i, rid, rec, zebra, rows_parent)
                 fr = self._row_frames.get(rid)
                 if fr and fr.winfo_exists():
-                    try:
-                        fr.grid(row=i + 1, column=0, padx=8, pady=(0, 2), sticky="ew")
-                    except Exception:
-                        pass
+                    fr.grid(row=i, column=0, padx=8, pady=self.ROW_PADY, sticky="ew")
 
-            # Continuar si faltan filas
-            if end < len(new_data):
+                self._row_order.append(rid)
+
+            if end < len(data):
                 self.after(self.ROW_BATCH_DELAY, lambda: paint_batch(end))
             else:
                 self._update_calendar_highlights()
 
-        # Iniciar repintado
+        
         paint_batch(0)
 
 
     def _create_row_widgets(self, visual_index, rid, rec, bg, container):
-        # Fila contenedora
-        row = ctk.CTkFrame(container, fg_color=bg, corner_radius=10)
-        row.grid(row=visual_index + 1, column=0, padx=8, pady=(0, 1), sticky="ew")
+        bg_color = "#FFFFFF" if (visual_index % 2 == 0) else "#F7F7F8"
+        row = ctk.CTkFrame(container, fg_color=bg_color, corner_radius=6, height=self.ROW_HEIGHT)
+        row.grid_propagate(False)
 
-        # Asegurar que las columnas coincidan con el encabezado
+        
         for i, (_, minw, weight) in enumerate(self._COLS):
-            row.grid_columnconfigure(i, minsize=minw, weight=weight)
+            row.grid_columnconfigure(i, minsize=minw, weight=(weight if i == len(self._COLS)-1 else max(1, weight)))
 
         widgets = {}
         values = self._row_values(rec)
 
-        # columnas de texto
+        
         for col, val in enumerate(values[:-1]):
             lbl = ctk.CTkLabel(
                 row, text=val, text_color=self.app.COLOR_TEXT,
-                anchor="w", justify="left"
+                anchor="w", justify="left", font=ctk.CTkFont(size=13)
             )
-            lbl.grid(row=0, column=col, padx=12, pady=8, sticky="ew")
+            lbl.grid(row=0, column=col, padx=12, pady=self.CELL_PADY, sticky="ew")
             lbl.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
             widgets[col] = lbl
 
-        # Acciones (última columna)
+        
         actions = ctk.CTkFrame(row, fg_color="transparent")
-        actions.grid(row=0, column=len(self._COLS) - 1, padx=8, pady=6, sticky="e")
+        actions.grid(row=0, column=len(self._COLS) - 1, padx=6, pady=0, sticky="e")
 
         def icon_btn(symbol, cmd):
             return ctk.CTkButton(
-                actions, text=symbol, width=36, height=32, corner_radius=8,
+                actions, text=symbol, width=28, height=24, corner_radius=6,
                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
                 text_color="#ffffff", command=cmd
             )
 
-        icon_btn("✎", lambda r_id=rid: self._select_row(r_id) or self._editar()).grid(row=0, column=0, padx=4)
-        icon_btn("🗑️", lambda r_id=rid: self._select_row(r_id) or self._eliminar()).grid(row=0, column=1, padx=4)
+        # <<< SIN usar "or" >>>  (evita evaluar _eliminar con widgets ya destruidos)
+        icon_btn("✎", lambda r_id=rid: (self._select_row(r_id), self._editar())).grid(row=0, column=0, padx=3)
+        icon_btn("🗑️", lambda r_id=rid: (self._select_row(r_id), self._eliminar())).grid(row=0, column=1, padx=3)
 
         row.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
+
         self._row_frames[rid] = row
         self._rows_widgets[rid] = widgets
 
 
         # Acciones
         actions = ctk.CTkFrame(row, fg_color="transparent")
-        actions.grid(row=0, column=len(self._COLS) - 1, padx=8, pady=6, sticky="e")
+        actions.grid(row=0, column=len(self._COLS) - 1, padx=6, pady=0, sticky="e")
         def icon_btn(symbol, cmd):
             return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=8,
                                  fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
@@ -727,19 +755,32 @@ class ClasesView(BaseModuleFrame):
     # ============================
     # Selección + detalle
     # ============================
-    def _select_row(self, rid):
-        if self._selected_id and self._selected_id in self._row_frames:
-            # restaurar zebra
-            idx = (self._row_order.index(self._selected_id) if self._selected_id in self._row_order else 0)
-            prev_bg = self._ROW_2 if ((idx + 1) % 2 == 0) else self._ROW_1
-            self._row_frames[self._selected_id].configure(fg_color=prev_bg)
 
+    def _select_row(self, rid):
+        # des-selecciona seguro
+        if self._selected_id and self._selected_id in self._row_frames:
+            fr_prev = self._row_frames.get(self._selected_id)
+            try:
+                if fr_prev and fr_prev.winfo_exists():
+                    idx = self._row_order.index(self._selected_id) if self._selected_id in self._row_order else 0
+                    prev_bg = self._ROW_2 if ((idx + 1) % 2 == 0) else self._ROW_1
+                    fr_prev.configure(fg_color=prev_bg)
+            except Exception:
+                pass
+
+        # nueva selección
         self._selected_id = rid
-        if rid in self._row_frames:
-            self._row_frames[rid].configure(fg_color=self.app.COLOR_DIVIDER)
+        fr_new = self._row_frames.get(rid)
+        try:
+            if fr_new and fr_new.winfo_exists():
+                fr_new.configure(fg_color=self.app.COLOR_DIVIDER)
+        except Exception:
+            pass
 
         rec = next((r for r in self._data if self._row_key(r) == rid), None)
-        if rec: self._update_detail(rec)
+        if rec:
+            self._update_detail(rec)
+
 
     # ============================
     # Actualización del detalle
@@ -914,7 +955,7 @@ class ClasesView(BaseModuleFrame):
 
         # Cabecera
         header = ctk.CTkFrame(self.table_right, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
+        header.grid(row=0, column=0, padx=8, pady=(2, 0), sticky="ew")
 
         for i, (nombre, _, _) in enumerate(self._COLS):
             header.grid_columnconfigure(i, weight=1)
@@ -933,8 +974,8 @@ class ClasesView(BaseModuleFrame):
 
         # Pintar filas
         for r, rec in enumerate(clases_dia, start=1):
-            row = ctk.CTkFrame(self.table_right, fg_color=self.app.COLOR_PANEL, corner_radius=10)
-            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
+            row = ctk.CTkFrame(self.table_right, fg_color=self.app.COLOR_PANEL, corner_radius=8)
+            row.grid(row=r, column=0, padx=8, pady=(0,1), sticky="ew")
 
             values = [
                 rec.get("nombre_estudiante", ""),

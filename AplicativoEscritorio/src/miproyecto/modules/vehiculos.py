@@ -126,6 +126,10 @@ class VehiculosView(BaseModuleFrame):
         self._data = []
         self._rows = []
         self._selected_idx = None
+        self._editing_placa = None  # placa original de la fila abierta en edición
+
+
+        self._editing_id = None  # id del vehículo actualmente en edición
 
         self._render_table()
         self.after(150, self._refrescar)
@@ -212,6 +216,56 @@ class VehiculosView(BaseModuleFrame):
             print("\n[ERROR Vehículos] _sync_column_widths():")
             traceback.print_exc()
 
+    def _extract_id(self, vh: dict):
+        """Devuelve el ID del vehículo sin importar el nombre de la clave."""
+        if not isinstance(vh, dict):
+            return None
+        for k in ("id", "idVehiculo", "vehiculoId", "id_vehiculo", "vehiculo_id", "idvehiculo"):
+            v = vh.get(k)
+            if v not in (None, "", 0):
+                return v
+        return None
+    
+
+    def _resolve_id_from_api_by_placa(self, placa: str):
+        """Intenta obtener el ID desde la API usando la placa (varias rutas comunes)."""
+        if not getattr(self.app, "api", None) or not placa:
+            return None
+
+        candidates = [
+            f"vehiculos/placa/{placa}",
+            f"vehiculos/by-placa/{placa}",
+            f"vehiculos/search?placa={placa}",
+            f"vehiculos?placa={placa}",
+        ]
+        for path in candidates:
+            try:
+                res = self.app.api.get_all(path)  # admite dict o list
+                data = res
+                if isinstance(res, dict):
+                    # desanidar si viene en { data: {...} } o { vehiculo: {...} } o { items: [...] }
+                    for key in ("data", "vehiculo", "vehiculos", "item", "items", "result", "results", "content"):
+                        if key in res:
+                            data = res[key]
+                            break
+                # si es lista, busca coincidencia por placa; si es dict, úsalo directo
+                if isinstance(data, list):
+                    for it in data:
+                        if str(it.get("placa", "")).strip().lower() == placa.strip().lower():
+                            vid = self._extract_id(it)
+                            if vid is None:
+                                continue
+                            return vid
+                elif isinstance(data, dict):
+                    vid = self._extract_id(data)
+                    if vid is not None:
+                        return vid
+            except Exception:
+                continue
+        return None
+
+
+
     # -------------------- Acciones UI --------------------
     def _select_row(self, idx):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
@@ -231,10 +285,16 @@ class VehiculosView(BaseModuleFrame):
 
     def _edit_row(self, idx):
         self._select_row(idx)
-        self.form.show_edit(self._data[idx])
+        item = self._data[idx]
+        self._editing_placa = (item.get("placa") or "").strip()  # << guarda placa original
+        self.form.show_edit(item)
+
 
     def _cancel_inline(self):
+        self._editing_placa = None
         self.form.hide()
+
+
 
     # -------------------- API / Datos --------------------
     def _refrescar(self):
@@ -253,6 +313,14 @@ class VehiculosView(BaseModuleFrame):
                     raw = []
 
             self._data = raw or []
+
+            # Normalizar: asegurar que cada item tenga clave 'id'
+            for it in self._data:
+                if "id" not in it:
+                    iid = self._extract_id(it)
+                    if iid is not None:
+                        it["id"] = iid
+
             self._render_table()
 
         except Exception as e:
@@ -271,15 +339,22 @@ class VehiculosView(BaseModuleFrame):
                 self.app._info("Vehículo creado.")
             else:
                 idx = self._selected_idx
-                if idx is None:
+                if idx is None or not (0 <= idx < len(self._data)):
                     self.app._info("Selecciona un vehículo para actualizar.")
                     return
-                vid = self._data[idx].get("id") or self._data[idx].get("idVehiculo")
-                if not vid:
-                    self.app._info("No se encontró el ID del vehículo.")
+
+                # Placa para la ruta (usa la original si el usuario cambió la del form)
+                placa_path = (self._editing_placa or self._data[idx].get("placa") or "").strip()
+                if not placa_path:
+                    self.app._info("No se encontró la placa del vehículo.")
                     return
-                self.app.api.update("vehiculos", vid, payload)
+
+                # Llama a PUT /api/vehiculos/{placa}
+                self.app.api.update("vehiculos", placa_path, payload)
                 self.app._info("Vehículo actualizado.")
+                self._editing_placa = None
+
+
 
             self._refrescar()
 
@@ -291,24 +366,25 @@ class VehiculosView(BaseModuleFrame):
     def _delete_row(self, idx):
         self._select_row(idx)
         vh = self._data[idx]
-        placa = vh.get("placa", "")
+        placa = (vh.get("placa") or "").strip()
+        if not placa:
+            self.app._info("No se encontró la placa del vehículo.")
+            return
+
         if not messagebox.askyesno("Confirmar", f"¿Eliminar el vehículo con placa {placa}?"):
             self.app._info("Operación cancelada.")
             return
-        try:
-            vid = vh.get("id") or vh.get("idVehiculo")
-            if not vid:
-                self.app._info("No se encontró el ID del vehículo.")
-                return
 
+        try:
+            # DELETE /api/vehiculos/{placa}
             if getattr(self.app, "api", None):
-                self.app.api.delete("vehiculos", vid)
+                self.app.api.delete("vehiculos", placa)
                 self.app._info("Vehículo eliminado.")
                 self._refrescar()
             else:
                 self.app._info("No hay cliente API activo.")
-
         except Exception as e:
             print("\n[ERROR Vehículos] _delete_row():")
             traceback.print_exc()
             messagebox.showerror("Vehículos", f"No se pudo eliminar:\n{e}", parent=self)
+

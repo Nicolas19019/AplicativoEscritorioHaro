@@ -284,13 +284,16 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Login / Sesión ----------------------- #
     def _show_login(self):
-        dlg = LoginDialog(self, on_success=self._on_login_ok, brand=self.BRAND_TEXT)
+        self.login_window = LoginDialog(self, on_success=self._on_login_ok, brand=self.BRAND_TEXT)
         if self.API_USER_DEFAULT:
-            dlg.en_user.insert(0, self.API_USER_DEFAULT)
+            self.login_window.en_user.insert(0, self.API_USER_DEFAULT)
         if self.API_PASS_DEFAULT:
-            dlg.en_pass.insert(0, self.API_PASS_DEFAULT)
+            self.login_window.en_pass.insert(0, self.API_PASS_DEFAULT)
 
     def _on_login_ok(self, user, password):
+        from api_client import ApiClient
+
+        # Crear el cliente con timeout corto
         self.api_user = user
         self.api_pass = password
         self.api = ApiClient(
@@ -301,10 +304,32 @@ class HaroDesktopApp(ctk.CTk):
             pass_field=self.JWT_PASS_FIELD,
             token_field=self.JWT_TOKEN_FIELD
         )
+
+        # 🔹 Intento de conexión de prueba rápida (máx 4s)
+        try:
+            test = self.api.get_all("estudiantes")
+        except Exception as e:
+            test = None
+            self.api.last_error = f"No se pudo conectar con la API. ({e})"
+
+        # 🔹 Si la conexión falló → mostrar error en el login y detener flujo
+        if test is None:
+            msg = self.api.last_error or "No se pudo conectar con la API. Verifica que el servidor esté en ejecución."
+            # Buscar el login activo (último Toplevel)
+            for w in self.winfo_children():
+                if isinstance(w, LoginDialog):
+                    w._show_error(msg)
+                    return  # ❌ No abrir ventana principal
+            # Si no encuentra login, al menos lo loguea
+            print(f"[WARN] {msg}")
+            return
+
+        # 🔹 Si pasa la conexión, abrir la app
         if not hasattr(self, "views"):
             self._register_views()
         self.deiconify()
         self.switch_view("Estudiantes")
+
 
     def _logout(self):
         if messagebox.askyesno("Sesión", "¿Está seguro que desea salir?"):

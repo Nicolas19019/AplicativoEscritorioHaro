@@ -171,14 +171,25 @@ class LoginDialog(ctk.CTkToplevel):
         if not u or not p:
             self._show_error("Usuario y contraseña son obligatorios.")
             return
+
         try:
+            # Llamar al callback (que intenta iniciar sesión)
             cb(u, p)
+
+            # 🔹 Verificar si la API falló
+            if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
+                self._show_error(self.app.api.last_error)
+                return
+
+            # Si todo bien, cerrar login
             self.grab_release()
             self.destroy()
+
         except Exception as e:
             print("\n[ERROR Login] _ok():")
             traceback.print_exc()
             self._show_error(f"Error de autenticación:\n{e}")
+
 
     def _cancel(self):
         self.grab_release()

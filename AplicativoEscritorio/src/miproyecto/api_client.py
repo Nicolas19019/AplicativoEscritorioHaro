@@ -58,49 +58,55 @@ class ApiClient:
         self._bearer = f"Bearer {token}"
 
     def _request(self, method, path, data=None, params=None):
+        """
+        Envía una petición HTTP al backend.
+        Si no hay conexión o la API no responde, NO lanza excepciones;
+        solo registra el error en self.last_error y devuelve None.
+        """
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
         if self.auth_mode == "jwt":
             if not self._bearer:
-                raise AuthError("No autenticado: falta Bearer token.")
+                self.last_error = "No autenticado: falta Bearer token."
+                return None
             headers["Authorization"] = self._bearer
         else:
             headers["Authorization"] = self._basic_header
 
-        if requests:
+        # Si no está disponible requests
+        if not requests:
+            self.last_error = "La librería 'requests' no está instalada."
+            return None
+
+        try:
             func = getattr(requests, method.lower())
-            resp = func(url, headers=headers, json=data, params=params, timeout=15)
+            resp = func(url, headers=headers, json=data, params=params, timeout=3)
+
             if resp.status_code in (401, 403):
-                raise AuthError(f"No autorizado (HTTP {resp.status_code}).")
+                self.last_error = f"No autorizado (HTTP {resp.status_code})."
+                return None
             if resp.status_code >= 400:
-                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+                self.last_error = f"HTTP {resp.status_code}: {resp.text}"
+                return None
+
             if resp.text and resp.headers.get("Content-Type", "").startswith("application/json"):
                 return resp.json()
             return None
-        else:
-            import urllib.request, urllib.error, json as _json
-            payload = None if data is None else _json.dumps(data).encode("utf-8")
-            if params:
-                from urllib.parse import urlencode
-                qs = urlencode(params)
-                url = url + ("&" if "?" in url else "?") + qs
-            req = urllib.request.Request(url, data=payload, method=method.upper())
-            for k, v in headers.items():
-                req.add_header(k, v)
-            try:
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    content = resp.read().decode("utf-8")
-                    if content:
-                        try:
-                            return json.loads(content)
-                        except Exception:
-                            return content
-                    return None
-            except urllib.error.HTTPError as e:
-                body = e.read().decode("utf-8")
-                if e.code in (401, 403):
-                    raise AuthError(f"No autorizado (HTTP {e.code}): {body}")
-                raise RuntimeError(f"HTTP {e.code}: {body}")
+
+        except requests.exceptions.ConnectionError:
+            self.last_error = "No se pudo conectar con la API. Verifique el servidor."
+            return None
+        except requests.exceptions.Timeout:
+            self.last_error = "La API tardó demasiado en responder."
+            return None
+        except requests.exceptions.RequestException as e:
+            self.last_error = f"Error en la solicitud: {e}"
+            return None
+        except Exception as e:
+            self.last_error = f"Error inesperado: {e}"
+            return None
+
 
     # CRUD helpers
     def get_all(self, resource, params=None): return self._request("GET", resource, params=params)

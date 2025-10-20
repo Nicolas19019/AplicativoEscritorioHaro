@@ -54,16 +54,16 @@ class InstructorInlineForm(ctk.CTkFrame):
             text_color=self.app.COLOR_TEXT,
             border_color=self.app.COLOR_DIVIDER,
         )
-        self.cb_esp.set("Práctica carro")  # valor por defecto
+        self.cb_esp.set("Seleccione una especialidad")
         self.cb_esp.grid(row=0, column=3, padx=12, pady=(12, 6), sticky="ew")
 
 
         ctk.CTkLabel(self, text="Nombre").grid(row=1, column=0, padx=12, pady=6, sticky="w")
-        self.en_nom = BorderedEntry(self, placeholder_text="Nombre")
+        self.en_nom = BorderedEntry(self, placeholder_text="Andres")
         self.en_nom.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
 
         ctk.CTkLabel(self, text="Apellido").grid(row=1, column=2, padx=12, pady=6, sticky="w")
-        self.en_ape = BorderedEntry(self, placeholder_text="Apellido")
+        self.en_ape = BorderedEntry(self, placeholder_text="Agudelo")
         self.en_ape.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
 
         ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=0, padx=12, pady=6, sticky="w")
@@ -87,17 +87,47 @@ class InstructorInlineForm(ctk.CTkFrame):
         red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
 
         self.mode = "create"
+    
+    def _reset_fields(self):
+        """Reinicia todos los campos del formulario con placeholders visibles."""
+        try:
+            # Limpiar todos los Entry
+            for w in (self.en_ced, self.en_nom, self.en_ape, self.en_tel, self.en_mail):
+                w.delete(0, "end")
+
+            # Restablecer el ComboBox con placeholder
+            self.cb_esp.set("Seleccione una especialidad")
+
+        except Exception as e:
+            print(f"[WARN] Error al reiniciar campos en InstructorInlineForm: {e}")
+
+
+    def _force_entry_placeholders(self):
+        """Fuerza a que los placeholders de CTkEntry se muestren correctamente al cargar."""
+        try:
+            for attr in dir(self):
+                widget = getattr(self, attr)
+                if isinstance(widget, ctk.CTkEntry):
+                    widget.focus()          # activa el entry
+                    widget.master.focus()   # quita el foco inmediatamente
+            self.update_idletasks()
+        except Exception as e:
+            print(f"[WARN] Error forzando placeholders en {self.__class__.__name__}: {e}")
 
     # -------- Métodos públicos --------
+
     def show_create(self):
         self.mode = "create"
-        self._fill({})
+        self._reset_fields()
         self.grid()
+        self.after(100, self._force_entry_placeholders)
+
 
     def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
         self.grid()
+        self.after(100, self._force_entry_placeholders)
 
     def hide(self):
         self.grid_remove()
@@ -236,16 +266,30 @@ class VehiculoInlineForm(ctk.CTkFrame):
 
         self.mode = "create"
 
+    def _force_entry_placeholders(self):
+        """Fuerza a que los placeholders de CTkEntry se muestren correctamente al cargar."""
+        try:
+            for attr in dir(self):
+                widget = getattr(self, attr)
+                if isinstance(widget, ctk.CTkEntry):
+                    widget.focus()          # activa el entry
+                    widget.master.focus()   # quita el foco inmediatamente
+            self.update_idletasks()
+        except Exception as e:
+            print(f"[WARN] Error forzando placeholders en {self.__class__.__name__}: {e}")
+
     # -------- API pública --------
     def show_create(self):
         self.mode = "create"
         self._fill({})
         self.grid()
+        self.after(100, self._force_entry_placeholders)
 
     def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
         self.grid()
+        self.after(100, self._force_entry_placeholders)
 
     def hide(self):
         self.grid_remove()
@@ -681,13 +725,14 @@ class ClaseInlineForm(ctk.CTkFrame):
     # === Lógica de horas ===
     def _auto_set_hf(self, selected):
         try:
-            if not selected or "hora" in selected.lower(): return
+            if not selected or "hora" in selected.lower():
+                return
             h, m = map(int, selected.split(":"))
             h2 = (h + 2) % 24
-            self.en_hf.configure(state="normal")
+            self.en_hf.configure(state="normal")   # abre para escribir
             self.en_hf.delete(0, "end")
             self.en_hf.insert(0, f"{h2:02d}:{m:02d}")
-            self.en_hf.configure(state="readonly")
+            self.en_hf.configure(state="readonly") # vuelve a readonly
         except Exception as e:
             print("[WARN] cálculo hora fin:", e)
 
@@ -748,14 +793,26 @@ class ClaseInlineForm(ctk.CTkFrame):
 
     def show_create(self):
         self.mode = "create"
-        self.fecha_seleccionada = None
-        self.cb_est.set("Seleccione un estudiante")
-        self.cb_prof.set("Seleccione un instructor")
-        self.cb_veh.set("Seleccione vehículo")
-        self.cb_hi.set("Seleccione hora")
-        self.cb_estado.set("Programada")
-        self.en_hf.configure(state="normal"); self.en_hf.delete(0,"end"); self.en_hf.configure(state="readonly")
+        self._reset_fields()
         self.grid()
+
+
+    def _reset_fields(self):
+        try:
+            self.cb_est.set("Seleccione un estudiante")
+            self.cb_prof.set("Seleccione un instructor")
+            self.cb_veh.set("Seleccione un vehículo")
+            self.cb_hi.set("Seleccione hora")
+            self.en_hf.configure(state="normal")
+            self.en_hf.delete(0, "end")
+            self.en_hf.insert(0, "Calculado automáticamente")
+            self.en_hf.configure(state="readonly")   # ← readonly, no disabled
+            self.cb_estado.set("Programada")
+            self.fecha_var.set("Seleccionar fecha")
+        except Exception as e:
+            print("[WARN] Error al reiniciar campos:", e)
+
+
 
     def show_edit(self, d):
         self.mode = "edit"

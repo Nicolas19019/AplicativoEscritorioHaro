@@ -56,22 +56,54 @@ class ReportesView(BaseModuleFrame):
         filtros.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
         filtros.grid_columnconfigure(6, weight=1)
 
-        ctk.CTkLabel(filtros, text="Tipo de reporte:", text_color=self.app.COLOR_TEXT).grid(row=0, column=0, padx=8, pady=10, sticky="w")
-        self.cb_tipo = ctk.CTkComboBox(filtros, values=["Estudiantes", "Estado de cuenta", "Clases prácticas"], width=200)
+        # === Tipo de reporte ===
+        ctk.CTkLabel(
+            filtros, text="Tipo de reporte:", text_color=self.app.COLOR_TEXT
+        ).grid(row=0, column=0, padx=8, pady=10, sticky="w")
+
+        self.cb_tipo = ctk.CTkComboBox(
+            filtros,
+            values=["Estudiantes", "Estado de cuenta", "Clases prácticas"],
+            width=200,
+            state="readonly"
+        )
         self.cb_tipo.set("Estudiantes")
         self.cb_tipo.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        ctk.CTkLabel(filtros, text="Rango de fechas:", text_color=self.app.COLOR_TEXT).grid(row=0, column=2, padx=8, pady=10, sticky="w")
-        self.en_fecha_ini = ctk.CTkEntry(filtros, placeholder_text="Desde (YYYY-MM-DD)", width=160)
-        self.en_fecha_fin = ctk.CTkEntry(filtros, placeholder_text="Hasta (YYYY-MM-DD)", width=160)
-        self.en_fecha_ini.grid(row=0, column=3, padx=4, pady=10)
-        self.en_fecha_fin.grid(row=0, column=4, padx=4, pady=10)
+        # === Selección de mes ===
+        meses = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ]
+        ctk.CTkLabel(
+            filtros, text="Mes:", text_color=self.app.COLOR_TEXT
+        ).grid(row=0, column=2, padx=8, pady=10, sticky="w")
 
+        self.cb_mes = ctk.CTkComboBox(filtros, values=meses, width=140, state="readonly")
+        self.cb_mes.set(meses[datetime.now().month - 1])
+        self.cb_mes.grid(row=0, column=3, padx=8, pady=10, sticky="w")
+
+        # === Selección de año ===
+        ctk.CTkLabel(
+            filtros, text="Año:", text_color=self.app.COLOR_TEXT
+        ).grid(row=0, column=4, padx=8, pady=10, sticky="w")
+
+        años = [str(y) for y in range(2022, datetime.now().year + 2)]
+        self.cb_anio = ctk.CTkComboBox(filtros, values=años, width=100, state="readonly")
+        self.cb_anio.set(str(datetime.now().year))
+        self.cb_anio.grid(row=0, column=5, padx=8, pady=10, sticky="w")
+
+        # === Botón buscar ===
         ctk.CTkButton(
-            filtros, text="🔍 Buscar", height=36, corner_radius=12,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-            text_color="#ffffff", command=self._generar
-        ).grid(row=0, column=5, padx=10, pady=10, sticky="e")
+            filtros,
+            text="🔍 Buscar",
+            height=36,
+            corner_radius=12,
+            fg_color=self.app.COLOR_RED,
+            hover_color=self.app.COLOR_YELLOW,
+            text_color="#ffffff",
+            command=self._generar
+        ).grid(row=0, column=6, padx=10, pady=10, sticky="e")
 
     # =====================================================
     #                     RENDER TABLA
@@ -102,28 +134,35 @@ class ReportesView(BaseModuleFrame):
     #                     ACCIONES
     # =====================================================
     def _generar(self):
-        """Simula la generación de datos."""
+        """Genera el reporte según tipo y mes/año seleccionados."""
         tipo = self.cb_tipo.get()
         self._tipo = tipo
+        mes = self.cb_mes.get()
+        anio = self.cb_anio.get()
 
+        # Para mostrar información
+        self.app._info(f"Generando reporte de {tipo} para {mes} {anio}...")
+
+        # Simulación temporal de datos (puedes conectar tu API aquí)
         if tipo == "Estudiantes":
             self._data = [
-                {"ID": 1, "Nombre": "Juan Pérez", "Estado": "Activo", "Ingreso": "2025-08-10"},
-                {"ID": 2, "Nombre": "Ana López", "Estado": "Inactivo", "Ingreso": "2025-09-12"},
+                {"ID": 1, "Nombre": "Juan Pérez", "Estado": "Activo", "Ingreso": f"{anio}-08-10"},
+                {"ID": 2, "Nombre": "Ana López", "Estado": "Inactivo", "Ingreso": f"{anio}-09-12"},
             ]
         elif tipo == "Estado de cuenta":
             self._data = [
-                {"Fecha": "2025-09-01", "Concepto": "Pago matrícula", "Tipo": "Ingreso", "Monto": 200000},
-                {"Fecha": "2025-09-05", "Concepto": "Compra combustible", "Tipo": "Egreso", "Monto": -50000},
+                {"Fecha": f"{anio}-09-01", "Concepto": "Pago matrícula", "Tipo": "Ingreso", "Monto": 200000},
+                {"Fecha": f"{anio}-09-05", "Concepto": "Compra combustible", "Tipo": "Egreso", "Monto": -50000},
             ]
         elif tipo == "Clases prácticas":
             self._data = [
-                {"Fecha": "2025-10-01", "Instructor": "Carlos Ruiz", "Estudiantes": 5, "Duración (h)": 3.0},
-                {"Fecha": "2025-10-02", "Instructor": "María Díaz", "Estudiantes": 4, "Duración (h)": 2.5},
+                {"Fecha": f"{anio}-10-01", "Instructor": "Carlos Ruiz", "Estudiantes": 5, "Duración (h)": 3.0},
+                {"Fecha": f"{anio}-10-02", "Instructor": "María Díaz", "Estudiantes": 4, "Duración (h)": 2.5},
             ]
 
         self._render_table()
-        self.app._info(f"Reporte de {tipo} generado correctamente.")
+        self.app._info(f"Reporte de {tipo} para {mes} {anio} generado correctamente.")
+
 
     def _exportar(self):
         """Selecciona el tipo de PDF según el reporte actual."""
