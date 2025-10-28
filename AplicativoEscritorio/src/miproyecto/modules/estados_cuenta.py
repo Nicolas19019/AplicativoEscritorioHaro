@@ -1,3 +1,5 @@
+# modules/estados_cuenta.py
+from typing import Tuple, Dict, Any, Optional
 import customtkinter as ctk
 from tkinter import messagebox
 from modules.base import BaseModuleFrame
@@ -34,12 +36,12 @@ class EstadosCuentaView(BaseModuleFrame):
         self.table.grid_columnconfigure(0, weight=1)
 
         # ===== Variables =====
-        self._data = []
-        self._rows = []
-        self._selected_idx = None
-        self.estudiantes = []
-        self.estudiantes_id_to_name = {}
-        self.estudiantes_name_to_id = {}
+        self._data = []                   # type: list[Dict[str, Any]]
+        self._rows = []                   # type: list[ctk.CTkFrame]
+        self._selected_idx = None         # type: Optional[int]
+        self.estudiantes = []             # type: list[Dict[str, Any]]
+        self.estudiantes_id_to_name = {}  # type: Dict[Any, str]
+        self.estudiantes_name_to_id = {}  # type: Dict[str, Any]
         self._totals_frame = None
 
         self._render_table()
@@ -142,7 +144,7 @@ class EstadosCuentaView(BaseModuleFrame):
             self.app._info("Operación cancelada.")
             return
         try:
-            if self.app.api and rec.get("id"):
+            if getattr(self.app, "api", None) and rec.get("id"):
                 self.app.api.delete("estados-cuenta", rec.get("id"))
                 self.app._info("Registro eliminado.")
             else:
@@ -163,7 +165,7 @@ class EstadosCuentaView(BaseModuleFrame):
                 return
 
             if self._form_mode == "create":
-                if self.app.api:
+                if getattr(self.app, "api", None):
                     self.app.api.create("estados-cuenta", payload)
                     self.app._info("Estado de cuenta creado.")
                 else:
@@ -174,7 +176,7 @@ class EstadosCuentaView(BaseModuleFrame):
                     self.app._info("No se seleccionó registro para actualizar.")
                     return
                 rec = self._data[self._editing_idx]
-                if self.app.api and rec.get("id"):
+                if getattr(self.app, "api", None) and rec.get("id"):
                     self.app.api.update("estados-cuenta", rec.get("id"), payload)
                     self.app._info("Estado de cuenta actualizado.")
                 else:
@@ -188,7 +190,7 @@ class EstadosCuentaView(BaseModuleFrame):
     # ===================== CARGA DATOS =====================
     def _cargar_catalogos_y_listar(self):
         try:
-            if not self.app.api:
+            if not getattr(self.app, "api", None):
                 self._refrescar(local_only=True)
                 return
 
@@ -222,7 +224,7 @@ class EstadosCuentaView(BaseModuleFrame):
 
     def _refrescar(self, local_only=False):
         try:
-            if self.app.api and not local_only:
+            if getattr(self.app, "api", None) and not local_only:
                 raw = self.app.api.get_all("estados-cuenta") or []
                 if isinstance(raw, dict):
                     for key in ("content","items","estados-cuenta","data","results"):
@@ -280,21 +282,34 @@ class EstadosCuentaView(BaseModuleFrame):
             total = float(rec.get("montoTotal") or 0)
             pagado = float(rec.get("montoPagado") or 0)
             saldo = total - pagado
-            estado = rec.get("estado", "pendiente").capitalize()
+            estado = (rec.get("estado", "pendiente") or "pendiente").capitalize()
             saldo_color = "#d9534f" if saldo > 0 else "#28a745"
 
-            vals = [
-                est, f"{total:,.2f}", f"{pagado:,.2f}", f"{saldo:,.2f}", estado
-            ]
+            # Estudiante
+            lbl_est = ctk.CTkLabel(row, text=est, text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
+            lbl_est.grid(row=0, column=0, padx=12, pady=10, sticky="ew")
+            lbl_est.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
 
-            for i, val in enumerate(vals):
-                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT,
-                                   anchor="w", justify="left")
+            # Totales
+            for i, val in enumerate([f"{total:,.2f}", f"{pagado:,.2f}"], start=1):
+                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
                 lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
                 lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
 
+            # Saldo (color)
+            lbl_saldo = ctk.CTkLabel(row, text=f"{saldo:,.2f}", text_color=saldo_color, anchor="w", justify="left")
+            lbl_saldo.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
+            lbl_saldo.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+
+            # Estado
+            lbl_estado = ctk.CTkLabel(row, text=estado, text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
+            lbl_estado.grid(row=0, column=4, padx=12, pady=10, sticky="ew")
+            lbl_estado.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+
+            # Acciones
             actions = ctk.CTkFrame(row, fg_color="transparent")
             actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+
             def icon_btn(symbol, cmd):
                 return ctk.CTkButton(actions, text=symbol, width=36, height=32, corner_radius=8,
                                      fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
@@ -332,19 +347,25 @@ class EstadosCuentaView(BaseModuleFrame):
                      text_color=saldo_color).grid(row=0, column=3, padx=12, pady=8, sticky="e")
 
     # ===================== SELECCIÓN =====================
-    def _select_row(self, idx):
+    def _select_row(self, idx: int):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
-            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+            try:
+                self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+            except Exception:
+                pass
         if 0 <= idx < len(self._rows):
-            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            try:
+                self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+            except Exception:
+                pass
             self._selected_idx = idx
 
-    def _edit_row(self, idx):
+    def _edit_row(self, idx: int):
         self._select_row(idx)
         self._editing_idx = idx
         self._show_form("edit", self._data[idx])
 
-    def _delete_row(self, idx):
+    def _delete_row(self, idx: int):
         self._select_row(idx)
         rec = self._data[idx]
         est = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), rec.get("idEstudiante"))
@@ -352,7 +373,7 @@ class EstadosCuentaView(BaseModuleFrame):
             self.app._info("Operación cancelada.")
             return
         try:
-            if self.app.api and rec.get("id"):
+            if getattr(self.app, "api", None) and rec.get("id"):
                 self.app.api.delete("estados-cuenta", rec.get("id"))
                 self.app._info("Registro eliminado.")
             else:
@@ -361,3 +382,102 @@ class EstadosCuentaView(BaseModuleFrame):
             self._refrescar(local_only=True)
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
+
+    # ===================== HELPERS FORM =====================
+    def _parse_money(self, s: str) -> float:
+        """
+        Acepta: "1.234,56" | "1,234.56" | "1234.56" | "1234".
+        Limpia símbolos y normaliza separadores antes de convertir a float.
+        """
+        if s is None:
+            return 0.0
+        s = str(s).strip()
+        if s == "":
+            return 0.0
+        for ch in "$₱€£% ":
+            s = s.replace(ch, "")
+        if "," in s and "." in s:
+            s = s.replace(".", "").replace(",", ".")
+        elif "," in s and "." not in s:
+            s = s.replace(",", ".")
+        try:
+            return float(s)
+        except Exception:
+            try:
+                return float(s.replace(",", ""))
+            except Exception:
+                raise ValueError("Valor numérico inválido")
+
+    def _collect_form(self) -> Dict[str, Any]:
+        """
+        JSON esperado:
+        {
+          "idEstudiante": int,
+          "montoTotal": float,
+          "montoPagado": float,
+          "estado": "pendiente"|"parcial"|"pagado"
+        }
+        """
+        # Estudiante -> id
+        est_name = (self.cb_estudiante.get() or "").strip()
+        id_est = self.estudiantes_name_to_id.get(est_name)
+        if id_est is None:
+            try:
+                id_est = int(est_name)  # permitir escribir el ID directo
+            except Exception:
+                id_est = None
+
+        total = self._parse_money(self.en_total.get())
+        pagado = self._parse_money(self.en_pagado.get())
+        estado = (self.cb_estado.get() or "pendiente").strip().lower()
+        if estado not in ("pendiente", "parcial", "pagado"):
+            estado = "pendiente"
+
+        return {
+            "idEstudiante": id_est,
+            "montoTotal": total,
+            "montoPagado": pagado,
+            "estado": estado
+        }
+
+    def _validate(self, payload: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Reglas:
+          - idEstudiante obligatorio (>0)
+          - montos >= 0
+          - montoPagado <= montoTotal
+          - coherencia con 'estado':
+              * pagado:  pagado == total
+              * parcial: 0 < pagado < total
+              * pendiente: pagado == 0
+        """
+        # idEstudiante
+        id_est = payload.get("idEstudiante")
+        if id_est in (None, "", 0):
+            return (False, "Debes seleccionar un estudiante válido.")
+
+        # montos
+        try:
+            total = float(payload.get("montoTotal", 0))
+            pagado = float(payload.get("montoPagado", 0))
+        except Exception:
+            return (False, "Los montos deben ser numéricos.")
+
+        if total < 0 or pagado < 0:
+            return (False, "Los montos no pueden ser negativos.")
+        if pagado > total:
+            return (False, "El monto pagado no puede superar el monto total.")
+
+        estado = (payload.get("estado") or "pendiente").lower()
+        eps = 1e-6
+        if estado == "pagado" and abs(pagado - total) > eps:
+            return (False, "Si el estado es 'pagado', el monto pagado debe ser igual al total.")
+        if estado == "parcial" and not (0 + eps < pagado < total - eps):
+            return (False, "Si el estado es 'parcial', el pagado debe ser > 0 y < total.")
+        if estado == "pendiente" and abs(pagado) > eps:
+            return (False, "Si el estado es 'pendiente', el pagado debe ser 0.")
+
+        return (True, "")
+
+# Export explícito por si usas import *
+__all__ = ["EstadosCuentaView"]
