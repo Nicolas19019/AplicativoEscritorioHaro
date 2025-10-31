@@ -1,11 +1,27 @@
-import sys, os, hashlib, traceback
+# ===================== modules/login.py =====================
+__all__ = ["LoginDialog", "SimpleAPI", "AnimatedToggle"]
+
+# ---------- IMPORTS ----------
+import sys
+import os
+import re
+import hashlib
+import traceback
+
 import customtkinter as ctk
 from tkinter import messagebox
+
+# HTTP (opcional, con fallback si no está instalado)
+try:
+    import requests
+except ImportError:
+    requests = None
+
+# Centrar ventana (intenta traerlo de utils y si no, fallback)
 try:
     from utils import centrar_ventana
 except Exception:
     def centrar_ventana(win, w, h):
-        # Fallback simple si no tienes utils.centrar_ventana
         win.update_idletasks()
         sw = win.winfo_screenwidth()
         sh = win.winfo_screenheight()
@@ -13,33 +29,30 @@ except Exception:
         y = max(0, (sh // 2) - (h // 2))
         win.geometry(f"{w}x{h}+{x}+{y}")
 
-# ───────────────────────── HTTP fallback ─────────────────────────
-try:
-    import requests
-except ImportError:
-    requests = None  # si no está, se avisará al usarlo
 
-
+# ---------- SimpleAPI (cliente HTTP mínimo) ----------
 class SimpleAPI:
-    """Cliente HTTP mínimo con manejo de errores, last_error y log de la URL efectiva."""
-    def __init__(self, base_url: str, context_path: str = ""):
+    """Cliente HTTP mínimo con manejo de errores, last_error y URL efectiva."""
+    def __init__(self, base_url, context_path=""):
         # base_url: ej. "http://localhost:8081"
         # context_path: ej. "", "/cea" (sin barra final)
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or "").rstrip("/")
         self.context_path = (context_path or "").rstrip("/")
         self.last_error = None
         self.last_url = None  # para depurar
 
-    def _join(self, path: str) -> str:
+    def _join(self, path):
         # path puede venir absoluto ("http://...") o relativo ("/api/...").
+        if not path:
+            path = "/"
         if path.startswith("http://") or path.startswith("https://"):
             return path
         left = self.base_url
         if self.context_path:
-            left += self.context_path  # no añade barra final
+            left += self.context_path
         return f"{left}{path if path.startswith('/') else '/'+path}"
 
-    def _do_post(self, url: str, json: dict, headers: dict | None, timeout: int):
+    def _do_post(self, url, json, headers, timeout):
         if requests is None:
             self.last_error = "La librería 'requests' no está instalada."
             return None
@@ -60,11 +73,12 @@ class SimpleAPI:
             self.last_error = f"Error de red hacia {url}: {e}"
             return None
 
-    def post(self, path: str, json: dict, headers: dict | None = None, timeout: int = 12):
+    def post(self, path, json, headers=None, timeout=12):
         self.last_error = None
         url = self._join(path)
         self.last_url = url
         data = self._do_post(url, json, headers, timeout)
+
         # Fallback si 404 y el path empieza por "/api/": reintenta sin "/api"
         if data is None and self.last_error and "HTTP 404" in self.last_error and path.startswith("/api/"):
             alt_path = path[4:]  # quita "/api"
@@ -76,7 +90,7 @@ class SimpleAPI:
         return data
 
 
-# ===================== TOGGLE ANIMADO (botón corredizo) =====================
+# ---------- TOGGLE ANIMADO ----------
 class AnimatedToggle(ctk.CTkFrame):
     """
     Toggle animado (slider) con dos opciones tipo web.
@@ -124,7 +138,7 @@ class AnimatedToggle(ctk.CTkFrame):
         self.lbl_right.bind("<Button-1>", lambda _e: self.select(1, animate=True))
         self.inner.bind("<Configure>", self._layout)
 
-        # Labels ocupan mitades (sin width/height en .place)
+        # Labels ocupan mitades
         self.lbl_left.place(relx=0.0,  rely=0.0, relwidth=0.5, relheight=1.0)
         self.lbl_right.place(relx=0.5, rely=0.0, relwidth=0.5, relheight=1.0)
 
@@ -133,16 +147,10 @@ class AnimatedToggle(ctk.CTkFrame):
         h = self.inner.winfo_height()
         if w <= 2 or h <= 2:
             return
-
-        # Tamaños: la píldora respeta 'pad' y ocupa la mitad
         slot_w = (w - 2*self.pad) // 2
         slot_h = self.h - 2*self.pad
         slot_h = max(2, slot_h)
-
-        # Actualiza tamaño de la píldora (NO en place)
         self.pill.configure(width=slot_w, height=slot_h)
-
-        # Posición X en píxeles (sin width/height en place)
         x0 = self.pad + (slot_w * self.idx)
         self.pill.place(x=x0, y=self.pad)
 
@@ -162,7 +170,6 @@ class AnimatedToggle(ctk.CTkFrame):
                 self.on_change(self.values[self.idx])
             return
 
-        # Animación suave en X (píxeles)
         w = self.inner.winfo_width()
         if w <= 2:
             return self.select(index, animate=False)
@@ -179,7 +186,7 @@ class AnimatedToggle(ctk.CTkFrame):
                 self.after(self.speed_ms, lambda: step(i+1, nx))
             else:
                 self.idx = index
-                self._layout()  # snap final
+                self._layout()
                 self.var.set(self.values[self.idx])
                 if self.on_change:
                     self.on_change(self.values[self.idx])
@@ -187,20 +194,31 @@ class AnimatedToggle(ctk.CTkFrame):
         step()
 
 
-# ============================== LOGIN DIALOG ==============================
+# ---------- LOGIN DIALOG ----------
 class LoginDialog(ctk.CTkToplevel):
     """
     Login/Registro para ADMIN.
-    - Login: si hay callback on_success(login, password_hex) se usa; si no, POST LOGIN_ENDPOINT
-    - Registrar admin: POST ADMIN_ENDPOINT con:
-      {correo, cedula, usuario, contrasenaHash(HEX), nombre, activo:true}
+    - Usuario máx. 20, cédula numérica, email validado
+    - Barra de fuerza de contraseña **solo en Registro**
+    - Toggle animado entre Login y Registro
+    - Al salir o cambiar de modo, limpia campos y oculta errores
     """
+    # Patrones y validadores
+    _re_usuario_tecla = re.compile(r"^[A-Za-z0-9._-]{0,20}$")
+    _re_usuario_full  = re.compile(r"^[A-Za-z0-9._-]{3,20}$")
+    _re_nombre_tecla  = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{0,80}$")
+    _re_nombre_full   = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{2,80}$")
+    _re_email_full    = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    _re_cedula_tecla  = re.compile(r"^[0-9]{0,20}$")
+    _re_cedula_full   = re.compile(r"^[0-9]{5,20}$")
+    _danger_chars     = set('<>"\'`$(){}[];')
+
     def __init__(self, master, on_success=None, brand="CEA HARO", base_url=None, api_client=None):
         super().__init__(master)
         self.app = master
         self.title("Inicio de sesión")
 
-        # API: usa self.app.api si existe; si no, usa api_client recibido; si no, crea SimpleAPI
+        # API: usa la de la app si existe, sino crea una
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8081")
         if api_client is not None:
             self.api = api_client
@@ -209,21 +227,14 @@ class LoginDialog(ctk.CTkToplevel):
         else:
             self.api = SimpleAPI(default_base)
 
-        # Endpoints configurables
+        # Endpoints
         self.LOGIN_ENDPOINT = getattr(self.app, "LOGIN_ENDPOINT", "/api/auth/login")
         self.ADMIN_ENDPOINT = getattr(self.app, "ADMIN_ENDPOINT", "/api/administradores")
 
-        self.on_success = on_success  # puede ser None -> se usa self.api para login
+        self.on_success = on_success
 
-        # Icono (opcional)
-        try:
-            if hasattr(self.app, "set_window_icon"):
-                self.app.set_window_icon(self)
-        except Exception:
-            pass
-
-        # Tamaño y posición
-        W, H = 720, 560
+        # Tamaño y posición (más alto para pantallas con escalado)
+        W, H = 720, 550
         self.geometry(f"{W}x{H}")
         try:
             centrar_ventana(self, W, H)
@@ -285,7 +296,6 @@ class LoginDialog(ctk.CTkToplevel):
         right = ctk.CTkFrame(self, fg_color=fg_panel, corner_radius=20,
                              border_width=2, border_color=fg_divider)
         right.grid(row=0, column=1, padx=(8, 16), pady=16, sticky="nsew")
-        # Estructura: header (0) | content (1, expand) | error (2) | botones (3)
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
@@ -297,6 +307,8 @@ class LoginDialog(ctk.CTkToplevel):
         self.modo = ctk.StringVar(value="LOGIN")  # "LOGIN" | "REG"
 
         def _on_toggle(texto):
+            # cada cambio de modo: limpia formularios y errores
+            self._reset_fields(clear_errors=True)
             if texto == "Registrar admin":
                 self.lbl_title.configure(text="Registrar administrador")
                 self.lbl_help.configure(text="Completa los datos para crear un administrador")
@@ -336,7 +348,13 @@ class LoginDialog(ctk.CTkToplevel):
         content.grid_columnconfigure(0, weight=1)
         content.grid_rowconfigure(0, weight=1)
 
-        # Frame LOGIN
+        # ---------- Validadores por tecla ----------
+        v_usuario = (self.register(lambda P: bool(self._re_usuario_tecla.match(P))), "%P")
+        v_nombre  = (self.register(lambda P: bool(self._re_nombre_tecla.match(P))), "%P")
+        v_cedula  = (self.register(lambda P: bool(self._re_cedula_tecla.match(P))), "%P")
+        v_email   = (self.register(self._email_key_validator), "%P")
+
+        # ================== LOGIN ==================
         self.frame_login = ctk.CTkFrame(content, fg_color="transparent")
         self.frame_login.grid(row=0, column=0, sticky="nsew")
         self.frame_login.grid_columnconfigure(0, weight=1)
@@ -347,7 +365,8 @@ class LoginDialog(ctk.CTkToplevel):
 
         self.en_user = ctk.CTkEntry(
             self.frame_login, height=40, corner_radius=12, fg_color=fg_input, text_color=fg_text,
-            border_width=2, border_color=fg_divider, placeholder_text="usuario o correo"
+            border_width=2, border_color=fg_divider, placeholder_text="usuario o correo",
+            validate="key", validatecommand=v_usuario
         )
         self.en_user.grid(row=rr, column=0, padx=0, pady=(0, 12), sticky="ew"); rr += 1
 
@@ -374,7 +393,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         opt_row = rr + 1
         self.cb_remember = ctk.CTkCheckBox(
-            self.frame_login, text="Recordar usuario en este equipo", text_color=fg_text,
+            self.frame_login, text="Recordar usuario", text_color=fg_text,
             fg_color=fg_input, border_color=fg_divider, hover_color=fg_divider
         )
         self.cb_remember.grid(row=opt_row, column=0, padx=0, pady=(0, 10), sticky="w")
@@ -385,8 +404,8 @@ class LoginDialog(ctk.CTkToplevel):
             command=lambda: messagebox.showinfo("Ayuda", "Contacta al administrador del sistema.")
         ).grid(row=opt_row, column=0, padx=0, pady=(0, 10), sticky="e")
 
-        # Frame REGISTRO ADMIN (oculto al inicio) — SIN confirmación de contraseña
-        self.frame_reg = ctk.CTkFrame(content, fg_color="transparent")
+        # ================== REGISTRO (scrollable + barra fuerza) ==================
+        self.frame_reg = ctk.CTkScrollableFrame(content, fg_color="transparent")
         self.frame_reg.grid_forget()
         self.frame_reg.grid_columnconfigure((0, 1), weight=1)
 
@@ -396,8 +415,10 @@ class LoginDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self.frame_reg, text="Cédula", text_color=fg_text)\
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 6), sticky="w"); r2 += 1
 
-        self.ca_nombre = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider)
-        self.ca_cedula = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider)
+        self.ca_nombre = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+                                      validate="key", validatecommand=v_nombre)
+        self.ca_cedula = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+                                      validate="key", validatecommand=v_cedula)
         self.ca_nombre.grid(row=r2, column=0, padx=(0, 10), pady=(0, 10), sticky="ew")
         self.ca_cedula.grid(row=r2, column=1, padx=(10, 0), pady=(0, 10), sticky="ew"); r2 += 1
 
@@ -406,8 +427,10 @@ class LoginDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self.frame_reg, text="Correo", text_color=fg_text)\
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 6), sticky="w"); r2 += 1
 
-        self.ca_usuario = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider)
-        self.ca_email   = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider)
+        self.ca_usuario = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+                                       validate="key", validatecommand=v_usuario)
+        self.ca_email   = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+                                       validate="key", validatecommand=v_email)
         self.ca_usuario.grid(row=r2, column=0, padx=(0, 10), pady=(0, 10), sticky="ew")
         self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 10), sticky="ew"); r2 += 1
 
@@ -418,8 +441,22 @@ class LoginDialog(ctk.CTkToplevel):
                                      border_color=fg_divider, show="*")
         self.ca_pass1.grid(row=r2, column=0, columnspan=2, padx=(0, 0), pady=(0, 10), sticky="ew"); r2 += 1
 
+        # --- Barra fuerza SOLO EN REGISTRO ---
+        self.pw_bar_reg = ctk.CTkProgressBar(self.frame_reg, height=8)
+        self.pw_bar_reg.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.pw_bar_reg.set(0.05)
+        self.pw_bar_reg.configure(progress_color="#ff4c4c"); r2 += 1
+        self.pw_lbl_reg = ctk.CTkLabel(self.frame_reg, text="Seguridad: Muy débil",
+                                       text_color="#ff4c4c", font=ctk.CTkFont(size=10))
+        self.pw_lbl_reg.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 10)); r2 += 1
+
+        # Actualiza al teclear (REGISTRO)
+        self.ca_pass1.bind("<KeyRelease>", lambda e: self._update_strength_meter(self.ca_pass1.get(),
+                                                                                 self.pw_bar_reg, self.pw_lbl_reg))
+
+        # Botón crear admin al final (no se corta por scroll)
         wrap_btn = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
-        wrap_btn.grid(row=r2, column=0, columnspan=2, sticky="e")
+        wrap_btn.grid(row=r2, column=0, columnspan=2, sticky="e", pady=(6, 12))
         self.btn_crear_admin = ctk.CTkButton(
             wrap_btn, text="Registrar administrador", height=34, corner_radius=8,
             fg_color=fg_red, hover_color=fg_yellow, text_color="#ffffff",
@@ -432,7 +469,7 @@ class LoginDialog(ctk.CTkToplevel):
                                 font=ctk.CTkFont(size=12, weight="bold"))
         self.err.grid(row=2, column=0, padx=20, pady=(0, 4), sticky="ew")
 
-        # --- Botones abajo (fijos) ---
+        # --- Botones abajo ---
         actions = ctk.CTkFrame(right, fg_color="transparent")
         actions.grid(row=3, column=0, padx=20, pady=(6, 16), sticky="e")
 
@@ -453,12 +490,81 @@ class LoginDialog(ctk.CTkToplevel):
         self.bind("<Return>", lambda e: self._ok())
         self.en_user.focus_set()
 
-    # =================== LÓGICA DE UI ===================
+    # -------- Helpers validación / fuerza / limpieza --------
+    def _email_key_validator(self, new_text):
+        """Bloquea caracteres peligrosos al escribir email; formato se valida al enviar."""
+        for ch in new_text:
+            if ch in self._danger_chars:
+                return False
+        return True
+
+    def _sanitize_login_for_submit(self, text):
+        """Limpia caracteres peligrosos por si llegan por pegado."""
+        return "".join(ch for ch in text if ch not in self._danger_chars)
+
+    def _password_strength_score(self, pwd):
+        """Score 0..4 según longitud y variedad."""
+        if not pwd:
+            return 0
+        score = 0
+        if len(pwd) >= 8:  score += 1
+        if len(pwd) >= 12: score += 1
+        if re.search(r"[A-Z]", pwd): score += 1
+        if re.search(r"[a-z]", pwd) and re.search(r"[0-9]", pwd): score += 1
+        if re.search(r"[^A-Za-z0-9]", pwd): score += 1
+        return min(score, 4)
+
+    def _strength_to_ui(self, score):
+        """Mapea score a (valor 0..1, texto, color)."""
+        mapping = {
+            0: (0.05, "Muy débil", "#ff4c4c"),
+            1: (0.25, "Débil",     "#ff7a59"),
+            2: (0.50, "Media",     "#f4c542"),
+            3: (0.75, "Fuerte",    "#4caf50"),
+            4: (1.00, "Muy fuerte","#2e7d32"),
+        }
+        return mapping.get(score, (0.05, "Muy débil", "#ff4c4c"))
+
+    def _update_strength_meter(self, pwd, bar, lbl):
+        score = self._password_strength_score(pwd)
+        val, text, color = self._strength_to_ui(score)
+        try:
+            bar.set(val)
+            bar.configure(progress_color=color)
+            lbl.configure(text=f"Seguridad: {text}", text_color=color)
+        except Exception:
+            pass
+
+    def _reset_fields(self, clear_errors=True):
+        """Limpia todos los campos de ambos formularios y oculta errores/barras."""
+        try:
+            # Login
+            self.en_user.delete(0, "end")
+            self.en_pass.delete(0, "end")
+            self.cb_remember.deselect()
+            # Registro
+            self.ca_nombre.delete(0, "end")
+            self.ca_cedula.delete(0, "end")
+            self.ca_usuario.delete(0, "end")
+            self.ca_email.delete(0, "end")
+            self.ca_pass1.delete(0, "end")
+            # Barra de fuerza (reset visual)
+            if hasattr(self, "pw_bar_reg"):
+                self.pw_bar_reg.set(0.05)
+            if hasattr(self, "pw_lbl_reg"):
+                self.pw_lbl_reg.configure(text="Seguridad: Muy débil", text_color="#ff4c4c")
+            # Error
+            if clear_errors and hasattr(self, "err"):
+                self.err.configure(text="")
+        except Exception:
+            pass
+
+    # -------- Lógica de UI --------
     def _toggle_pass(self):
         self._pass_visible = not self._pass_visible
         self.en_pass.configure(show="" if self._pass_visible else "*")
 
-    def _show_error(self, msg: str):
+    def _show_error(self, msg):
         # Añade URL efectiva si existe para depurar rápido
         if hasattr(self, "api") and getattr(self.api, "last_url", None):
             msg = f"{msg}\n\nURL: {self.api.last_url}"
@@ -468,28 +574,41 @@ class LoginDialog(ctk.CTkToplevel):
             traceback.print_exc()
             messagebox.showerror("Login", msg, parent=self)
 
-    # =================== LÓGICA LOGIN / REGISTRO ===================
+    # -------- Lógica Login / Registro --------
     def _ok(self):
         if self.modo.get() != "LOGIN":
             self._show_error("Estás en 'Registrar admin'. Cambia a 'Iniciar sesión' para loguearte.")
             return
 
-        u = self.en_user.get().strip()
+        # Oculta errores previos
+        self.err.configure(text="")
+
+        u = self._sanitize_login_for_submit(self.en_user.get().strip())
         p = self.en_pass.get().strip()
         if not u or not p:
             self._show_error("Usuario y contraseña son obligatorios.")
             return
 
+        # Validación: email vs usuario
+        if "@" in u:
+            if not self._re_email_full.fullmatch(u):
+                self._show_error("Correo inválido.")
+                return
+        else:
+            if not self._re_usuario_full.fullmatch(u):
+                self._show_error("Usuario inválido. Use letras, números, . _ - (3-20).")
+                return
+
         p_hex = hashlib.sha256(p.encode("utf-8")).hexdigest()
 
-        # Si te pasaron callback, úsalo
         if callable(self.on_success):
             try:
                 self.on_success(u, p_hex)
-                # Si el caller mantiene last_error, lo revisamos
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
                     self._show_error(self.app.api.last_error)
                     return
+                # éxito: limpia antes de cerrar
+                self._reset_fields(clear_errors=True)
                 self.grab_release(); self.destroy()
                 return
             except Exception as e:
@@ -497,18 +616,20 @@ class LoginDialog(ctk.CTkToplevel):
                 self._show_error(f"Error de autenticación: {e}")
                 return
 
-        # Si no hay callback, hacemos POST directo con el fallback API
         data = self.api.post(self.LOGIN_ENDPOINT, json={"login": u, "password": p_hex})
         if data is None:
             self._show_error(self.api.last_error or "Login falló.")
             return
 
-        # Si quieres, aquí puedes guardar tokens en self.app.session
-        # tokens: data.get("tokenAcceso"), data.get("tokenRefresco"), etc.
+        # éxito: limpia antes de cerrar
+        self._reset_fields(clear_errors=True)
         self.grab_release()
         self.destroy()
 
     def _crear_admin(self):
+        # Oculta errores previos
+        self.err.configure(text="")
+
         nombre  = getattr(self, "ca_nombre", None).get().strip()
         cedula  = getattr(self, "ca_cedula", None).get().strip()
         usuario = getattr(self, "ca_usuario", None).get().strip()
@@ -517,6 +638,24 @@ class LoginDialog(ctk.CTkToplevel):
 
         if not (nombre and cedula and usuario and correo and p1):
             self._show_error("Completa nombre, cédula, usuario, correo y contraseña.")
+            return
+
+        # Validaciones fuertes
+        if not self._re_nombre_full.fullmatch(nombre):
+            self._show_error("Nombre inválido. Solo letras, espacios, apóstrofo y guion (2-80).")
+            return
+        if not self._re_cedula_full.fullmatch(cedula):
+            self._show_error("Cédula inválida. Solo números (5-20).")
+            return
+        if not self._re_usuario_full.fullmatch(usuario):
+            self._show_error("Usuario inválido. Use letras, números, . _ - (3-20).")
+            return
+        if not self._re_email_full.fullmatch(correo):
+            self._show_error("Correo inválido.")
+            return
+        # Reglas mínimas de contraseña
+        if len(p1) < 8 or not re.search(r"[A-Za-z]", p1) or not re.search(r"[0-9]", p1):
+            self._show_error("La contraseña debe tener mínimo 8 caracteres, con letras y números.")
             return
 
         contrasena_hex = hashlib.sha256(p1.encode("utf-8")).hexdigest()
@@ -534,18 +673,21 @@ class LoginDialog(ctk.CTkToplevel):
             self._show_error(self.api.last_error or "No se pudo crear el administrador.")
             return
 
+        # Mensaje corto de éxito y luego limpiar a fondo
         self.err.configure(text="Administrador creado correctamente.")
-        # Prellenar login y volver al modo LOGIN
-        self.en_user.delete(0, "end"); self.en_user.insert(0, usuario)
-        self.en_pass.delete(0, "end"); self.en_pass.insert(0, p1)
+
+        # Regresar a LOGIN **vacío** (sin prellenar nada)
+        self._reset_fields(clear_errors=True)
         self.modo.set("LOGIN")
         self.frame_reg.grid_forget()
         self.frame_login.grid(row=0, column=0, sticky="nsew")
         self.lbl_title.configure(text="Bienvenido")
         self.lbl_help.configure(text="Ingresa con tus credenciales para continuar")
 
-    # =================== SALIDA TOTAL ===================
+    # -------- Salida total --------
     def _quit_all(self):
+        # Limpia para que, si se vuelve a abrir, no queden rastros visuales
+        self._reset_fields(clear_errors=True)
         try: self.grab_release()
         except Exception: pass
         try:
@@ -562,29 +704,4 @@ class LoginDialog(ctk.CTkToplevel):
             os._exit(0)
 
     def _cancel(self):
-        self._quit_all()  # porque no conecta a la API y tira un 404
-
-
-# ============================== DEMO RÁPIDO ==============================
-if __name__ == "__main__":
-    ctk.set_appearance_mode("light")
-    ctk.set_default_color_theme("blue")
-
-    class App(ctk.CTk):
-        def __init__(self):
-            super().__init__()
-            self.title("Demo LoginDialog")
-            self.geometry("300x200+50+50")
-
-            # Configuración API: AJUSTA AQUÍ TUS ENDPOINTS
-            self.API_BASE_URL = "http://localhost:8081"  # sin /api aquí
-            self.api = SimpleAPI(self.API_BASE_URL)      # si tu Spring usa context-path: SimpleAPI(..., context_path="/cea")
-            self.LOGIN_ENDPOINT = "/api/auth/login"
-            self.ADMIN_ENDPOINT = "/api/administradores"
-
-            ctk.CTkButton(self, text="Abrir Login", command=self.open_login).pack(padx=20, pady=40)
-
-        def open_login(self):
-            LoginDialog(self, brand="CEA HARO")
-
-    App().mainloop()
+        self._quit_all()
