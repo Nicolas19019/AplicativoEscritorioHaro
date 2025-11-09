@@ -79,10 +79,31 @@ class EstadosCuentaView(BaseModuleFrame):
         self.en_pagado = entry("0.00")
         self.en_pagado.grid(row=1, column=3, padx=10, pady=(0,6), sticky="ew")
 
-        label(2, 2, "Estado")
-        self.cb_estado = ctk.CTkComboBox(self.form, values=["pendiente", "parcial", "pagado"], width=180)
-        self.cb_estado.set("pendiente")
-        self.cb_estado.grid(row=3, column=2, padx=10, pady=(0,8), sticky="w")
+        # ---- Estado calculado (solo visual; NO se envía al backend) ----
+        label(2, 2, "Estado (calculado)")
+        self.lbl_estado_calc = ctk.CTkLabel(self.form, text="Pendiente", text_color=self.app.COLOR_MUTED)
+        self.lbl_estado_calc.grid(row=3, column=2, padx=10, pady=(0,8), sticky="w")
+
+        # Preview en vivo del estado según montos (opcional, para UX)
+        def _update_preview(_=None):
+            try:
+                total = self._parse_money(self.en_total.get())
+                pagado = self._parse_money(self.en_pagado.get())
+                if total < 0 or pagado < 0:
+                    self.lbl_estado_calc.configure(text="Inválido")
+                elif pagado == 0:
+                    self.lbl_estado_calc.configure(text="Pendiente")
+                elif abs(pagado - total) < 1e-6:
+                    self.lbl_estado_calc.configure(text="Pagado")
+                elif 0 < pagado < total:
+                    self.lbl_estado_calc.configure(text="En deuda")
+                else:
+                    self.lbl_estado_calc.configure(text="Inválido")
+            except Exception:
+                self.lbl_estado_calc.configure(text="Inválido")
+
+        self.en_total.bind("<KeyRelease>", _update_preview)
+        self.en_pagado.bind("<KeyRelease>", _update_preview)
 
         # Botones
         btns = ctk.CTkFrame(self.form, fg_color="transparent")
@@ -108,7 +129,7 @@ class EstadosCuentaView(BaseModuleFrame):
             self.cb_estudiante.set(est_name)
             self.en_total.delete(0, "end"); self.en_total.insert(0, f"{(data.get('montoTotal') or 0):.2f}")
             self.en_pagado.delete(0, "end"); self.en_pagado.insert(0, f"{(data.get('montoPagado') or 0):.2f}")
-            self.cb_estado.set(data.get("estado", "pendiente"))
+            self.lbl_estado_calc.configure(text=(data.get("estado") or "Pendiente"))
             try:
                 self._editing_idx = self._data.index(data)
             except Exception:
@@ -119,7 +140,7 @@ class EstadosCuentaView(BaseModuleFrame):
                 self.cb_estudiante.set(self.cb_estudiante.cget("values")[0])
             self.en_total.delete(0, "end"); self.en_total.insert(0, "0.00")
             self.en_pagado.delete(0, "end"); self.en_pagado.insert(0, "0.00")
-            self.cb_estado.set("pendiente")
+            self.lbl_estado_calc.configure(text="Pendiente")
         self.form.grid()
 
     def _hide_form(self):
@@ -166,10 +187,11 @@ class EstadosCuentaView(BaseModuleFrame):
 
             if self._form_mode == "create":
                 if getattr(self.app, "api", None):
-                    self.app.api.create("estados-cuenta", payload)
+                    created = self.app.api.create("estados-cuenta", payload)  # <- backend calcula 'estado'
                     self.app._info("Estado de cuenta creado.")
                 else:
                     payload["_local_id"] = (max([r.get("_local_id",0) for r in self._data] or [0]) + 1)
+                    payload["estado"] = self._preview_estado(payload)  # local-only
                     self._data.append(payload)
             else:
                 if self._editing_idx is None:
@@ -177,9 +199,10 @@ class EstadosCuentaView(BaseModuleFrame):
                     return
                 rec = self._data[self._editing_idx]
                 if getattr(self.app, "api", None) and rec.get("id"):
-                    self.app.api.update("estados-cuenta", rec.get("id"), payload)
+                    updated = self.app.api.update("estados-cuenta", rec.get("id"), payload)
                     self.app._info("Estado de cuenta actualizado.")
                 else:
+                    payload["estado"] = self._preview_estado(payload)  # local-only
                     self._data[self._editing_idx].update(payload)
 
             self._hide_form()
@@ -282,7 +305,7 @@ class EstadosCuentaView(BaseModuleFrame):
             total = float(rec.get("montoTotal") or 0)
             pagado = float(rec.get("montoPagado") or 0)
             saldo = total - pagado
-            estado = (rec.get("estado", "pendiente") or "pendiente").capitalize()
+            estado = (rec.get("estado", "Pendiente") or "Pendiente")
             saldo_color = "#d9534f" if saldo > 0 else "#28a745"
 
             # Estudiante
@@ -410,13 +433,13 @@ class EstadosCuentaView(BaseModuleFrame):
 
     def _collect_form(self) -> Dict[str, Any]:
         """
-        JSON esperado:
+        JSON esperado por el backend:
         {
           "idEstudiante": int,
           "montoTotal": float,
-          "montoPagado": float,
-          "estado": "pendiente"|"parcial"|"pagado"
+          "montoPagado": float
         }
+        (el 'estado' lo calcula el servidor; NO se envía)
         """
         # Estudiante -> id
         est_name = (self.cb_estudiante.get() or "").strip()
@@ -429,27 +452,19 @@ class EstadosCuentaView(BaseModuleFrame):
 
         total = self._parse_money(self.en_total.get())
         pagado = self._parse_money(self.en_pagado.get())
-        estado = (self.cb_estado.get() or "pendiente").strip().lower()
-        if estado not in ("pendiente", "parcial", "pagado"):
-            estado = "pendiente"
 
         return {
             "idEstudiante": id_est,
             "montoTotal": total,
-            "montoPagado": pagado,
-            "estado": estado
+            "montoPagado": pagado
         }
 
     def _validate(self, payload: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Reglas:
+        Reglas mínimas en el front (el back valida de nuevo):
           - idEstudiante obligatorio (>0)
           - montos >= 0
           - montoPagado <= montoTotal
-          - coherencia con 'estado':
-              * pagado:  pagado == total
-              * parcial: 0 < pagado < total
-              * pendiente: pagado == 0
         """
         # idEstudiante
         id_est = payload.get("idEstudiante")
@@ -468,16 +483,22 @@ class EstadosCuentaView(BaseModuleFrame):
         if pagado > total:
             return (False, "El monto pagado no puede superar el monto total.")
 
-        estado = (payload.get("estado") or "pendiente").lower()
-        eps = 1e-6
-        if estado == "pagado" and abs(pagado - total) > eps:
-            return (False, "Si el estado es 'pagado', el monto pagado debe ser igual al total.")
-        if estado == "parcial" and not (0 + eps < pagado < total - eps):
-            return (False, "Si el estado es 'parcial', el pagado debe ser > 0 y < total.")
-        if estado == "pendiente" and abs(pagado) > eps:
-            return (False, "Si el estado es 'pendiente', el pagado debe ser 0.")
-
         return (True, "")
+
+    def _preview_estado(self, payload: Dict[str, Any]) -> str:
+        """Solo para modo local sin API: emula el cálculo del backend."""
+        try:
+            total = float(payload.get("montoTotal") or 0)
+            pagado = float(payload.get("montoPagado") or 0)
+            if pagado == 0:
+                return "Pendiente"
+            if abs(pagado - total) < 1e-6:
+                return "Pagado"
+            if 0 < pagado < total:
+                return "En deuda"
+        except Exception:
+            pass
+        return "Inválido"
 
 # Export explícito por si usas import *
 __all__ = ["EstadosCuentaView"]
