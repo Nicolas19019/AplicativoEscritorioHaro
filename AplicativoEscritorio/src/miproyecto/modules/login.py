@@ -41,6 +41,7 @@ class SimpleAPI:
         self.last_error = None
         self.last_url = None  # para depurar
 
+
     def _join(self, path):
         # path puede venir absoluto ("http://...") o relativo ("/api/...").
         if not path:
@@ -195,15 +196,9 @@ class AnimatedToggle(ctk.CTkFrame):
 
 
 # ---------- LOGIN DIALOG ----------
+
 class LoginDialog(ctk.CTkToplevel):
-    """
-    Login/Registro para ADMIN.
-    - Usuario máx. 20, cédula numérica, email validado
-    - Barra de fuerza de contraseña **solo en Registro**
-    - Toggle animado entre Login y Registro
-    - Al salir o cambiar de modo, limpia campos y oculta errores
-    """
-    # Patrones y validadores
+
     _re_usuario_tecla = re.compile(r"^[A-Za-z0-9._-]{0,20}$")
     _re_usuario_full  = re.compile(r"^[A-Za-z0-9._-]{3,20}$")
     _re_nombre_tecla  = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{0,80}$")
@@ -218,7 +213,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.app = master
         self.title("Inicio de sesión")
 
-        # API: usa la de la app si existe, sino crea una
+        # API
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8081")
         if api_client is not None:
             self.api = api_client
@@ -227,30 +222,24 @@ class LoginDialog(ctk.CTkToplevel):
         else:
             self.api = SimpleAPI(default_base)
 
-        # Endpoints
-        self.LOGIN_ENDPOINT = getattr(self.app, "LOGIN_ENDPOINT", "/api/auth/login")
-        self.ADMIN_ENDPOINT = getattr(self.app, "ADMIN_ENDPOINT", "/api/administradores")
 
+        self.LOGIN_ENDPOINT = getattr(self.app, "LOGIN_ENDPOINT", "/api/auth/login")
+
+        self.ADMIN_ENDPOINT = getattr(self.app, "ADMIN_ENDPOINT", "/api/administradores")
+        
         self.on_success = on_success
 
-        # Tamaño y posición (más alto para pantallas con escalado)
-        W, H = 720, 550
+        # Ventana
+        W, H = 740, 560
         self.geometry(f"{W}x{H}")
-        try:
-            centrar_ventana(self, W, H)
-        except Exception:
-            traceback.print_exc()
-
+        try: centrar_ventana(self, W, H)
+        except Exception: traceback.print_exc()
         self.resizable(False, False)
-        self.transient(master)
-        self.grab_set()
-        self.focus_set()
-
-        # Cerrar = apagar toda la app
+        self.transient(master); self.grab_set(); self.focus_set()
         self.protocol("WM_DELETE_WINDOW", self._quit_all)
         self.bind("<Escape>", lambda e: self._quit_all())
 
-        # Paleta desde la app (con fallback)
+        # Paleta
         fg_bg      = getattr(self.app, "COLOR_BG", ("#FFFFFF", "#0f0f10"))
         fg_panel   = getattr(self.app, "COLOR_PANEL", ("#FFFFFF", "#151517"))
         fg_text    = getattr(self.app, "COLOR_TEXT", ("#111111", "#F5F7FA"))
@@ -259,153 +248,153 @@ class LoginDialog(ctk.CTkToplevel):
         fg_input   = getattr(self.app, "COLOR_INPUT_BG", ("#F6F7F9", "#1b1d22"))
         fg_red     = getattr(self.app, "COLOR_RED", ("#E53935", "#ff4c4c"))
         fg_yellow  = getattr(self.app, "COLOR_YELLOW", ("#FFC107", "#FFD54F"))
+        fg_dark    = "#111827"
 
         self.configure(fg_color=fg_bg)
-
-        # ====== Layout principal (2 columnas) ======
+        
         self.grid_columnconfigure(0, weight=1, minsize=280)
-        self.grid_columnconfigure(1, weight=1, minsize=440)
+        self.grid_columnconfigure(1, weight=1, minsize=460)
         self.grid_rowconfigure(0, weight=1)
 
-        # -------- Columna Izquierda (branding) --------
+        # -------- Branding (izquierda)
         left = ctk.CTkFrame(self, fg_color=fg_panel, corner_radius=20,
                             border_width=2, border_color=fg_divider)
         left.grid(row=0, column=0, padx=(16, 8), pady=16, sticky="nsew")
-        left.grid_rowconfigure((0, 1, 2, 3, 4), weight=0)
-        left.grid_rowconfigure(5, weight=1)
+        
         left.grid_columnconfigure(0, weight=1)
 
         logo_img = getattr(self.app, "logo_image", None)
         if logo_img:
-            ctk.CTkLabel(left, image=logo_img, text="").grid(row=0, column=0, pady=(20, 10))
-
+            ctk.CTkLabel(left, image=logo_img, text="").grid(row=0, column=0, pady=(20, 12))
         ctk.CTkLabel(left, text=brand, text_color=fg_text,
-                     font=ctk.CTkFont(size=22, weight="bold")
-                     ).grid(row=1, column=0, padx=18, pady=(6, 2), sticky="n")
-
+                     font=ctk.CTkFont(size=22, weight="bold")).grid(row=1, column=0, pady=(4, 2))
         ctk.CTkLabel(left, text="Sistema de Información", text_color=fg_muted,
-                     font=ctk.CTkFont(size=13)
-                     ).grid(row=2, column=0, padx=18, pady=(2, 16), sticky="n")
+                     font=ctk.CTkFont(size=13)).grid(row=2, column=0, pady=(0, 14))
+        ctk.CTkLabel(left, text="• Gestión integral de estudiantes", text_color=fg_text)\
+            .grid(row=3, column=0, padx=18, sticky="w")
 
-        bullets = ["Gestión integral de estudiantes"]
-        for i, t in enumerate(bullets):
-            ctk.CTkLabel(left, text=f"• {t}", text_color=fg_text, anchor="w")\
-                .grid(row=3 + i, column=0, padx=18, pady=2, sticky="w")
-
-        # -------- Columna Derecha (contenedor) --------
+        # -------- Panel derecho
         right = ctk.CTkFrame(self, fg_color=fg_panel, corner_radius=20,
                              border_width=2, border_color=fg_divider)
         right.grid(row=0, column=1, padx=(8, 16), pady=16, sticky="nsew")
         right.grid_columnconfigure(0, weight=1)
+        # 0=header, 1=content (crece), 2=error, 3=acciones
+        right.grid_rowconfigure(0, weight=0)
         right.grid_rowconfigure(1, weight=1)
+        right.grid_rowconfigure(2, weight=0)
+        right.grid_rowconfigure(3, weight=0)
 
-        # --- Header con toggle animado ---
+        # --- Header + tabs ovalados
         header = ctk.CTkFrame(right, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
-        header.grid_columnconfigure(0, weight=1)
+        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(6, 4))
+        header.grid_columnconfigure((0,1), weight=0)
+        header.grid_columnconfigure(2, weight=1)
 
-        self.modo = ctk.StringVar(value="LOGIN")  # "LOGIN" | "REG"
-
-        def _on_toggle(texto):
-            # cada cambio de modo: limpia formularios y errores
-            self._reset_fields(clear_errors=True)
-            if texto == "Registrar admin":
-                self.lbl_title.configure(text="Registrar administrador")
-                self.lbl_help.configure(text="Completa los datos para crear un administrador")
-                self.frame_login.grid_forget()
-                self.frame_reg.grid(row=0, column=0, sticky="nsew")
-                self.modo.set("REG")
-            else:
-                self.lbl_title.configure(text="Bienvenido")
-                self.lbl_help.configure(text="Ingresa con tus credenciales para continuar")
-                self.frame_reg.grid_forget()
-                self.frame_login.grid(row=0, column=0, sticky="nsew")
-                self.modo.set("LOGIN")
-
-        toggle = AnimatedToggle(
-            header, values=["Iniciar sesión", "Registrar admin"],
-            variable=ctk.StringVar(value="Iniciar sesión"),
-            on_change=_on_toggle,
-            height=40, corner_radius=12,
-            bg_color_bar=fg_divider,
-            indicator_color="#111827",
-            text_color="#000000",
-            pad=4, speed_ms=10, steps=16
+        self.modo = ctk.StringVar(value="LOGIN")
+        self.btn_tab_login = ctk.CTkButton(
+            header, text="Iniciar sesión", height=36, corner_radius=999,
+            fg_color="transparent", text_color="#000", hover_color=fg_divider,
+            border_width=2, border_color=fg_yellow, command=lambda: self._switch_mode("LOGIN")
         )
-        toggle.grid(row=0, column=0, sticky="w")
+        self.btn_tab_reg = ctk.CTkButton(
+            header, text="Registrar admin", height=36, corner_radius=999,
+            fg_color="transparent", text_color="#000", hover_color=fg_divider,
+            border_width=2, border_color="#E5E7EB", command=lambda: self._switch_mode("REG")
+        )
+        self.btn_tab_login.grid(row=0, column=0, padx=(0,8))
+        self.btn_tab_reg.grid(row=0, column=1)
 
-        self.lbl_title = ctk.CTkLabel(header, text="Bienvenido",
-                                      text_color=fg_text, font=ctk.CTkFont(size=20, weight="bold"))
-        self.lbl_title.grid(row=1, column=0, sticky="w", pady=(10, 4))
-
+        self.lbl_title = ctk.CTkLabel(header, text="Bienvenido", text_color=fg_text,
+                                      font=ctk.CTkFont(size=20, weight="bold"))
+        self.lbl_title.grid(row=1, column=0, columnspan=3, sticky="w", pady=(10, 2))
         self.lbl_help = ctk.CTkLabel(header, text="Ingresa con tus credenciales para continuar",
                                      text_color=fg_muted, font=ctk.CTkFont(size=12))
-        self.lbl_help.grid(row=2, column=0, sticky="w")
+        self.lbl_help.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 0))
 
-        # --- Content (swap de formularios) ---
+        # --- Contenido (fila 1)
         content = ctk.CTkFrame(right, fg_color="transparent")
-        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(6, 6))
+        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 8))
         content.grid_columnconfigure(0, weight=1)
-        content.grid_rowconfigure(0, weight=1)
+        self.content = content
 
-        # ---------- Validadores por tecla ----------
+        # Validadores
         v_usuario = (self.register(lambda P: bool(self._re_usuario_tecla.match(P))), "%P")
         v_nombre  = (self.register(lambda P: bool(self._re_nombre_tecla.match(P))), "%P")
         v_cedula  = (self.register(lambda P: bool(self._re_cedula_tecla.match(P))), "%P")
         v_email   = (self.register(self._email_key_validator), "%P")
 
-        # ================== LOGIN ==================
+        # ===== LOGIN (form)
         self.frame_login = ctk.CTkFrame(content, fg_color="transparent")
         self.frame_login.grid(row=0, column=0, sticky="nsew")
         self.frame_login.grid_columnconfigure(0, weight=1)
 
         rr = 0
-        ctk.CTkLabel(self.frame_login, text="Usuario o correo", text_color=fg_text)\
-            .grid(row=rr, column=0, padx=0, pady=(0, 6), sticky="w"); rr += 1
-
+        ctk.CTkLabel(self.frame_login, text="Correo registrado", text_color=fg_text)\
+            .grid(row=rr, column=0, pady=(0, 6), sticky="w"); rr += 1
         self.en_user = ctk.CTkEntry(
-            self.frame_login, height=40, corner_radius=12, fg_color=fg_input, text_color=fg_text,
-            border_width=2, border_color=fg_divider, placeholder_text="usuario o correo",
+            self.frame_login, height=44, corner_radius=12, fg_color=fg_input, text_color=fg_text,
+            border_width=2, border_color=fg_divider,
+            placeholder_text="ana.perez@cea-haro.com",
             validate="key", validatecommand=v_usuario
         )
-        self.en_user.grid(row=rr, column=0, padx=0, pady=(0, 12), sticky="ew"); rr += 1
+        self.en_user.grid(row=rr, column=0, pady=(0, 12), sticky="ew"); rr += 1
+        self._decorate_entry(self.en_user)
 
         ctk.CTkLabel(self.frame_login, text="Contraseña", text_color=fg_text)\
-            .grid(row=rr, column=0, padx=0, pady=(0, 6), sticky="w"); rr += 1
-
+            .grid(row=rr, column=0, pady=(0, 6), sticky="w"); rr += 1
         pass_wrap = ctk.CTkFrame(self.frame_login, fg_color="transparent")
-        pass_wrap.grid(row=rr, column=0, padx=0, pady=(0, 12), sticky="ew")
+        pass_wrap.grid(row=rr, column=0, pady=(0, 6), sticky="ew")
         pass_wrap.grid_columnconfigure(0, weight=1)
 
         self.en_pass = ctk.CTkEntry(
-            pass_wrap, height=40, corner_radius=12, show="*",
+            pass_wrap, height=44, corner_radius=12, show="*",
             fg_color=fg_input, text_color=fg_text,
             border_width=2, border_color=fg_divider, placeholder_text="********"
         )
         self.en_pass.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self._pass_visible = False
-
+        self._decorate_entry(self.en_pass)
         ctk.CTkButton(
-            pass_wrap, text="👁", width=40, height=40, corner_radius=12,
+            pass_wrap, text="👁", width=40, height=44, corner_radius=12,
             fg_color=fg_divider, hover_color=fg_input, text_color=fg_text,
             command=self._toggle_pass
         ).grid(row=0, column=1, sticky="e")
 
-        opt_row = rr + 1
+        # Mensaje "¿No tienes un perfil administrador? Crea uno"
+        row_msg = rr + 1
+        msg_wrap = ctk.CTkFrame(self.frame_login, fg_color="transparent")
+        msg_wrap.grid(row=row_msg, column=0, sticky="w", pady=(2, 10))
+
+        ctk.CTkLabel(
+            msg_wrap,
+            text="¿No tienes un perfil administrador?",
+            text_color=fg_muted,
+            font=ctk.CTkFont(size=11),
+        ).grid(row=0, column=0, sticky="w")
+
+        ctk.CTkButton(
+            msg_wrap,
+            text="Crea uno",
+            fg_color="transparent",
+            hover_color=fg_divider,
+            text_color=fg_yellow,  # resalta con el amarillo de marca
+            font=ctk.CTkFont(size=11, weight="bold", underline=True),
+            command=lambda: self._switch_mode("REG"),
+        ).grid(row=0, column=1, padx=(6, 0), sticky="w")
+
+
         self.cb_remember = ctk.CTkCheckBox(
             self.frame_login, text="Recordar usuario", text_color=fg_text,
             fg_color=fg_input, border_color=fg_divider, hover_color=fg_divider
         )
-        self.cb_remember.grid(row=opt_row, column=0, padx=0, pady=(0, 10), sticky="w")
-
+        self.cb_remember.grid(row=rr+2, column=0, pady=(0, 10), sticky="w")
         ctk.CTkButton(
-            self.frame_login, text="¿Olvidaste tu contraseña?", height=28, corner_radius=8,
+            self.frame_login, text="¿Olvidaste tu contraseña?", height=30, corner_radius=8,
             fg_color="transparent", hover_color=fg_divider, text_color=fg_muted,
             command=lambda: messagebox.showinfo("Ayuda", "Contacta al administrador del sistema.")
-        ).grid(row=opt_row, column=0, padx=0, pady=(0, 10), sticky="e")
+        ).grid(row=rr+2, column=0, pady=(0, 4), sticky="e")
 
-        # ================== REGISTRO (scrollable + barra fuerza) ==================
-        self.frame_reg = ctk.CTkScrollableFrame(content, fg_color="transparent")
+        # ===== REGISTRO (form fijo sin scroll)
+        self.frame_reg = ctk.CTkFrame(content, fg_color="transparent")
         self.frame_reg.grid_forget()
         self.frame_reg.grid_columnconfigure((0, 1), weight=1)
 
@@ -415,97 +404,122 @@ class LoginDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self.frame_reg, text="Cédula", text_color=fg_text)\
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 6), sticky="w"); r2 += 1
 
-        self.ca_nombre = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
-                                      validate="key", validatecommand=v_nombre)
-        self.ca_cedula = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+        self.ca_nombre = ctk.CTkEntry(self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+                                      border_color=fg_divider, placeholder_text="Ana María Pérez")
+        self.ca_cedula = ctk.CTkEntry(self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+                                      border_color=fg_divider, placeholder_text="1032456789",
                                       validate="key", validatecommand=v_cedula)
         self.ca_nombre.grid(row=r2, column=0, padx=(0, 10), pady=(0, 10), sticky="ew")
         self.ca_cedula.grid(row=r2, column=1, padx=(10, 0), pady=(0, 10), sticky="ew"); r2 += 1
+        self._decorate_entry(self.ca_nombre); self._decorate_entry(self.ca_cedula)
 
         ctk.CTkLabel(self.frame_reg, text="Usuario", text_color=fg_text)\
             .grid(row=r2, column=0, padx=(0, 10), pady=(0, 6), sticky="w")
         ctk.CTkLabel(self.frame_reg, text="Correo", text_color=fg_text)\
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 6), sticky="w"); r2 += 1
 
-        self.ca_usuario = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+        self.ca_usuario = ctk.CTkEntry(self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+                                       border_color=fg_divider, placeholder_text="aperez",
                                        validate="key", validatecommand=v_usuario)
-        self.ca_email   = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text, border_color=fg_divider,
+        self.ca_email   = ctk.CTkEntry(self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+                                       border_color=fg_divider, placeholder_text="ana.perez@cea-haro.com",
                                        validate="key", validatecommand=v_email)
         self.ca_usuario.grid(row=r2, column=0, padx=(0, 10), pady=(0, 10), sticky="ew")
         self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 10), sticky="ew"); r2 += 1
+        self._decorate_entry(self.ca_usuario); self._decorate_entry(self.ca_email)
 
         ctk.CTkLabel(self.frame_reg, text="Contraseña", text_color=fg_text)\
             .grid(row=r2, column=0, padx=(0, 10), pady=(0, 6), sticky="w"); r2 += 1
 
-        self.ca_pass1 = ctk.CTkEntry(self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
-                                     border_color=fg_divider, show="*")
-        self.ca_pass1.grid(row=r2, column=0, columnspan=2, padx=(0, 0), pady=(0, 10), sticky="ew"); r2 += 1
+        self.ca_pass1 = ctk.CTkEntry(self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+                                     border_color=fg_divider, show="*",
+                                     placeholder_text="Mín. 8 caracteres (letras y números)")
+        self.ca_pass1.grid(row=r2, column=0, columnspan=2, pady=(0, 10), sticky="ew"); r2 += 1
+        self._decorate_entry(self.ca_pass1)
 
-        # --- Barra fuerza SOLO EN REGISTRO ---
         self.pw_bar_reg = ctk.CTkProgressBar(self.frame_reg, height=8)
         self.pw_bar_reg.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        self.pw_bar_reg.set(0.05)
-        self.pw_bar_reg.configure(progress_color="#ff4c4c"); r2 += 1
+        self.pw_bar_reg.set(0.05); self.pw_bar_reg.configure(progress_color="#ff4c4c"); r2 += 1
         self.pw_lbl_reg = ctk.CTkLabel(self.frame_reg, text="Seguridad: Muy débil",
                                        text_color="#ff4c4c", font=ctk.CTkFont(size=10))
-        self.pw_lbl_reg.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 10)); r2 += 1
-
-        # Actualiza al teclear (REGISTRO)
+        self.pw_lbl_reg.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 6)); r2 += 1
         self.ca_pass1.bind("<KeyRelease>", lambda e: self._update_strength_meter(self.ca_pass1.get(),
                                                                                  self.pw_bar_reg, self.pw_lbl_reg))
 
-        # Botón crear admin al final (no se corta por scroll)
-        wrap_btn = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
-        wrap_btn.grid(row=r2, column=0, columnspan=2, sticky="e", pady=(6, 12))
-        self.btn_crear_admin = ctk.CTkButton(
-            wrap_btn, text="Registrar administrador", height=34, corner_radius=8,
-            fg_color=fg_red, hover_color=fg_yellow, text_color="#ffffff",
-            command=self._crear_admin
-        )
-        self.btn_crear_admin.grid(row=0, column=0, padx=0, pady=(4, 2), sticky="e")
-
-        # --- Error / info ---
+        # --- Error / info (fila 2)
         self.err = ctk.CTkLabel(right, text="", text_color=fg_red, anchor="w", justify="left",
                                 font=ctk.CTkFont(size=12, weight="bold"))
         self.err.grid(row=2, column=0, padx=20, pady=(0, 4), sticky="ew")
 
-        # --- Botones abajo ---
-        actions = ctk.CTkFrame(right, fg_color="transparent")
-        actions.grid(row=3, column=0, padx=20, pady=(6, 16), sticky="e")
-
+        # --- Acciones (fila 3): 2 barras, se muestra 1 a la vez
+        # Login
+        self.actions_login = ctk.CTkFrame(right, fg_color="transparent")
+        self.actions_login.grid(row=3, column=0, padx=20, pady=(6, 16), sticky="e")
         self.btn_cancel = ctk.CTkButton(
-            actions, text="Cancelar", height=40, corner_radius=12,
+            self.actions_login, text="Cancelar", height=42, corner_radius=12,
             fg_color=fg_red, hover_color=fg_yellow, text_color="#ffffff",
             command=self._cancel
         )
         self.btn_accept = ctk.CTkButton(
-            actions, text="Ingresar", height=40, corner_radius=12,
-            fg_color="#111827", hover_color="#333c49", text_color="#ffffff",
+            self.actions_login, text="Ingresar", height=42, corner_radius=12,
+            fg_color=fg_dark, hover_color="#333c49", text_color="#ffffff",
             command=self._ok
         )
         self.btn_cancel.grid(row=0, column=0, padx=(0, 8))
         self.btn_accept.grid(row=0, column=1)
 
-        # Atajos
-        self.bind("<Return>", lambda e: self._ok())
-        self.en_user.focus_set()
+        # Registro (oculta al inicio)
+        self.actions_reg = ctk.CTkFrame(right, fg_color="transparent")
+        self.btn_cancel_reg = ctk.CTkButton(
+            self.actions_reg, text="Cancelar", height=42, corner_radius=12,
+            fg_color="transparent", hover_color=fg_divider, text_color=fg_text,
+            border_width=1, border_color=fg_divider, command=self._cancel
+        )
+        self.btn_registrar_bottom = ctk.CTkButton(
+            self.actions_reg, text="Registrar administrador", height=42, corner_radius=12,
+            fg_color=fg_red, hover_color=fg_yellow, text_color="#ffffff",
+            command=self._crear_admin
+        )
+        self.btn_cancel_reg.grid(row=0, column=0, padx=(0, 8))
+        self.btn_registrar_bottom.grid(row=0, column=1)
 
-    # -------- Helpers validación / fuerza / limpieza --------
+        # Enfoque inicial y estilo de tab
+        self.bind("<Return>", lambda e: self._enter_action())
+        self.en_user.focus_set()
+        self._style_tabs(active="LOGIN")
+
+    # ---------- Helpers UI ----------
+    def _style_tabs(self, active):
+        if active == "LOGIN":
+            self.btn_tab_login.configure(border_color="#FFD54F")
+            self.btn_tab_reg.configure(border_color="#E5E7EB")
+        else:
+            self.btn_tab_login.configure(border_color="#E5E7EB")
+            self.btn_tab_reg.configure(border_color="#FFD54F")
+
+    def _decorate_entry(self, entry):
+        normal = {"border_color": "#E5E7EB"}
+        focus  = {"border_color": "#FFC107"}
+        try:
+            entry.configure(border_width=2, **normal)
+            entry.bind("<FocusIn>",  lambda _e: entry.configure(**focus))
+            entry.bind("<FocusOut>", lambda _e: entry.configure(**normal))
+        except Exception:
+            pass
+
+    # ---------- Validación / fuerza ----------
     def _email_key_validator(self, new_text):
-        """Bloquea caracteres peligrosos al escribir email; formato se valida al enviar."""
+    
         for ch in new_text:
-            if ch in self._danger_chars:
-                return False
+            if ch in self._danger_chars: return False
         return True
 
     def _sanitize_login_for_submit(self, text):
-        """Limpia caracteres peligrosos por si llegan por pegado."""
+    
         return "".join(ch for ch in text if ch not in self._danger_chars)
 
     def _password_strength_score(self, pwd):
-        """Score 0..4 según longitud y variedad."""
-        if not pwd:
-            return 0
+        if not pwd: return 0
         score = 0
         if len(pwd) >= 8:  score += 1
         if len(pwd) >= 12: score += 1
@@ -515,121 +529,100 @@ class LoginDialog(ctk.CTkToplevel):
         return min(score, 4)
 
     def _strength_to_ui(self, score):
-        """Mapea score a (valor 0..1, texto, color)."""
-        mapping = {
-            0: (0.05, "Muy débil", "#ff4c4c"),
-            1: (0.25, "Débil",     "#ff7a59"),
-            2: (0.50, "Media",     "#f4c542"),
-            3: (0.75, "Fuerte",    "#4caf50"),
-            4: (1.00, "Muy fuerte","#2e7d32"),
-        }
-        return mapping.get(score, (0.05, "Muy débil", "#ff4c4c"))
+        mapping = {0:(0.05,"Muy débil","#ff4c4c"),1:(0.25,"Débil","#ff7a59"),
+                   2:(0.50,"Media","#f4c542"),3:(0.75,"Fuerte","#4caf50"),4:(1.00,"Muy fuerte","#2e7d32")}
+        return mapping.get(score, (0.05,"Muy débil","#ff4c4c"))
 
     def _update_strength_meter(self, pwd, bar, lbl):
-        score = self._password_strength_score(pwd)
-        val, text, color = self._strength_to_ui(score)
-        try:
-            bar.set(val)
-            bar.configure(progress_color=color)
-            lbl.configure(text=f"Seguridad: {text}", text_color=color)
-        except Exception:
-            pass
+        val, text, color = self._strength_to_ui(self._password_strength_score(pwd))
+        try: bar.set(val); bar.configure(progress_color=color); lbl.configure(text=f"Seguridad: {text}", text_color=color)
+        except Exception: pass
 
     def _reset_fields(self, clear_errors=True):
-        """Limpia todos los campos de ambos formularios y oculta errores/barras."""
+    
         try:
             # Login
-            self.en_user.delete(0, "end")
-            self.en_pass.delete(0, "end")
+            self.en_user.delete(0, "end"); self.en_pass.delete(0, "end")
             self.cb_remember.deselect()
             # Registro
-            self.ca_nombre.delete(0, "end")
-            self.ca_cedula.delete(0, "end")
-            self.ca_usuario.delete(0, "end")
-            self.ca_email.delete(0, "end")
-            self.ca_pass1.delete(0, "end")
-            # Barra de fuerza (reset visual)
-            if hasattr(self, "pw_bar_reg"):
-                self.pw_bar_reg.set(0.05)
-            if hasattr(self, "pw_lbl_reg"):
-                self.pw_lbl_reg.configure(text="Seguridad: Muy débil", text_color="#ff4c4c")
+            for w in ("ca_nombre","ca_cedula","ca_usuario","ca_email","ca_pass1"):
+                if hasattr(self, w): getattr(self, w).delete(0,"end")
+            if hasattr(self, "pw_bar_reg"): self.pw_bar_reg.set(0.05)
+            if hasattr(self, "pw_lbl_reg"): self.pw_lbl_reg.configure(text="Seguridad: Muy débil", text_color="#ff4c4c")
             # Error
-            if clear_errors and hasattr(self, "err"):
-                self.err.configure(text="")
+            if clear_errors and hasattr(self, "err"): self.err.configure(text="")
         except Exception:
             pass
 
-    # -------- Lógica de UI --------
+    # ---------- Acciones ----------
+    def _enter_action(self):
+        if self.modo.get() == "REG":
+            self._crear_admin()
+        else:
+            self._ok()
+
     def _toggle_pass(self):
-        self._pass_visible = not self._pass_visible
+        self._pass_visible = not getattr(self, "_pass_visible", False)
         self.en_pass.configure(show="" if self._pass_visible else "*")
 
+   
     def _show_error(self, msg):
-        # Añade URL efectiva si existe para depurar rápido
+    
         if hasattr(self, "api") and getattr(self.api, "last_url", None):
             msg = f"{msg}\n\nURL: {self.api.last_url}"
-        try:
-            self.err.configure(text=msg or "")
+        try: self.err.configure(text=msg or "")
         except Exception:
-            traceback.print_exc()
-            messagebox.showerror("Login", msg, parent=self)
+            traceback.print_exc(); messagebox.showerror("Login", msg, parent=self)
 
-    # -------- Lógica Login / Registro --------
+    def _switch_mode(self, mode):
+        if mode == "REG":
+            self.modo.set("REG")
+            self.lbl_title.configure(text="Registrar administrador")
+            self.lbl_help.configure(text="Completa los datos para crear un administrador.")
+            self.frame_login.grid_forget()
+            self.frame_reg.grid(row=0, column=0, sticky="nsew")
+            # acciones
+            self.actions_login.grid_forget()
+            self.actions_reg.grid(row=3, column=0, padx=20, pady=(6, 16), sticky="e")
+            self._style_tabs(active="REG")
+        else:
+            self.modo.set("LOGIN")
+            self.lbl_title.configure(text="Bienvenido")
+            self.lbl_help.configure(text="Ingresa con tus credenciales para continuar")
+            self.frame_reg.grid_forget()
+            self.frame_login.grid(row=0, column=0, sticky="nsew")
+            # acciones
+            self.actions_reg.grid_forget()
+            self.actions_login.grid(row=3, column=0, padx=20, pady=(6, 16), sticky="e")
+            self._style_tabs(active="LOGIN")
+
     def _ok(self):
         if self.modo.get() != "LOGIN":
-            self._show_error("Estás en 'Registrar admin'. Cambia a 'Iniciar sesión' para loguearte.")
-            return
-
-        # Oculta errores previos
-        self.err.configure(text="")
-
+            self._show_error("Estás en 'Registrar admin'. Cambia a 'Iniciar sesión' para loguearte."); return
         u = self._sanitize_login_for_submit(self.en_user.get().strip())
         p = self.en_pass.get().strip()
-        if not u or not p:
-            self._show_error("Usuario y contraseña son obligatorios.")
-            return
-
-        # Validación: email vs usuario
+        if not u or not p: self._show_error("Usuario y contraseña son obligatorios."); return
         if "@" in u:
-            if not self._re_email_full.fullmatch(u):
-                self._show_error("Correo inválido.")
-                return
+            if not self._re_email_full.fullmatch(u): self._show_error("Correo inválido."); return
         else:
-            if not self._re_usuario_full.fullmatch(u):
-                self._show_error("Usuario inválido. Use letras, números, . _ - (3-20).")
-                return
-
+            if not self._re_usuario_full.fullmatch(u): self._show_error("Usuario inválido. Use letras, números, . _ - (3-20)."); return
         p_hex = hashlib.sha256(p.encode("utf-8")).hexdigest()
 
         if callable(self.on_success):
             try:
                 self.on_success(u, p_hex)
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
-                    self._show_error(self.app.api.last_error)
-                    return
-                # éxito: limpia antes de cerrar
-                self._reset_fields(clear_errors=True)
-                self.grab_release(); self.destroy()
-                return
+                    self._show_error(self.app.api.last_error); return
+                self._reset_fields(True); self.grab_release(); self.destroy(); return
             except Exception as e:
-                traceback.print_exc()
-                self._show_error(f"Error de autenticación: {e}")
-                return
+                traceback.print_exc(); self._show_error(f"Error de autenticación: {e}"); return
 
         data = self.api.post(self.LOGIN_ENDPOINT, json={"login": u, "password": p_hex})
-        if data is None:
-            self._show_error(self.api.last_error or "Login falló.")
-            return
-
-        # éxito: limpia antes de cerrar
-        self._reset_fields(clear_errors=True)
-        self.grab_release()
-        self.destroy()
+        if data is None: self._show_error(self.api.last_error or "Login falló."); return
+        self._reset_fields(True); self.grab_release(); self.destroy()
 
     def _crear_admin(self):
-        # Oculta errores previos
-        self.err.configure(text="")
-
+    
         nombre  = getattr(self, "ca_nombre", None).get().strip()
         cedula  = getattr(self, "ca_cedula", None).get().strip()
         usuario = getattr(self, "ca_usuario", None).get().strip()
@@ -637,57 +630,33 @@ class LoginDialog(ctk.CTkToplevel):
         p1      = getattr(self, "ca_pass1",   None).get().strip()
 
         if not (nombre and cedula and usuario and correo and p1):
-            self._show_error("Completa nombre, cédula, usuario, correo y contraseña.")
-            return
-
-        # Validaciones fuertes
+            self._show_error("Completa nombre, cédula, usuario, correo y contraseña."); return
         if not self._re_nombre_full.fullmatch(nombre):
-            self._show_error("Nombre inválido. Solo letras, espacios, apóstrofo y guion (2-80).")
-            return
+            self._show_error("Nombre inválido. Solo letras, espacios, apóstrofo y guion (2-80)."); return
         if not self._re_cedula_full.fullmatch(cedula):
-            self._show_error("Cédula inválida. Solo números (5-20).")
-            return
+            self._show_error("Cédula inválida. Solo números (5-20)."); return
         if not self._re_usuario_full.fullmatch(usuario):
-            self._show_error("Usuario inválido. Use letras, números, . _ - (3-20).")
-            return
+            self._show_error("Usuario inválido. Use letras, números, . _ - (3-20)."); return
         if not self._re_email_full.fullmatch(correo):
-            self._show_error("Correo inválido.")
-            return
-        # Reglas mínimas de contraseña
+            self._show_error("Correo inválido."); return
         if len(p1) < 8 or not re.search(r"[A-Za-z]", p1) or not re.search(r"[0-9]", p1):
-            self._show_error("La contraseña debe tener mínimo 8 caracteres, con letras y números.")
-            return
+            self._show_error("La contraseña debe tener mínimo 8 caracteres, con letras y números."); return
 
         contrasena_hex = hashlib.sha256(p1.encode("utf-8")).hexdigest()
-        payload = {
-            "correo":         correo,
-            "cedula":         cedula,
-            "usuario":        usuario,
-            "contrasenaHash": contrasena_hex,
-            "nombre":         nombre,
-            "activo":         True
-        }
-
+        payload = {"correo": correo, "cedula": cedula, "usuario": usuario,
+                   "contrasenaHash": contrasena_hex, "nombre": nombre, "activo": True}
         data = self.api.post(self.ADMIN_ENDPOINT, json=payload)
         if data is None:
-            self._show_error(self.api.last_error or "No se pudo crear el administrador.")
-            return
+            self._show_error(self.api.last_error or "No se pudo crear el administrador."); return
 
-        # Mensaje corto de éxito y luego limpiar a fondo
+        
         self.err.configure(text="Administrador creado correctamente.")
+        self._reset_fields(True)
+        self._switch_mode("LOGIN")
 
-        # Regresar a LOGIN **vacío** (sin prellenar nada)
-        self._reset_fields(clear_errors=True)
-        self.modo.set("LOGIN")
-        self.frame_reg.grid_forget()
-        self.frame_login.grid(row=0, column=0, sticky="nsew")
-        self.lbl_title.configure(text="Bienvenido")
-        self.lbl_help.configure(text="Ingresa con tus credenciales para continuar")
-
-    # -------- Salida total --------
+    # ---------- Salida ----------
     def _quit_all(self):
-        # Limpia para que, si se vuelve a abrir, no queden rastros visuales
-        self._reset_fields(clear_errors=True)
+        self._reset_fields(True)
         try: self.grab_release()
         except Exception: pass
         try:
@@ -698,8 +667,7 @@ class LoginDialog(ctk.CTkToplevel):
         except Exception: pass
         try: self.destroy()
         except Exception: pass
-        try:
-            sys.exit(0)
+        try: sys.exit(0)
         except SystemExit:
             os._exit(0)
 
