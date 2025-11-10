@@ -2,6 +2,7 @@
 __all__ = ["LoginDialog", "SimpleAPI", "AnimatedToggle"]
 
 # ---------- IMPORTS ----------
+from pathlib import Path
 import sys
 import os
 import re
@@ -10,6 +11,11 @@ import traceback
 
 import customtkinter as ctk
 from tkinter import messagebox
+from PIL import Image
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+ICON_ICO_PATH = SCRIPT_DIR / "media" / "logoHARO.ico"   # respeta el nombre real
+ICON_PNG_PATH = SCRIPT_DIR / "media" / "logoHARO.png"
 
 # HTTP (opcional, con fallback si no está instalado)
 try:
@@ -33,7 +39,10 @@ except Exception:
 # ---------- SimpleAPI (cliente HTTP mínimo) ----------
 class SimpleAPI:
     """Cliente HTTP mínimo con manejo de errores, last_error y URL efectiva."""
+    
     def __init__(self, base_url, context_path=""):
+
+
         # base_url: ej. "http://localhost:8081"
         # context_path: ej. "", "/cea" (sin barra final)
         self.base_url = (base_url or "").rstrip("/")
@@ -103,6 +112,9 @@ class AnimatedToggle(ctk.CTkFrame):
                  bg_color_bar="#E5E7EB", indicator_color="#111827", text_color="#000000",
                  pad=4, speed_ms=10, steps=16):
         super().__init__(master, fg_color="transparent")
+        # rutas de icono disponibles en la instancia del diálogo
+        self.set_window_icon()
+
         assert isinstance(values, (list, tuple)) and len(values) == 2, "values debe tener 2 opciones"
         self.values = list(values)
         self.var = variable or ctk.StringVar(value=self.values[0])
@@ -212,6 +224,9 @@ class LoginDialog(ctk.CTkToplevel):
         super().__init__(master)
         self.app = master
         self.title("Inicio de sesión")
+        self._ICON_ICO_PATH = ICON_ICO_PATH
+        self._ICON_PNG_PATH = ICON_PNG_PATH
+        self.set_window_icon()  # <- ¡esto aplica el icono!
 
         # API
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8081")
@@ -329,12 +344,12 @@ class LoginDialog(ctk.CTkToplevel):
         self.frame_login.grid_columnconfigure(0, weight=1)
 
         rr = 0
-        ctk.CTkLabel(self.frame_login, text="Correo registrado", text_color=fg_text)\
+        ctk.CTkLabel(self.frame_login, text="Usuario registrado", text_color=fg_text)\
             .grid(row=rr, column=0, pady=(0, 6), sticky="w"); rr += 1
         self.en_user = ctk.CTkEntry(
             self.frame_login, height=44, corner_radius=12, fg_color=fg_input, text_color=fg_text,
             border_width=2, border_color=fg_divider,
-            placeholder_text="ana.perez@cea-haro.com",
+            placeholder_text="EjemploCEAHARO",
             validate="key", validatecommand=v_usuario
         )
         self.en_user.grid(row=rr, column=0, pady=(0, 12), sticky="ew"); rr += 1
@@ -506,6 +521,80 @@ class LoginDialog(ctk.CTkToplevel):
             entry.bind("<FocusOut>", lambda _e: entry.configure(**normal))
         except Exception:
             pass
+
+    def set_window_icon(self, window=None):
+        import sys
+        win = window or self
+
+        ico = self._resolve_existing_path(self._ICON_ICO_PATH)
+        png = self._resolve_existing_path(self._ICON_PNG_PATH)
+
+        # 1) Windows: .ico
+        try:
+            if sys.platform.startswith("win") and ico:
+                win.iconbitmap(str(ico))
+                print("[OK] Icono .ico aplicado con iconbitmap")
+                return  # <- IMPORTANTE
+        except Exception as e:
+            print(f"[Icono] iconbitmap falló: {e}")
+
+        # 2) Fallback PNG
+        try:
+            if png:
+                from PIL import Image, ImageTk
+                img = Image.open(png)
+                photo = ImageTk.PhotoImage(img)
+                if not hasattr(self, "_icon_refs"):
+                    self._icon_refs = []
+                self._icon_refs.append(photo)
+                win.iconphoto(True, photo)
+                print("[OK] Icono PNG aplicado con iconphoto")
+        except Exception as e:
+            print(f"[Icono] iconphoto falló: {e}")
+
+
+
+    def _set_default_logo(self):
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        for x in range(64):
+            for y in range(64):
+                dx, dy = x-32, y-32
+                if dx*dx + dy*dy <= 30*30:
+                    img.putpixel((x, y), (229, 57, 53, 255))
+        self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+
+    def _load_fixed_logo(self):
+        try:
+            path = self.resource_path(self._LOGO_PATH)
+            if not path.exists():
+                print(f"[Logo] No existe: {path}")
+                self._set_default_logo()
+                return
+            img = Image.open(path)
+            w, h = img.size
+            side = min(w, h)
+            left, top = (w - side) // 2, (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+            self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+        except Exception as e:
+            print(f"[Logo] Error cargando: {e}")
+            self._set_default_logo()
+        
+    def _resolve_existing_path(self, p: Path):
+        try:
+            if not isinstance(p, Path):
+                p = Path(p)
+            if p.exists():
+                return p
+            base = Path(getattr(sys, "_MEIPASS", SCRIPT_DIR))
+            cand = base / p if not p.is_absolute() else base / p.name
+            if cand.exists():
+                return cand
+            cand2 = SCRIPT_DIR / p.name
+            return cand2 if cand2.exists() else None
+        except Exception:
+            return p if isinstance(p, Path) and p.exists() else None
+
 
     # ---------- Validación / fuerza ----------
     def _email_key_validator(self, new_text):

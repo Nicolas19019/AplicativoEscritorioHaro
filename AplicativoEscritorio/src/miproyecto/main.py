@@ -48,7 +48,7 @@ class HaroDesktopApp(ctk.CTk):
     SIDEBAR_W = 260
     TOPBAR_H  = 64
 
-    # Marca y logo
+    # Marca y logof
     BRAND_TEXT = "CEA HARO"
     LOGO_SIZE  = (50, 40)
 
