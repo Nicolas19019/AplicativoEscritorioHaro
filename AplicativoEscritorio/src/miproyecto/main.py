@@ -44,7 +44,7 @@ class HaroDesktopApp(ctk.CTk):
 
 
     APP_TITLE = "CEA HARO — Sistema de Información"
-    APP_W, APP_H = 1180, 720
+    APP_W, APP_H = 1210, 720
     SIDEBAR_W = 260
     TOPBAR_H  = 64
 
@@ -60,7 +60,7 @@ class HaroDesktopApp(ctk.CTk):
 
 
     # API
-    API_BASE_URL = "http://localhost:8081/api"
+    API_BASE_URL = "http://localhost:8082/api"
     AUTH_MODE = "basic"
     JWT_LOGIN_PATH = "auth/login"
     JWT_USER_FIELD = "username"
@@ -88,7 +88,7 @@ class HaroDesktopApp(ctk.CTk):
 
         # Estado UI / credenciales
         self.current_view = None
-        self.sidebar_visible = True
+        self.sidebar_visible = False
         self.logo_image = None
         self.api_user = None
         self.api_pass = None
@@ -109,9 +109,20 @@ class HaroDesktopApp(ctk.CTk):
         self._build_sidebar()
         self._build_content_area()
 
+        # Ocultar sidebar inicialmente
+        self.sidebar.grid_remove()
+        self.grid_columnconfigure(0, minsize=0, weight=0)
+        self.grid_columnconfigure(1, weight=1)
+
+
         # Mostrar login antes de todo
         self.withdraw()
         self.after(50, self._show_login)
+
+
+    def minimizar(self):
+        self.iconify()   # minimiza la ventana
+
 
     # ----------------------- Helpers de recursos ----------------------- #
     @staticmethod
@@ -249,11 +260,11 @@ class HaroDesktopApp(ctk.CTk):
         ).grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
 
         # Neutro
-        ctk.CTkButton(
-            self.topbar, text="● Tema", height=36, corner_radius=12,
-            fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
-            text_color=self.COLOR_TEXT, command=self._toggle_theme
-        ).grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
+        #ctk.CTkButton(
+        #    self.topbar, text="● Tema", height=36, corner_radius=12,
+        #    fg_color=self.COLOR_INPUT_BG, hover_color=self.COLOR_DIVIDER,
+        #    text_color=self.COLOR_TEXT, command=self._toggle_theme
+        #).grid(row=0, column=5, padx=(0, 12), pady=12, sticky="e")
 
         # Peligro (rojo)
         ctk.CTkButton(
@@ -327,6 +338,7 @@ class HaroDesktopApp(ctk.CTk):
         }
 
     # ----------------------- Login / Sesión ----------------------- #
+
     def _show_login(self):
         self.login_window = LoginDialog(self, on_success=self._on_login_ok, brand=self.BRAND_TEXT)
         if self.API_USER_DEFAULT:

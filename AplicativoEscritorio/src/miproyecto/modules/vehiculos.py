@@ -7,27 +7,19 @@ from modules.base import BaseModuleFrame
 
 class VehiculosView(BaseModuleFrame):
     """Vista del módulo Vehículos — Gestión de automóviles de la academia."""
+    DEBOUNCE_MS = 250
 
     # -------------------- Resolver de APP (auto) --------------------
     @staticmethod
     def _resolve_app(master):
-        """
-        Intenta obtener el objeto 'app' desde:
-          1) master si ya es la app,
-          2) master.app,
-          3) ascendiendo por master.master,
-          4) la ventana toplevel,
-        y si no lo encuentra, crea un shim con colores y métodos mínimos.
-        """
-        # 1) ¿master ya es la app?
+ 
         if hasattr(master, "api") or hasattr(master, "COLOR_BG") or hasattr(master, "_info"):
             return master
-
-        # 2) ¿master.app?
+ 
         if hasattr(master, "app"):
             return master.app
 
-        # 3) Subir por la cadena master.master
+ 
         cur = getattr(master, "master", None)
         hops = 0
         while cur is not None and hops < 20:
@@ -38,7 +30,7 @@ class VehiculosView(BaseModuleFrame):
             cur = getattr(cur, "master", None)
             hops += 1
 
-        # 4) Probar con toplevel
+ 
         try:
             top = master.winfo_toplevel()
             if hasattr(top, "api") or hasattr(top, "COLOR_BG") or hasattr(top, "_info"):
@@ -48,10 +40,10 @@ class VehiculosView(BaseModuleFrame):
         except Exception:
             pass
 
-        # 5) Shim mínimo para no reventar
+ 
         class _AppShim:
             def __init__(self):
-                # Colores por defecto (modo oscuro)
+ 
                 self.COLOR_BG       = "#0f0f10"
                 self.COLOR_PANEL    = "#151517"
                 self.COLOR_TEXT     = "#F5F7FA"
@@ -70,19 +62,26 @@ class VehiculosView(BaseModuleFrame):
 
     # -------------------- Constructor --------------------
     def __init__(self, master, app=None):
-        """
-        Compatible con:
-          - VehiculosView(master, app)
-          - VehiculosView(master)  # se auto-resuelve el 'app'
-        """
+    
         app = app or self._resolve_app(master)
 
-        # ⚠️ BaseModuleFrame NO recibe 'app'. Solo (master, titulo, subtitulo?)
+ 
         super().__init__(master, "Vehículos", "Gestione los automóviles de la academia")
 
-        # Asegurar que self.app exista (por si BaseModuleFrame no lo definió)
+
         if not hasattr(self, "app") or self.app is None:
             self.app = app
+
+        # ===== Estado para filtros =====
+        self._all_data = []      # todo lo de API
+        self._data = []          # filtrado
+        self._rows = []
+        self._selected_idx = None
+        self._debounce_id = None
+
+        # ===== Estado edición =====
+        self._editing_placa = None
+        self._editing_id = None
 
         # Toolbar
         tb = ctk.CTkFrame(self, fg_color="transparent")
@@ -105,10 +104,14 @@ class VehiculosView(BaseModuleFrame):
         self.form.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
         self.form.hide()
 
+        # ===== Filtros PRO (nuevo) =====
+        self.filters = self._make_filters_bar(self)
+        self.filters.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
+
         # Tabla
         self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        self.table.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="nsew")
-        self.grid_rowconfigure(3, weight=1)
+        self.table.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
@@ -123,16 +126,153 @@ class VehiculosView(BaseModuleFrame):
         ]
 
         self._col_widths = [w for _, w in self._COLS]
-        self._data = []
-        self._rows = []
-        self._selected_idx = None
-        self._editing_placa = None  # placa original de la fila abierta en edición
 
 
-        self._editing_id = None  # id del vehículo actualmente en edición
 
+
+ 
         self._render_table()
         self.after(150, self._refrescar)
+
+    # =====================================================
+    #                    FILTROS (PRO)
+    # =====================================================
+    def _make_filters_bar(self, parent):
+        bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
+        # 0 placa, 1 marca, 2 modelo, 3 año, 4 estado, 5 botones
+        bar.grid_columnconfigure(0, weight=1)
+        bar.grid_columnconfigure(1, weight=1)
+        bar.grid_columnconfigure(2, weight=1)
+        bar.grid_columnconfigure(3, weight=0)
+        bar.grid_columnconfigure(4, weight=0)
+        bar.grid_columnconfigure(5, weight=0)
+
+        def entry(ph, w=None):
+            return ctk.CTkEntry(
+                bar, placeholder_text=ph, height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                width=w if w else 140
+            )
+
+        # Placa
+        ctk.CTkLabel(bar, text="Placa", text_color=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
+        self.f_placa = entry("ABC123")
+        self.f_placa.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="ew")
+
+        # Marca
+        ctk.CTkLabel(bar, text="Marca", text_color=self.app.COLOR_TEXT)\
+            .grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_marca = entry("Chevrolet")
+        self.f_marca.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="ew")
+
+        # Modelo
+        ctk.CTkLabel(bar, text="Modelo", text_color=self.app.COLOR_TEXT)\
+            .grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_modelo = entry("Spark")
+        self.f_modelo.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
+
+        # Año
+        ctk.CTkLabel(bar, text="Año", text_color=self.app.COLOR_TEXT)\
+            .grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_anio = entry("2020", w=110)
+        self.f_anio.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
+
+        # Estado
+        ctk.CTkLabel(bar, text="Estado", text_color=self.app.COLOR_TEXT)\
+            .grid(row=0, column=4, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_estado = ctk.CTkComboBox(
+            bar,
+            values=["Todos", "Activo", "Inactivo", "Mantenimiento", "Suspendido"],
+            width=170
+        )
+        self.f_estado.set("Todos")
+        self.f_estado.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
+
+        # Botones
+        btns = ctk.CTkFrame(bar, fg_color="transparent")
+        btns.grid(row=1, column=5, padx=(8, 12), pady=(0, 10), sticky="e")
+
+        def light_btn(text, cmd):
+            return ctk.CTkButton(
+                btns, text=text, height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
+                text_color=self.app.COLOR_TEXT, command=cmd
+            )
+
+        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
+        light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
+
+        # Bindings (búsqueda en vivo + debounce)
+        for w in (self.f_placa, self.f_marca, self.f_modelo, self.f_anio):
+            w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())
+        self.f_estado.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
+
+        return bar
+
+    def _collect_filters(self):
+        return {
+            "placa": (self.f_placa.get() or "").strip(),
+            "marca": (self.f_marca.get() or "").strip(),
+            "modelo": (self.f_modelo.get() or "").strip(),
+            "anio": (self.f_anio.get() or "").strip(),
+            "estado": (self.f_estado.get() or "Todos").strip(),
+        }
+
+    def _clear_filters(self):
+        self.f_placa.delete(0, "end")
+        self.f_marca.delete(0, "end")
+        self.f_modelo.delete(0, "end")
+        self.f_anio.delete(0, "end")
+        self.f_estado.set("Todos")
+        self._apply_filters_now()
+
+    def _debounced_apply_filters(self):
+        if self._debounce_id:
+            try:
+                self.after_cancel(self._debounce_id)
+            except Exception:
+                pass
+        self._debounce_id = self.after(self.DEBOUNCE_MS, self._apply_filters_now)
+
+    def _apply_filters_now(self):
+        src = self._all_data or []
+        self._data = self._apply_filters(src, self._collect_filters())
+        self._render_table()
+
+    def _apply_filters(self, data_list, f):
+        """Filtra localmente por placa, marca, modelo, año y estado. Insensible a mayúsculas."""
+        if not data_list:
+            return []
+
+        placa_sub = f["placa"].lower()
+        marca_sub = f["marca"].lower()
+        modelo_sub = f["modelo"].lower()
+        anio_sub = f["anio"].lower()
+        estado = f["estado"]
+
+        out = []
+        for vh in data_list:
+            placa = str(vh.get("placa", "") or "").strip().lower()
+            marca = str(vh.get("marca", "") or "").strip().lower()
+            modelo = str(vh.get("modelo", "") or "").strip().lower()
+            anio = str(vh.get("anio", "") or "").strip().lower()
+            est = str(vh.get("estado", "") or "").strip()
+
+            if placa_sub and placa_sub not in placa:
+                continue
+            if marca_sub and marca_sub not in marca:
+                continue
+            if modelo_sub and modelo_sub not in modelo:
+                continue
+            if anio_sub and anio_sub not in anio:
+                continue
+            if estado != "Todos" and est != estado:
+                continue
+
+            out.append(vh)
+        return out
 
     # -------------------- Renderizado --------------------
     def _render_table(self):
@@ -216,57 +356,7 @@ class VehiculosView(BaseModuleFrame):
             print("\n[ERROR Vehículos] _sync_column_widths():")
             traceback.print_exc()
 
-    def _extract_id(self, vh: dict):
-        """Devuelve el ID del vehículo sin importar el nombre de la clave."""
-        if not isinstance(vh, dict):
-            return None
-        for k in ("id", "idVehiculo", "vehiculoId", "id_vehiculo", "vehiculo_id", "idvehiculo"):
-            v = vh.get(k)
-            if v not in (None, "", 0):
-                return v
-        return None
-    
-
-    def _resolve_id_from_api_by_placa(self, placa: str):
-        """Intenta obtener el ID desde la API usando la placa (varias rutas comunes)."""
-        if not getattr(self.app, "api", None) or not placa:
-            return None
-
-        candidates = [
-            f"vehiculos/placa/{placa}",
-            f"vehiculos/by-placa/{placa}",
-            f"vehiculos/search?placa={placa}",
-            f"vehiculos?placa={placa}",
-        ]
-        for path in candidates:
-            try:
-                res = self.app.api.get_all(path)  # admite dict o list
-                data = res
-                if isinstance(res, dict):
-                    # desanidar si viene en { data: {...} } o { vehiculo: {...} } o { items: [...] }
-                    for key in ("data", "vehiculo", "vehiculos", "item", "items", "result", "results", "content"):
-                        if key in res:
-                            data = res[key]
-                            break
-                # si es lista, busca coincidencia por placa; si es dict, úsalo directo
-                if isinstance(data, list):
-                    for it in data:
-                        if str(it.get("placa", "")).strip().lower() == placa.strip().lower():
-                            vid = self._extract_id(it)
-                            if vid is None:
-                                continue
-                            return vid
-                elif isinstance(data, dict):
-                    vid = self._extract_id(data)
-                    if vid is not None:
-                        return vid
-            except Exception:
-                continue
-        return None
-
-
-
-    # -------------------- Acciones UI --------------------
+ # -------------------- Acciones UI --------------------
     def _select_row(self, idx):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
             self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
@@ -277,16 +367,12 @@ class VehiculosView(BaseModuleFrame):
     def _nuevo(self):
         self.form.show_create()
 
-    def _editar(self):
-        if self._selected_idx is None:
-            self.app._info("Selecciona un vehículo primero.")
-            return
-        self._edit_row(self._selected_idx)
+
 
     def _edit_row(self, idx):
         self._select_row(idx)
         item = self._data[idx]
-        self._editing_placa = (item.get("placa") or "").strip()  # << guarda placa original
+        self._editing_placa = (item.get("placa") or "").strip()
         self.form.show_edit(item)
 
 
@@ -297,6 +383,15 @@ class VehiculosView(BaseModuleFrame):
 
 
     # -------------------- API / Datos --------------------
+    def _extract_id(self, vh: dict):
+        if not isinstance(vh, dict):
+            return None
+        for k in ("id", "idVehiculo", "vehiculoId", "id_vehiculo", "vehiculo_id", "idvehiculo"):
+            v = vh.get(k)
+            if v not in (None, "", 0):
+                return v
+        return None
+
     def _refrescar(self):
         try:
             if not getattr(self.app, "api", None):
@@ -312,15 +407,16 @@ class VehiculosView(BaseModuleFrame):
                 else:
                     raw = []
 
-            self._data = raw or []
-
-            # Normalizar: asegurar que cada item tenga clave 'id'
-            for it in self._data:
+            # normaliza + guarda fuente
+            data = raw or []
+            for it in data:
                 if "id" not in it:
                     iid = self._extract_id(it)
                     if iid is not None:
                         it["id"] = iid
 
+            self._all_data = data
+            self._data = self._apply_filters(self._all_data, self._collect_filters())
             self._render_table()
 
         except Exception as e:
@@ -343,13 +439,13 @@ class VehiculosView(BaseModuleFrame):
                     self.app._info("Selecciona un vehículo para actualizar.")
                     return
 
-                # Placa para la ruta (usa la original si el usuario cambió la del form)
+
                 placa_path = (self._editing_placa or self._data[idx].get("placa") or "").strip()
                 if not placa_path:
                     self.app._info("No se encontró la placa del vehículo.")
                     return
 
-                # Llama a PUT /api/vehiculos/{placa}
+
                 self.app.api.update("vehiculos", placa_path, payload)
                 self.app._info("Vehículo actualizado.")
                 self._editing_placa = None
@@ -376,7 +472,7 @@ class VehiculosView(BaseModuleFrame):
             return
 
         try:
-            # DELETE /api/vehiculos/{placa}
+
             if getattr(self.app, "api", None):
                 self.app.api.delete("vehiculos", placa)
                 self.app._info("Vehículo eliminado.")
