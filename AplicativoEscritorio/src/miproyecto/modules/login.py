@@ -219,6 +219,13 @@ class LoginDialog(ctk.CTkToplevel):
     _re_cedula_full   = re.compile(r"^[0-9]{5,20}$")
     _danger_chars     = set('<>"\'`$(){}[];')
 
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        raw = (base_url or "").strip().rstrip("/")
+        if raw.lower().endswith("/api"):
+            return raw[: len(raw) - 4]
+        return raw
+
     def __init__(self, master, on_success=None, brand="CEA HARO", base_url=None, api_client=None):
         super().__init__(master)
         self.app = master
@@ -245,8 +252,9 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
         # ==== Config / endpoints ====
-        self.ADMIN_OTP_EMAIL = getattr(self.app, "ADMIN_OTP_EMAIL", "admin@ceaharo.com")
+        self.ADMIN_OTP_EMAIL = getattr(self.app, "ADMIN_OTP_EMAIL", "nicolasmachado19292@gmail.com")
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8082")
+        default_base = self._normalize_base_url(default_base)
 
         if api_client is not None:
             self.api = api_client
@@ -425,7 +433,7 @@ class LoginDialog(ctk.CTkToplevel):
  
         msg_wrap = ctk.CTkFrame(self.frame_login, fg_color="transparent")
         msg_wrap.grid(row=rr+1, column=0, sticky="w", pady=(6, 6))
-        ctk.CTkLabel(msg_wrap, text="¿No tienes un perfil administrador?", text_color=fg_muted,
+        ctk.CTkLabel(msg_wrap, text="¿No tienes un perfil administrador", text_color=fg_muted,
                      font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
             msg_wrap, text="Crea uno",
@@ -445,7 +453,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.cb_remember.grid(row=rr+2, column=0, pady=(0, 6), sticky="w")
 
         ctk.CTkButton(
-            self.frame_login, text="¿Olvidaste tu contraseña?",
+            self.frame_login, text="¿Olvidaste tu contraseña",
             height=30, corner_radius=8,
             fg_color="transparent", hover_color=fg_divider,
             text_color=fg_muted,
@@ -457,10 +465,10 @@ class LoginDialog(ctk.CTkToplevel):
         self.frame_reg.grid_forget()
         self.frame_reg.grid_columnconfigure((0, 1), weight=1)
 
-        # ✅ Link "¿ya tienes cuenta?" JUSTO ARRIBA del formulario
+        # ✅ Link "¿ya tienes cuenta" JUSTO ARRIBA del formulario
         reg_link = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
         reg_link.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 1))
-        ctk.CTkLabel(reg_link, text="¿Ya tienes una cuenta?", text_color=fg_muted,
+        ctk.CTkLabel(reg_link, text="¿Ya tienes una cuenta", text_color=fg_muted,
                      font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
             reg_link, text="Ingresa aquí",
@@ -1036,6 +1044,12 @@ class LoginDialog(ctk.CTkToplevel):
         self._verify_otp_and_create_with_code(codigo)
 
     # ====================== Login ======================
+    def _credential_for_on_success(self, plain_password: str, hashed_password: str) -> str:
+        mode = str(getattr(self.app, "AUTH_MODE", "basic") or "basic").strip().lower()
+        # Para basic, enviar la clave en texto (el backend ya aplica su prehash interno).
+        # Para jwt, mantenemos el hash SHA-256 que usa el endpoint /api/auth/login.
+        return hashed_password if mode == "jwt" else plain_password
+
     def _ok(self):
         self._clear_error_ui()
 
@@ -1059,10 +1073,17 @@ class LoginDialog(ctk.CTkToplevel):
                 return
 
         p_hex = hashlib.sha256(p.encode("utf-8")).hexdigest()
+        on_success_secret = self._credential_for_on_success(p, p_hex)
 
         if callable(self.on_success):
             try:
-                self.on_success(u, p_hex)
+                # Valida credenciales contra /api/auth/login antes de abrir la app.
+                test = self.api.post(self.LOGIN_ENDPOINT, json={"login": u, "password": p_hex})
+                if test is None:
+                    self._show_error(technical=self.api.last_error or "Credenciales inválidas.")
+                    return
+
+                self.on_success(u, on_success_secret)
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
                     self._show_error(technical=str(self.app.api.last_error))
                     return

@@ -1,4 +1,5 @@
 import sys
+import threading
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
@@ -7,12 +8,6 @@ from PIL import Image
 from utils import centrar_ventana
 from api_client import ApiClient
 from modules.login import LoginDialog
-from modules.estudiantes import EstudiantesView
-from modules.instructores import InstructoresView
-from modules.vehiculos import VehiculosView
-from modules.clases import ClasesView
-from modules.estados_cuenta import EstadosCuentaView
-from modules.reportes import ReportesView
 
 
 class HaroDesktopApp(ctk.CTk):
@@ -66,6 +61,10 @@ class HaroDesktopApp(ctk.CTk):
     JWT_USER_FIELD = "username"
     JWT_PASS_FIELD = "password"
     JWT_TOKEN_FIELD = "token"
+    GOOGLE_CALENDAR_ENABLED = True
+    GOOGLE_CALENDAR_ENDPOINT = "calendar/reuniones"
+    GOOGLE_CALENDAR_ID = "primary"
+    GOOGLE_CALENDAR_TIMEZONE = "America/Bogota"
 
     API_USER_DEFAULT = ""
     API_PASS_DEFAULT = ""
@@ -93,6 +92,8 @@ class HaroDesktopApp(ctk.CTk):
         self.api_user = None
         self.api_pass = None
         self.api: ApiClient | None = None
+        self.views = {}
+        self._view_factories = {}
 
         # Atajos
         self.bind_all("<Escape>", self._on_escape)
@@ -108,6 +109,7 @@ class HaroDesktopApp(ctk.CTk):
         self._build_topbar()
         self._build_sidebar()
         self._build_content_area()
+        self._register_view_factories()
 
         # Ocultar sidebar inicialmente
         self.sidebar.grid_remove()
@@ -256,7 +258,7 @@ class HaroDesktopApp(ctk.CTk):
         ctk.CTkButton(
             self.topbar, text="⟳ Sincronizar", height=36, corner_radius=18,
             fg_color=self.MUSTARD_MAIN, hover_color=self.MUSTARD_HOVER,
-            text_color="#111111"
+            text_color="#111111", command=self._sync
         ).grid(row=0, column=4, padx=(8, 8), pady=12, sticky="e")
 
         # Neutro
@@ -327,15 +329,47 @@ class HaroDesktopApp(ctk.CTk):
         self.content.grid_rowconfigure(0, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
 
-    def _register_views(self):
-        self.views = {
-            "Estudiantes": EstudiantesView(self.content),
-            "Instructores": InstructoresView(self.content),
-            "Vehículos": VehiculosView(self.content),
-            "Clases": ClasesView(self.content),
-            "Estados de Cuenta": EstadosCuentaView(self.content),
-            "Reportes": ReportesView(self.content),
+    def _register_view_factories(self):
+        self._view_factories = {
+            "Estudiantes": self._create_estudiantes_view,
+            "Instructores": self._create_instructores_view,
+            "Vehículos": self._create_vehiculos_view,
+            "Clases": self._create_clases_view,
+            "Estados de Cuenta": self._create_estados_cuenta_view,
+            "Reportes": self._create_reportes_view,
         }
+        self.views = {}
+
+    def _create_estudiantes_view(self):
+        from modules.estudiantes import EstudiantesView
+        return EstudiantesView(self.content)
+
+    def _create_instructores_view(self):
+        from modules.instructores import InstructoresView
+        return InstructoresView(self.content)
+
+    def _create_vehiculos_view(self):
+        from modules.vehiculos import VehiculosView
+        return VehiculosView(self.content)
+
+    def _create_clases_view(self):
+        from modules.clases import ClasesView
+        return ClasesView(self.content)
+
+    def _create_estados_cuenta_view(self):
+        from modules.estados_cuenta import EstadosCuentaView
+        return EstadosCuentaView(self.content)
+
+    def _create_reportes_view(self):
+        from modules.reportes import ReportesView
+        return ReportesView(self.content)
+
+    def _show_login_error(self, msg: str):
+        for w in self.winfo_children():
+            if isinstance(w, LoginDialog):
+                w._show_error(msg)
+                return
+        print(f"[WARN] {msg}")
 
     # ----------------------- Login / Sesión ----------------------- #
 
@@ -349,52 +383,65 @@ class HaroDesktopApp(ctk.CTk):
     def _on_login_ok(self, user, password):
         from api_client import ApiClient
 
-        # Crear el cliente con timeout corto
-        self.api_user = user
-        self.api_pass = password
-        self.api = ApiClient(
-            self, self.API_BASE_URL, user, password,
-            auth_mode=self.AUTH_MODE,
-            jwt_login_path=self.JWT_LOGIN_PATH,
-            user_field=self.JWT_USER_FIELD,
-            pass_field=self.JWT_PASS_FIELD,
-            token_field=self.JWT_TOKEN_FIELD
-        )
-
-        # 🔹 Intento de conexión de prueba rápida (máx 4s)
         try:
-            test = self.api.get_all("estudiantes")
+            self.api_user = user
+            self.api_pass = password
+            self.api = ApiClient(
+                self, self.API_BASE_URL, user, password,
+                auth_mode=self.AUTH_MODE,
+                jwt_login_path=self.JWT_LOGIN_PATH,
+                user_field=self.JWT_USER_FIELD,
+                pass_field=self.JWT_PASS_FIELD,
+                token_field=self.JWT_TOKEN_FIELD
+            )
         except Exception as e:
-            test = None
-            self.api.last_error = f"No se pudo conectar con la API. ({e})"
-
-        # 🔹 Si la conexión falló → mostrar error en el login y detener flujo
-        if test is None:
-            msg = self.api.last_error or "No se pudo conectar con la API. Verifica que el servidor esté en ejecución."
-            # Buscar el login activo (último Toplevel)
-            for w in self.winfo_children():
-                if isinstance(w, LoginDialog):
-                    w._show_error(msg)
-                    return  # ❌ No abrir ventana principal
-            # Si no encuentra login, al menos lo loguea
-            print(f"[WARN] {msg}")
-            return
-
-        # 🔹 Si pasa la conexión, abrir la app
-        if not hasattr(self, "views"):
-            self._register_views()
-        self.deiconify()
-        self.switch_view("Estudiantes")
-
-
-    def _logout(self):
-        if messagebox.askyesno("Sesión", "¿Está seguro que desea salir?"):
             self.api = None
             self.api_user = None
             self.api_pass = None
-            if hasattr(self, "current_view") and self.current_view:
+            self._show_login_error(f"No fue posible iniciar sesión: {e}")
+            return
+
+        self.deiconify()
+        self.switch_view("Estudiantes")
+        self.after(150, self._warm_api_cache_async)
+
+    def _warm_api_cache_async(self):
+        if not self.api:
+            return
+
+        # Prefetch de catalogos para evitar sensacion de recarga al abrir modulos.
+        resources = ("profesores", "vehiculos", "clases", "estados-cuenta")
+
+        def worker():
+            unauthorized = False
+            for resource in resources:
+                try:
+                    self.api.get_all(resource)
+                except Exception as e:
+                    msg = str(e)
+                    if "HTTP 401" in msg or "No autorizado" in msg:
+                        unauthorized = True
+                        break
+                    self._info(f"[cache] No se pudo precargar '{resource}': {e}")
+            if unauthorized:
+                self._info("[cache] Precarga omitida por sesion no autorizada.")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _logout(self):
+        if messagebox.askyesno("Sesión", "¿Está seguro que desea salir"):
+            self.api = None
+            self.api_user = None
+            self.api_pass = None
+            if self.current_view:
                 self.current_view.grid_remove()
                 self.current_view = None
+            for view in self.views.values():
+                try:
+                    view.destroy()
+                except Exception:
+                    pass
+            self.views.clear()
             self.withdraw()
             self.after(50, self._show_login)
 
@@ -403,10 +450,22 @@ class HaroDesktopApp(ctk.CTk):
         self.switch_view(name)
 
     def switch_view(self, name: str):
-        if getattr(self, "views", None) is None:
+        if not self._view_factories:
+            self._register_view_factories()
+
+        factory = self._view_factories.get(name)
+        if not factory:
+            self._info(f"Vista '{name}' no encontrada")
             return
-        if self.current_view is not None:
-            self.current_view.grid_remove()
+
+        view = self.views.get(name)
+        if view is None:
+            try:
+                view = factory()
+                self.views[name] = view
+            except Exception as e:
+                messagebox.showerror("Vista", f"No fue posible abrir '{name}':\n{e}", parent=self)
+                return
 
         # limpiar estilo de todos
         for _, b in self.nav_buttons.items():
@@ -422,16 +481,14 @@ class HaroDesktopApp(ctk.CTk):
                 border_width=1
             )
 
-        view = self.views.get(name)
-        if view:
+        if not view.winfo_ismapped():
             view.grid(row=0, column=0, sticky="nsew")
-            self.current_view = view
-        else:
-            self._info(f"Vista '{name}' no encontrada")
+        view.tkraise()
+        self.current_view = view
 
     # ----------------------- Acciones genéricas ----------------------- #
     def _on_escape(self, _event=None):
-        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación?"):
+        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación"):
             self.destroy()
 
     def _focus_search(self, _event=None):
@@ -444,14 +501,62 @@ class HaroDesktopApp(ctk.CTk):
             self._info(f"Buscar: {q}")
 
     def _sync(self):
-        self._info("Sincronizando datos…")
+        if not self.api:
+            self._info("No hay cliente API activo. Inicia sesión.")
+            return
+
+        self._info("Sincronizando datos con la base de datos...")
+        resources = ("estudiantes", "profesores", "vehiculos", "clases", "estados-cuenta")
+
+        def worker():
+            errors = []
+            try:
+                self.api._cache_clear()
+            except Exception:
+                pass
+
+            for resource in resources:
+                try:
+                    self.api.get_all(resource, force_refresh=True)
+                except Exception as e:
+                    errors.append(f"{resource}: {e}")
+
+            def refresh_loaded_views():
+                refreshed = 0
+                for name, view in list(self.views.items()):
+                    refresher = getattr(view, "_refrescar", None)
+                    if not callable(refresher):
+                        continue
+                    try:
+                        if hasattr(view, "_last_refresh_ts"):
+                            view._last_refresh_ts = 0
+                        try:
+                            refresher(force_refresh=True)
+                        except TypeError:
+                            refresher()
+                        refreshed += 1
+                    except Exception as e:
+                        errors.append(f"vista {name}: {e}")
+
+                if errors:
+                    self._info("Sincronización terminada con avisos:")
+                    for err in errors[:5]:
+                        self._info(f" - {err}")
+                    if len(errors) > 5:
+                        self._info(f" - ... {len(errors) - 5} error(es) adicional(es).")
+                else:
+                    self._info(f"Sincronización completada. Vistas actualizadas: {refreshed}.")
+
+            self.after(0, refresh_loaded_views)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _toggle_theme(self):
         current = ctk.get_appearance_mode()
         ctk.set_appearance_mode("light" if current == "Dark" else "dark")
 
     def _confirm_delete(self, what="registro"):
-        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}?"):
+        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}"):
             self._info(f"{what.capitalize()} eliminado.")
         else:
             self._info("Operación cancelada.")

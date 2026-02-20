@@ -1,4 +1,4 @@
-# modules/clases.py
+﻿# modules/clases.py
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
@@ -84,6 +84,11 @@ class ClasesView(BaseModuleFrame):
 
         red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=1, padx=(0, 8))
         red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=(0, 8))
+        ctk.CTkButton(
+            bar, text="Restablecer filtros", height=36, corner_radius=12,
+            fg_color=self._INPUT, hover_color=self._DIV,
+            text_color=self._TEXT, command=self._restablecer_filtros
+        ).grid(row=0, column=3, padx=(0, 8))
 
         # ===== Form inline =====
         try:
@@ -109,7 +114,7 @@ class ClasesView(BaseModuleFrame):
         self._loading_overlay = None
 
         # Carga inicial
-        self.after(150, self._cargar_catalogos_y_listar)
+        self.after(150, lambda: self._cargar_catalogos_y_listar(force_refresh=True))
         self._set_data(self._data)
         self._show_loading(False)
 
@@ -228,8 +233,6 @@ class ClasesView(BaseModuleFrame):
             pass
 
     # ============================
-    # VISTA CALENDARIO + TARJETAS
-    # ============================
     def _build_calendar_view(self):
         self.view_calendar = ctk.CTkFrame(self.main, fg_color="transparent")
         self.view_calendar.grid_rowconfigure(0, weight=1)
@@ -278,7 +281,12 @@ class ClasesView(BaseModuleFrame):
             except Exception: pass
 
         if not records:
-            ctk.CTkLabel(parent, text="Sin clases programadas para este día.",
+            empty_text = (
+                "Selecciona un día en el calendario para ver clases."
+                if not self.fecha_filtrada else
+                "Sin clases programadas para este día."
+            )
+            ctk.CTkLabel(parent, text=empty_text,
                          text_color=self._MUTED, anchor="w")\
                 .grid(row=0, column=0, padx=16, pady=16, sticky="w")
             return
@@ -389,19 +397,25 @@ class ClasesView(BaseModuleFrame):
     def _toggle_calendar_mode(self):
         self._show_view("calendar" if not self._calendar_mode else "normal")
 
+    def _restablecer_filtros(self):
+        self.fecha_filtrada = None
+        self._update_calendar_highlights()
+        self._sync_rows_to("right" if self._calendar_mode else "top")
+        self.app._info("Filtros restablecidos. Mostrando todas las clases.")
+
     # ============================
     # Catálogos y datos
     # ============================
-    def _cargar_catalogos_y_listar(self):
+    def _cargar_catalogos_y_listar(self, force_refresh=False):
         try:
             if not (self.app and getattr(self.app, "api", None)):
                 self.app._info("Modo local: sin conexión a API.")
                 self._refrescar(local_only=True)
                 return
 
-            self._estudiantes = self.app.api.get_all("estudiantes") or []
-            self._profesores  = self.app.api.get_all("profesores")  or []
-            self._vehiculos   = self.app.api.get_all("vehiculos")   or []
+            self._estudiantes = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
+            self._profesores  = self.app.api.get_all("profesores", force_refresh=force_refresh)  or []
+            self._vehiculos   = self.app.api.get_all("vehiculos", force_refresh=force_refresh)   or []
 
             self.estudiantes_id_to_name = {}
             self.profesores_id_to_name = {}
@@ -433,7 +447,7 @@ class ClasesView(BaseModuleFrame):
             if self.form:
                 self.form.set_options(self._estudiantes, self._profesores, self._vehiculos)
 
-            self._refrescar()
+            self._refrescar(force_refresh=force_refresh)
         except Exception as e:
             messagebox.showerror("Clases", f"No fue posible cargar catálogos:\n{e}", parent=self)
 
@@ -461,7 +475,7 @@ class ClasesView(BaseModuleFrame):
         rec = next((r for r in self._data if self._row_key(r) == self._selected_id), None)
         if not rec:
             return
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar la clase de {rec.get('nombre_estudiante','este estudiante')} del {rec.get('fecha','día')}?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar la clase de {rec.get('nombre_estudiante','este estudiante')} del {rec.get('fecha','día')}"):
             return
         try:
             if self.app and getattr(self.app, "api", None) and rec.get("id"):
@@ -471,7 +485,7 @@ class ClasesView(BaseModuleFrame):
                 self._data = [d for d in self._data if self._row_key(d) != self._selected_id]
                 self.app._info("Clase eliminada (local).")
             self._selected_id = None
-            self._set_data(self._data)
+            self._sync_rows_to("right" if self._calendar_mode else "top")
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
 
@@ -481,6 +495,7 @@ class ClasesView(BaseModuleFrame):
                 if mode == "create":
                     self.app.api.create("clases", payload)
                     self.app._info("Clase creada.")
+                    self._try_sync_google_calendar(payload)
                 else:
                     rec = next((r for r in self._data if self._row_key(r) == self._selected_id), None)
                     if rec and rec.get("id"):
@@ -499,27 +514,180 @@ class ClasesView(BaseModuleFrame):
                     self.app._info("Clase actualizada (local).")
             if self.form:
                 self.form.hide()
-            self._set_data(self._data)
+            self._sync_rows_to("right" if self._calendar_mode else "top")
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible guardar la clase:\n{e}", parent=self)
+
+    def _try_sync_google_calendar(self, payload):
+        if not getattr(self.app, "GOOGLE_CALENDAR_ENABLED", True):
+            return
+        if not (self.app and getattr(self.app, "api", None)):
+            return
+
+        req = self._build_google_calendar_request(payload)
+        if not req:
+            return
+
+        endpoint = getattr(self.app, "GOOGLE_CALENDAR_ENDPOINT", "calendar/reuniones")
+        try:
+            created = self.app.api.create(endpoint, req) or {}
+            meet_link = created.get("meetLink") if isinstance(created, dict) else None
+            if meet_link:
+                messagebox.showinfo(
+                    "Google Calendar",
+                    f"Clase creada y reunion agendada.\nMeet: {meet_link}",
+                    parent=self
+                )
+            else:
+                self.app._info("Clase creada y evento enviado a Google Calendar.")
+        except Exception as e:
+            err = str(e)
+            service_account_block = (
+                "forbiddenForServiceAccounts" in err
+                or "cuenta de servicio" in err.lower()
+            )
+            if service_account_block and req.get("asistentes"):
+                try:
+                    retry_req = dict(req)
+                    retry_req["asistentes"] = []
+                    created = self.app.api.create(endpoint, retry_req) or {}
+                    meet_link = created.get("meetLink") if isinstance(created, dict) else None
+                    if meet_link:
+                        messagebox.showinfo(
+                            "Google Calendar",
+                            "Clase creada y reunion agendada sin invitados.\n"
+                            f"Meet: {meet_link}",
+                            parent=self
+                        )
+                    else:
+                        self.app._info("Clase creada y evento de Calendar agendado sin invitados.")
+                    return
+                except Exception as retry_error:
+                    err = str(retry_error)
+            messagebox.showwarning(
+                "Google Calendar",
+                "La clase se guardo, pero no se pudo crear la reunion en Calendar:\n"
+                f"{err}",
+                parent=self
+            )
+
+    def _build_google_calendar_request(self, payload):
+        fecha = str(payload.get("fecha") or "").strip()
+        hora_inicio = str(payload.get("horaInicio") or "").strip()
+        hora_fin = str(payload.get("horaFin") or "").strip()
+        if not fecha or not hora_inicio or not hora_fin:
+            return None
+
+        tz_name = getattr(self.app, "GOOGLE_CALENDAR_TIMEZONE", "America/Bogota")
+        calendar_id = getattr(self.app, "GOOGLE_CALENDAR_ID", "primary")
+
+        inicio_iso = self._to_iso8601(fecha, hora_inicio, tz_name)
+        fin_iso = self._to_iso8601(fecha, hora_fin, tz_name)
+        if not inicio_iso or not fin_iso:
+            return None
+
+        est_id = payload.get("id_estudiante") or payload.get("idEstudiante")
+        prof_id = payload.get("id_profesor") or payload.get("idProfesor")
+
+        est = self._find_by_id(self._estudiantes, est_id, ("id", "idEstudiante"))
+        prof = self._find_by_id(self._profesores, prof_id, ("id", "idProfesor"))
+        vehiculo = self._find_by_placa(self._vehiculos, payload.get("placa_vehiculo"))
+
+        est_nombre = self._person_name(est, fallback="Estudiante")
+        prof_nombre = self._person_name(prof, fallback="Instructor")
+        doc = self._normalize_doc((est or {}).get("numeroDocumento") or (est or {}).get("cedula"))
+        placa = payload.get("placa_vehiculo") or "-"
+        vehiculo_sede = (vehiculo or {}).get("sede") or "N/A"
+        estado = payload.get("estado") or "Programada"
+
+        descripcion = (
+            "Clase CEA HARO\n"
+            f"Estudiante: {est_nombre}\n"
+            f"Documento: {doc}\n"
+            f"Instructor: {prof_nombre}\n"
+            f"Vehiculo: {placa}\n"
+            f"Sede vehiculo: {vehiculo_sede}\n"
+            f"Estado: {estado}"
+        )
+
+        asistentes = self._collect_attendees(est, prof)
+
+        return {
+            "titulo": f"Clase de conduccion - {est_nombre}",
+            "descripcion": descripcion,
+            "inicio": inicio_iso,
+            "fin": fin_iso,
+            "zonaHoraria": tz_name,
+            "calendarId": calendar_id,
+            "asistentes": asistentes,
+        }
+
+    def _to_iso8601(self, fecha, hora, tz_name):
+        try:
+            dt_naive = datetime.datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+            try:
+                from zoneinfo import ZoneInfo
+                dt_tz = dt_naive.replace(tzinfo=ZoneInfo(tz_name))
+                return dt_tz.isoformat(timespec="seconds")
+            except Exception:
+                # Fallback de Colombia en caso de no tener zona horaria del sistema
+                return dt_naive.strftime("%Y-%m-%dT%H:%M:00-05:00")
+        except Exception:
+            return None
+
+    def _find_by_id(self, records, expected_id, id_keys):
+        if expected_id in (None, ""):
+            return None
+        target = str(expected_id)
+        for rec in (records or []):
+            for key in id_keys:
+                val = rec.get(key)
+                if val is not None and str(val) == target:
+                    return rec
+        return None
+
+    def _find_by_placa(self, records, placa):
+        p = str(placa or "").strip().upper()
+        if not p:
+            return None
+        for rec in (records or []):
+            if str(rec.get("placa") or "").strip().upper() == p:
+                return rec
+        return None
+
+    def _person_name(self, person, fallback="Persona"):
+        if not person:
+            return fallback
+        full = f"{person.get('nombre', '')} {person.get('apellido', '')}".strip()
+        return full or fallback
+
+    def _collect_attendees(self, est, prof):
+        mails = []
+        for person in (est, prof):
+            if not person:
+                continue
+            mail = (person.get("email") or person.get("correo") or "").strip()
+            if "@" in mail and mail not in mails:
+                mails.append(mail)
+        return mails
 
     # ============================
     # Refresh (debounced + bg)
     # ============================
-    def _refrescar(self, local_only=False):
+    def _refrescar(self, local_only=False, force_refresh=True):
         now = int(time.time() * 1000)
         if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
             return
         self._last_refresh_ts = now
 
         if local_only or not (self.app and getattr(self.app, "api", None)):
-            self._set_data(self._apply_current_filters(self._data))
+            self._sync_rows_to("right" if self._calendar_mode else "top")
             return
 
         def worker():
             try:
                 self.after(0, lambda: self._show_loading(True))
-                raw = self.app.api.get_all("clases") or []
+                raw = self.app.api.get_all("clases", force_refresh=force_refresh) or []
                 if isinstance(raw, dict):
                     for key in ("content","items","clases","data","results"):
                         if isinstance(raw.get(key), list):
@@ -527,7 +695,7 @@ class ClasesView(BaseModuleFrame):
                     else:
                         raw = []
                 self._data = raw
-                self.after(0, lambda: self._set_data(self._apply_current_filters(self._data)))
+                self.after(0, lambda: self._sync_rows_to("right" if self._calendar_mode else "top"))
             except Exception as e:
                 self.after(0, lambda: messagebox.showerror("Clases", f"No fue posible consultar la API:\n{e}", parent=self))
             finally:
@@ -536,7 +704,11 @@ class ClasesView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_current_filters(self, data):
-        return [d for d in data if (not self.fecha_filtrada or d.get("fecha") == self.fecha_filtrada)]
+        rows = list(data or [])
+        if not self.fecha_filtrada:
+            return rows
+        target = self._normalize_ymd(self.fecha_filtrada)
+        return [d for d in rows if self._normalize_ymd(d.get("fecha")) == target]
 
     # ============================
     # Tabla incremental / sincronización
@@ -546,8 +718,39 @@ class ClasesView(BaseModuleFrame):
         return rec.get("id") or rec.get("_local_id") or (self._take_id_est(rec), rec.get("fecha"), rec.get("horaInicio"))
 
     def _sync_rows_to(self, _where: str):
-        data = self._apply_current_filters(self._data)
+        # Vista normal: siempre mostrar todo.
+        # Vista calendario: aplicar filtro por día seleccionado.
+        if _where == "top":
+            data = list(self._data or [])
+        else:
+            data = self._apply_current_filters(self._data) if self.fecha_filtrada else []
         self._set_data(data)
+
+    def _normalize_ymd(self, value):
+        """Normaliza distintas representaciones de fecha a YYYY-MM-DD."""
+        if value is None:
+            return ""
+        if isinstance(value, datetime.date):
+            return value.strftime("%Y-%m-%d")
+
+        s = str(value).strip()
+        if not s:
+            return ""
+
+        # Soporta 'YYYY-MM-DDTHH:mm:ss' o 'YYYY-MM-DD HH:mm:ss'
+        if "T" in s:
+            s = s.split("T", 1)[0]
+        if " " in s:
+            s = s.split(" ", 1)[0]
+        if len(s) >= 10:
+            s = s[:10]
+
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                return datetime.datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+        return s
 
     def _set_data(self, new_data):
         if not hasattr(self, "main") or not self.main.winfo_exists():
@@ -615,8 +818,7 @@ class ClasesView(BaseModuleFrame):
             cont.grid_rowconfigure(1, weight=1)
             self.cards_container_right.grid_columnconfigure(0, weight=1)
 
-            clases_filtradas = list(new_data) if self.fecha_filtrada else []
-            self._render_vertical_cards(self.cards_container_right, clases_filtradas)
+            self._render_vertical_cards(self.cards_container_right, list(new_data or []))
             self._update_calendar_highlights()
 
     def _create_row_widgets(self, visual_index, rid, rec, bg, container):
@@ -867,10 +1069,10 @@ class ClasesView(BaseModuleFrame):
         dias_con_clases = set()
 
         for item in (self._data or []):
-            f = item.get("fecha")
-            if not f:
-                continue
             try:
+                f = self._normalize_ymd(item.get("fecha"))
+                if not f:
+                    continue
                 dt = datetime.datetime.strptime(f, "%Y-%m-%d").date()
                 if dt.year == self._cal_year and dt.month == self._cal_month:
                     dias_con_clases.add(dt)
@@ -882,7 +1084,7 @@ class ClasesView(BaseModuleFrame):
                 if day == hoy:
                     btn.configure(fg_color="#FFD966", text_color="#000000")
                 elif self.fecha_filtrada:
-                    sel = datetime.datetime.strptime(self.fecha_filtrada, "%Y-%m-%d").date()
+                    sel = datetime.datetime.strptime(self._normalize_ymd(self.fecha_filtrada), "%Y-%m-%d").date()
                     if day == sel:
                         btn.configure(fg_color="#FFD966", text_color="#000000")
                         continue
@@ -897,9 +1099,11 @@ class ClasesView(BaseModuleFrame):
         self.lbl_cal_info.configure(text=f"{len(dias_con_clases)} día(s) con clases en {month_name} {self._cal_year}")
 
     def _on_calendar_day_click(self, day: datetime.date):
-        self.fecha_filtrada = day.strftime("%Y-%m-%d")
+        clicked = day.strftime("%Y-%m-%d")
+        # Click repetido: limpiar filtro.
+        self.fecha_filtrada = None if self.fecha_filtrada == clicked else clicked
         self._update_calendar_highlights()
-        clases_dia = [c for c in (self._data or []) if c.get("fecha") == self.fecha_filtrada]
+        clases_dia = self._apply_current_filters(self._data) if self.fecha_filtrada else []
         self._render_vertical_cards(self.cards_container_right, clases_dia)
 
     # ============================

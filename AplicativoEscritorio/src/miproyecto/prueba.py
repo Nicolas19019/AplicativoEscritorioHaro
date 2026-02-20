@@ -161,7 +161,7 @@ class ApiClient:
             if params:
                 from urllib.parse import urlencode
                 qs = urlencode(params)
-                url = url + ("&" if "?" in url else "?") + qs
+                url = url + ("&" if "" in url else "") + qs
             req = urllib.request.Request(url, data=payload, method=method.upper())
             for k, v in headers.items():
                 req.add_header(k, v)
@@ -312,7 +312,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.cb_remember.grid(row=r+1, column=0, padx=20, pady=(0, 10), sticky="w")
 
         ctk.CTkButton(
-            right, text="¿Olvidaste tu contraseña?", height=28, corner_radius=8,
+            right, text="¿Olvidaste tu contraseña", height=28, corner_radius=8,
             fg_color="transparent", hover_color=fg_divider, text_color=fg_muted,
             command=lambda: messagebox.showinfo("Ayuda", "Contacta al administrador del sistema.")
         ).grid(row=r+1, column=1, padx=20, pady=(0,10), sticky="e"); r += 2
@@ -1335,7 +1335,7 @@ class EstudiantesView(BaseModuleFrame):
         if not doc:
             self.app._info("El registro no tiene 'numeroDocumento'.")
             return
-        if not messagebox.askyesno("Confirmar", "¿Eliminar al estudiante:\n{} (Doc: {})?".format(full_name, doc)):
+        if not messagebox.askyesno("Confirmar", "¿Eliminar al estudiante:\n{} (Doc: {})".format(full_name, doc)):
             self.app._info("Operación cancelada.")
             return
 
@@ -1556,7 +1556,7 @@ class InstructoresView(BaseModuleFrame):
         inst = self._data[idx]
         full_name = "{} {}".format(inst.get("nombre",""), inst.get("apellido","")).strip()
         ced = inst.get("cedula", "")
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar al instructor:\n{full_name} (Cédula: {ced})?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar al instructor:\n{full_name} (Cédula: {ced})"):
             self.app._info("Operación cancelada.")
             return
 
@@ -1761,7 +1761,7 @@ class VehiculosView(BaseModuleFrame):
         self._select_row(idx)
         v = self._data[idx]
         placa = v.get("placa","")
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar el vehículo con placa: {placa}?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar el vehículo con placa: {placa}"):
             self.app._info("Operación cancelada.")
             return
 
@@ -2272,11 +2272,11 @@ class ClasesView(BaseModuleFrame):
     def _delete_row(self, idx):
         self._select_row(idx)
         d = self._data[idx]
-        est_name = self.estudiantes_id_to_name.get(d.get("id_estudiante"), "¿?")
+        est_name = self.estudiantes_id_to_name.get(d.get("id_estudiante"), "¿")
         pro_id   = d.get("id_profesor") or d.get("id_instructor")
-        pro_name = self.profesores_id_to_name.get(pro_id, "¿?")
+        pro_name = self.profesores_id_to_name.get(pro_id, "¿")
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar la clase?\nEstudiante: {est_name}\nInstructor: {pro_name}\nFecha: {d.get('fecha','')}"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar la clase\nEstudiante: {est_name}\nInstructor: {pro_name}\nFecha: {d.get('fecha','')}"):
             self.app._info("Operación cancelada.")
             return
 
@@ -2624,7 +2624,7 @@ class ClasesView(BaseModuleFrame):
             pass
 
         try:
-            print("DEBUG: calendario mostrado (container exists?)", getattr(self, "_cal_container", None) is not None)
+            print("DEBUG: calendario mostrado (container exists)", getattr(self, "_cal_container", None) is not None)
         except Exception:
             pass
 
@@ -2858,7 +2858,7 @@ class EstadosCuentaView(BaseModuleFrame):
             return
         rec = self._data[self._selected_idx]
         est_name = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), rec.get("idEstudiante"))
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar estado de cuenta de: {est_name}?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar estado de cuenta de: {est_name}"):
             self.app._info("Operación cancelada.")
             return
         try:
@@ -3171,7 +3171,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._select_row(idx)
         rec = self._data[idx]
         est = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), rec.get("idEstudiante"))
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar registro de {est}?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar registro de {est}"):
             self.app._info("Operación cancelada.")
             return
         try:
@@ -3426,7 +3426,7 @@ class HaroDesktopApp(ctk.CTk):
 
 
     def _logout(self):
-        if messagebox.askyesno("Sesión", "¿Está seguro que desea salir?"):
+        if messagebox.askyesno("Sesión", "¿Está seguro que desea salir"):
             self.api = None
             self.api_user = None
             self.api_pass = None
@@ -3462,7 +3462,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Acciones genéricas ----------------------- #
     def _on_escape(self, _event=None):
-        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación?"):
+        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación"):
             self.destroy()
 
     def _focus_search(self, _event=None):
@@ -3482,7 +3482,7 @@ class HaroDesktopApp(ctk.CTk):
         ctk.set_appearance_mode("light" if current == "Dark" else "dark")
 
     def _confirm_delete(self, what="registro"):
-        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}?"):
+        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}"):
             self._info(f"{what.capitalize()} eliminado.")
         else:
             self._info("Operación cancelada.")

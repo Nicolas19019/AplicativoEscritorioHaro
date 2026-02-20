@@ -1,11 +1,17 @@
-import customtkinter as ctk
+﻿import customtkinter as ctk
 from tkinter import messagebox
+import threading
+import time
 from modules.base import BaseModuleFrame
 from modules.forms_inlines import InstructorInlineForm
 
 
 class InstructoresView(BaseModuleFrame):
     DEBOUNCE_MS = 250
+    ROW_BATCH_SIZE = 30
+    ROW_BATCH_DELAY = 4
+    MIN_REFRESH_INTERVAL = 500  # ms
+    RENDER_DELAY_MS = 16
 
     def __init__(self, master):
         super().__init__(master, "Instructores", "Gestione los profesores registrados en el sistema")
@@ -16,6 +22,12 @@ class InstructoresView(BaseModuleFrame):
         self._rows = []
         self._selected_idx = None
         self._debounce_id = None
+        self._render_after_id = None
+        self._render_seq = 0
+        self._row_pool = []
+        self._empty_label = None
+        self._loading_overlay = None
+        self._last_refresh_ts = 0
 
         # ===== Toolbar =====
         tb = ctk.CTkFrame(self, fg_color="transparent")
@@ -159,7 +171,20 @@ class InstructoresView(BaseModuleFrame):
     def _apply_filters_now(self):
         src = self._all_data or []
         self._data = self._apply_filters(src, self._collect_filters())
-        self._render_table()
+        self._queue_render(self._data)
+
+    def _queue_render(self, rows):
+        self._data = list(rows or [])
+        if self._render_after_id:
+            try:
+                self.after_cancel(self._render_after_id)
+            except Exception:
+                pass
+        self._render_after_id = self.after(self.RENDER_DELAY_MS, self._flush_render)
+
+    def _flush_render(self):
+        self._render_after_id = None
+        self._set_data(self._data)
 
     def _apply_filters(self, data_list, f):
         """Filtra por cédula, nombre, apellido, estado y especialidad (case-insensitive)."""
@@ -216,61 +241,140 @@ class InstructoresView(BaseModuleFrame):
         for i, (_, minw, weight) in enumerate(self._COLS):
             container.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
 
+    def _row_values(self, prof):
+        full_name = f"{prof.get('nombre', '')} {prof.get('apellido', '')}".strip()
+        return [
+            prof.get("cedula", ""),
+            full_name,
+            prof.get("especialidad", ""),
+            prof.get("telefono", ""),
+            prof.get("email", ""),
+        ]
+
     def _render_table(self):
+        self._queue_render(self._data)
+
+    def _build_table_shell(self):
+        if getattr(self, "_table_header", None) and self._table_header.winfo_exists():
+            return
+
         for w in self.table.winfo_children():
             w.destroy()
-        self._rows.clear()
-        self._selected_idx = None
+        self._row_pool = []
 
-        header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
-        self._apply_colspecs(header)
+        self._table_header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
+        self._table_header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
+        self._apply_colspecs(self._table_header)
 
         for i, (nombre, _, _) in enumerate(self._COLS):
             ctk.CTkLabel(
-                header, text=nombre, text_color=self.app.COLOR_MUTED,
+                self._table_header, text=nombre, text_color=self.app.COLOR_MUTED,
                 anchor="w", justify="left"
             ).grid(row=0, column=i, padx=12, pady=10, sticky="ew")
 
-        if not self._data:
-            ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)\
-                .grid(row=1, column=0, padx=8, pady=12, sticky="w")
+        self._rows_container = ctk.CTkFrame(self.table, fg_color="transparent")
+        self._rows_container.grid(row=1, column=0, sticky="nsew")
+        self.table.grid_rowconfigure(1, weight=1)
+        self._rows_container.grid_columnconfigure(0, weight=1)
+
+        self._empty_label = ctk.CTkLabel(
+            self._rows_container,
+            text="Sin resultados",
+            text_color=self.app.COLOR_MUTED
+        )
+        self._empty_label.grid(row=0, column=0, padx=8, pady=12, sticky="w")
+        self._empty_label.grid_remove()
+
+    def _create_row_widget(self):
+        row = ctk.CTkFrame(self._rows_container, fg_color=self.app.COLOR_PANEL, corner_radius=10)
+        self._apply_colspecs(row)
+
+        labels = []
+        for i in range(len(self._COLS) - 1):
+            lbl = ctk.CTkLabel(row, text="", text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
+            lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
+            labels.append(lbl)
+
+        actions = ctk.CTkFrame(row, fg_color="transparent")
+        actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+
+        btn_edit = ctk.CTkButton(
+            actions, text="✎", width=36, height=32, corner_radius=10,
+            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+            text_color="#ffffff"
+        )
+        btn_edit.grid(row=0, column=0, padx=4)
+
+        btn_delete = ctk.CTkButton(
+            actions, text="🗑️", width=36, height=32, corner_radius=10,
+            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+            text_color="#ffffff"
+        )
+        btn_delete.grid(row=0, column=1, padx=4)
+
+        return {
+            "frame": row,
+            "labels": labels,
+            "edit_btn": btn_edit,
+            "delete_btn": btn_delete,
+        }
+
+    def _update_row_widget(self, row_info, prof, idx):
+        row = row_info["frame"]
+        row.configure(fg_color=self.app.COLOR_PANEL)
+        values = self._row_values(prof)
+
+        for col, val in enumerate(values):
+            lbl = row_info["labels"][col]
+            lbl.configure(text=str(val))
+            lbl.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
+
+        row_info["edit_btn"].configure(command=lambda i=idx: self._edit_row(i))
+        row_info["delete_btn"].configure(command=lambda i=idx: self._delete_row(i))
+        row.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
+
+    def _set_data(self, rows):
+        self._build_table_shell()
+        self._selected_idx = None
+        self._rows.clear()
+        data = list(rows or [])
+
+        self._render_seq += 1
+        render_seq = self._render_seq
+
+        for row_info in self._row_pool:
+            try:
+                row_info["frame"].grid_remove()
+            except Exception:
+                pass
+
+        if not data:
+            if self._empty_label and self._empty_label.winfo_exists():
+                self._empty_label.grid()
             return
 
-        for r, prof in enumerate(self._data, start=1):
-            row = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_PANEL, corner_radius=10)
-            row.grid(row=r, column=0, padx=8, pady=4, sticky="ew")
-            self._apply_colspecs(row)
+        if self._empty_label and self._empty_label.winfo_exists():
+            self._empty_label.grid_remove()
 
-            full_name = f"{prof.get('nombre','')} {prof.get('apellido','')}".strip()
-            values = [
-                prof.get("cedula", ""),
-                full_name,
-                prof.get("especialidad", ""),
-                prof.get("telefono", ""),
-                prof.get("email", ""),
-            ]
+        def paint_batch(start=0):
+            if render_seq != self._render_seq:
+                return
+            if not self._rows_container.winfo_exists():
+                return
 
-            for i, val in enumerate(values):
-                lbl = ctk.CTkLabel(row, text=val, text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
-                lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-                lbl.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
+            end = min(start + self.ROW_BATCH_SIZE, len(data))
+            for idx in range(start, end):
+                if idx >= len(self._row_pool):
+                    self._row_pool.append(self._create_row_widget())
+                row_info = self._row_pool[idx]
+                self._update_row_widget(row_info, data[idx], idx)
+                row_info["frame"].grid(row=idx + 1, column=0, padx=8, pady=4, sticky="ew")
+                self._rows.append(row_info["frame"])
 
-            actions = ctk.CTkFrame(row, fg_color="transparent")
-            actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+            if end < len(data):
+                self.after(self.ROW_BATCH_DELAY, lambda: paint_batch(end))
 
-            def icon_btn(symbol, cmd):
-                return ctk.CTkButton(
-                    actions, text=symbol, width=36, height=32, corner_radius=10,
-                    fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                    text_color="#ffffff", command=cmd
-                )
-
-            icon_btn("✎", lambda idx=r-1: self._edit_row(idx)).grid(row=0, column=0, padx=4)
-            icon_btn("🗑️", lambda idx=r-1: self._delete_row(idx)).grid(row=0, column=1, padx=4)
-
-            row.bind("<Button-1>", lambda e, idx=r-1: self._select_row(idx))
-            self._rows.append(row)
+        paint_batch(0)
 
     def _select_row(self, idx):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
@@ -295,29 +399,58 @@ class InstructoresView(BaseModuleFrame):
     # =====================================================
     #                    API
     # =====================================================
-    def _refrescar(self):
-        try:
-            if not self.app.api:
-                self.app._info("No hay cliente API activo. Inicia sesión.")
+    def _refrescar(self, force_refresh=True):
+        now = int(time.time() * 1000)
+        if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
+            return
+        self._last_refresh_ts = now
+
+        if not self.app.api:
+            self.app._info("No hay cliente API activo. Inicia sesión.")
+            return
+
+        def worker():
+            try:
+                self.after(0, lambda: self._show_loading(True))
+                raw = self.app.api.get_all("profesores", force_refresh=force_refresh) or []
+                if isinstance(raw, dict):
+                    for key in ("content", "items", "profesores", "data", "results"):
+                        lst = raw.get(key)
+                        if isinstance(lst, list):
+                            raw = lst
+                            break
+                    else:
+                        raw = []
+
+                def apply_data():
+                    self._all_data = raw or []
+                    self._refresh_especialidad_options()
+                    self._data = self._apply_filters(self._all_data, self._collect_filters())
+                    self._queue_render(self._data)
+
+                self.after(0, apply_data)
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Profesores", f"No fue posible consultar la API:\n{e}", parent=self))
+            finally:
+                self.after(0, lambda: self._show_loading(False))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_loading(self, on=True, text="Actualizando..."):
+        if on:
+            if self._loading_overlay and self._loading_overlay.winfo_exists():
                 return
-
-            raw = self.app.api.get_all("profesores") or []
-            if isinstance(raw, dict):
-                for key in ("content", "items", "profesores", "data", "results"):
-                    lst = raw.get(key)
-                    if isinstance(lst, list):
-                        raw = lst
-                        break
-                else:
-                    raw = []
-
-            self._all_data = raw or []
-            self._refresh_especialidad_options()
-            self._data = self._apply_filters(self._all_data, self._collect_filters())
-            self._render_table()
-
-        except Exception as e:
-            messagebox.showerror("Profesores", f"No fue posible consultar la API:\n{e}", parent=self)
+            self._loading_overlay = ctk.CTkLabel(
+                self.table,
+                text=text,
+                text_color=self.app.COLOR_MUTED,
+                font=ctk.CTkFont(size=13, weight="bold")
+            )
+            self._loading_overlay.place(relx=0.5, rely=0.03, anchor="n")
+        else:
+            if self._loading_overlay and self._loading_overlay.winfo_exists():
+                self._loading_overlay.destroy()
+            self._loading_overlay = None
 
     def _submit_inline(self, payload, mode):
         try:
@@ -340,6 +473,7 @@ class InstructoresView(BaseModuleFrame):
                 self.app.api.update("profesores", prof_id, payload)
                 self.app._info("Profesor actualizado.")
 
+            self._last_refresh_ts = 0
             self._refrescar()
 
         except Exception as e:
@@ -351,7 +485,7 @@ class InstructoresView(BaseModuleFrame):
         name = f"{prof.get('nombre','')} {prof.get('apellido','')}".strip()
         ced = prof.get("cedula", "")
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar al profesor:\n{name} (Cédula: {ced})?"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar al profesor:\n{name} (Cédula: {ced})"):
             self.app._info("Operación cancelada.")
             return
 
@@ -362,6 +496,7 @@ class InstructoresView(BaseModuleFrame):
                 return
             self.app.api.delete("profesores", prof_id)
             self.app._info("Profesor eliminado.")
+            self._last_refresh_ts = 0
             self._refrescar()
         except Exception as e:
             messagebox.showerror("Profesores", f"No fue posible eliminar:\n{e}", parent=self)
