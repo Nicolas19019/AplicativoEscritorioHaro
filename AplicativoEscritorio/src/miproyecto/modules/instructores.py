@@ -1,17 +1,19 @@
 ﻿import customtkinter as ctk
 from tkinter import messagebox
+from tkinter import ttk
 import threading
 import time
+
 from modules.base import BaseModuleFrame
 from modules.forms_inlines import InstructorInlineForm
 
 
 class InstructoresView(BaseModuleFrame):
     DEBOUNCE_MS = 250
-    ROW_BATCH_SIZE = 30
-    ROW_BATCH_DELAY = 4
     MIN_REFRESH_INTERVAL = 500  # ms
     RENDER_DELAY_MS = 16
+    TREE_INSERT_CHUNK = 250
+    TREE_INSERT_DELAY = 1  # ms
 
     def __init__(self, master):
         super().__init__(master, "Instructores", "Gestione los profesores registrados en el sistema")
@@ -19,21 +21,21 @@ class InstructoresView(BaseModuleFrame):
         # ===== Estado para filtros =====
         self._all_data = []      # todo lo que viene de API
         self._data = []          # filtrado para pintar
-        self._rows = []
         self._selected_idx = None
         self._debounce_id = None
         self._render_after_id = None
         self._render_seq = 0
-        self._row_pool = []
-        self._empty_label = None
         self._loading_overlay = None
         self._last_refresh_ts = 0
+
+        # mapeo Tree IID -> idx actual en self._data
+        self._iid_to_index = {}
 
         # ===== Toolbar =====
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        tb.grid_columnconfigure((0, 1, 2), weight=0)
-        tb.grid_columnconfigure(3, weight=1)
+        tb.grid_columnconfigure((0, 1, 2, 3, 4), weight=0)
+        tb.grid_columnconfigure(5, weight=1)
 
         def red_btn(parent, text, cmd):
             return ctk.CTkButton(
@@ -43,7 +45,9 @@ class InstructoresView(BaseModuleFrame):
             )
 
         red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
-        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
         # ===== Formulario inline =====
         self.form = InstructorInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
@@ -54,23 +58,24 @@ class InstructoresView(BaseModuleFrame):
         self.filters = self._make_filters_bar(self)
         self.filters.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
 
-        # ===== Tabla =====
-        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        # ===== Tabla (Treeview) =====
+        self.table = ctk.CTkFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
         self.table.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="nsew")
         self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
+        self.table.grid_rowconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
         self._COLS = [
-            ("Cédula",        120, 0),
-            ("Nombre",        260, 1),
-            ("Especialidad",  180, 0),
-            ("Teléfono",      130, 0),
-            ("Email",         240, 0),
-            ("Acciones",      120, 0),
+            ("Cédula", 120),
+            ("Nombre", 260),
+            ("Especialidad", 180),
+            ("Teléfono", 130),
+            ("Email", 240),
         ]
 
-        self._render_table()
+        self._build_tree()
+        self._queue_render(self._data)
         self.after(150, self._refrescar)
 
     # =====================================================
@@ -93,34 +98,28 @@ class InstructoresView(BaseModuleFrame):
                 border_width=2, border_color=self.app.COLOR_DIVIDER
             )
 
-        # Cédula
         ctk.CTkLabel(bar, text="Cédula").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
         self.f_cedula = entry("Ej: 1012345678")
         self.f_cedula.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="ew")
 
-        # Nombre
         ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_nombre = entry("Nombre")
         self.f_nombre.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="ew")
 
-        # Apellido
         ctk.CTkLabel(bar, text="Apellido").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_apellido = entry("Apellido")
         self.f_apellido.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
 
-        # Estado
         ctk.CTkLabel(bar, text="Estado").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_estado = ctk.CTkComboBox(bar, values=["Todos", "Activo", "Inactivo", "Suspendido"], width=160)
         self.f_estado.set("Todos")
         self.f_estado.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
 
-        # Especialidad
         ctk.CTkLabel(bar, text="Especialidad").grid(row=0, column=4, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_especialidad = ctk.CTkComboBox(bar, values=["Todas"], width=170)
         self.f_especialidad.set("Todas")
         self.f_especialidad.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
 
-        # Botones
         btns = ctk.CTkFrame(bar, fg_color="transparent")
         btns.grid(row=1, column=5, padx=(8, 12), pady=(0, 10), sticky="e")
 
@@ -134,10 +133,8 @@ class InstructoresView(BaseModuleFrame):
         light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
         light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
 
-        # Bindings: Entry -> debounce; Combos -> apply inmediato
         for w in (self.f_cedula, self.f_nombre, self.f_apellido):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())
-
         self.f_estado.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
         self.f_especialidad.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
 
@@ -187,7 +184,6 @@ class InstructoresView(BaseModuleFrame):
         self._set_data(self._data)
 
     def _apply_filters(self, data_list, f):
-        """Filtra por cédula, nombre, apellido, estado y especialidad (case-insensitive)."""
         if not data_list:
             return []
 
@@ -220,7 +216,6 @@ class InstructoresView(BaseModuleFrame):
         return out
 
     def _refresh_especialidad_options(self):
-        """Llena el combo de especialidad con lo que venga del backend."""
         esps = set()
         for p in (self._all_data or []):
             e = str(p.get("especialidad", "") or "").strip()
@@ -235,153 +230,124 @@ class InstructoresView(BaseModuleFrame):
             pass
 
     # =====================================================
-    #                    TABLA
+    #                    TREEVIEW (TABLA RÁPIDA)
     # =====================================================
-    def _apply_colspecs(self, container):
-        for i, (_, minw, weight) in enumerate(self._COLS):
-            container.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
+    def _build_tree(self):
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        # Igual que en Estudiantes: adaptar a Light/Dark
+        mode = ctk.get_appearance_mode()  # "Light" o "Dark"
+
+        if mode == "Light":
+            bg = "#ffffff"
+            panel = "#ffffff"
+            text = "#111111"
+            muted = "#444444"
+            divider = "#e5e7eb"
+            sel_bg = "#f1f5f9"
+        else:
+            bg = getattr(self.app, "COLOR_BG", "#111111")
+            panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")
+            text = getattr(self.app, "COLOR_TEXT", "#ffffff")
+            muted = getattr(self.app, "COLOR_MUTED", "#cfcfcf")
+            divider = getattr(self.app, "COLOR_DIVIDER", "#2a2a2a")
+            sel_bg = divider
+
+        style.configure(
+            "Haro.Treeview",
+            background=panel,
+            fieldbackground=panel,
+            foreground=text,
+            bordercolor=divider,
+            lightcolor=divider,
+            darkcolor=divider,
+            rowheight=28,
+        )
+        style.map(
+            "Haro.Treeview",
+            background=[("selected", sel_bg)],
+            foreground=[("selected", text)],
+        )
+        style.configure(
+            "Haro.Treeview.Heading",
+            background=bg,
+            foreground=muted,
+            relief="flat",
+            font=("Segoe UI", 10, "bold"),
+        )
+
+        cols = [c[0] for c in self._COLS]
+        self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+
+        vsb = ttk.Scrollbar(self.table, orient="vertical", command=self.tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns", padx=(6, 10), pady=10)
+        hsb = ttk.Scrollbar(self.table, orient="horizontal", command=self.tree.xview)
+        hsb.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        for name, w in self._COLS:
+            self.tree.heading(name, text=name)
+            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.7)), stretch=True, anchor="w")
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", lambda e: self._editar())
+
+        self._empty_label = ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)
+        self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
+        self._empty_label.place_forget()
+
+    def _on_tree_select(self, _evt=None):
+        sel = self.tree.selection()
+        if not sel:
+            self._selected_idx = None
+            return
+        iid = sel[0]
+        self._selected_idx = self._iid_to_index.get(iid)
 
     def _row_values(self, prof):
         full_name = f"{prof.get('nombre', '')} {prof.get('apellido', '')}".strip()
-        return [
+        return (
             prof.get("cedula", ""),
             full_name,
             prof.get("especialidad", ""),
             prof.get("telefono", ""),
             prof.get("email", ""),
-        ]
-
-    def _render_table(self):
-        self._queue_render(self._data)
-
-    def _build_table_shell(self):
-        if getattr(self, "_table_header", None) and self._table_header.winfo_exists():
-            return
-
-        for w in self.table.winfo_children():
-            w.destroy()
-        self._row_pool = []
-
-        self._table_header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        self._table_header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
-        self._apply_colspecs(self._table_header)
-
-        for i, (nombre, _, _) in enumerate(self._COLS):
-            ctk.CTkLabel(
-                self._table_header, text=nombre, text_color=self.app.COLOR_MUTED,
-                anchor="w", justify="left"
-            ).grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-
-        self._rows_container = ctk.CTkFrame(self.table, fg_color="transparent")
-        self._rows_container.grid(row=1, column=0, sticky="nsew")
-        self.table.grid_rowconfigure(1, weight=1)
-        self._rows_container.grid_columnconfigure(0, weight=1)
-
-        self._empty_label = ctk.CTkLabel(
-            self._rows_container,
-            text="Sin resultados",
-            text_color=self.app.COLOR_MUTED
         )
-        self._empty_label.grid(row=0, column=0, padx=8, pady=12, sticky="w")
-        self._empty_label.grid_remove()
-
-    def _create_row_widget(self):
-        row = ctk.CTkFrame(self._rows_container, fg_color=self.app.COLOR_PANEL, corner_radius=10)
-        self._apply_colspecs(row)
-
-        labels = []
-        for i in range(len(self._COLS) - 1):
-            lbl = ctk.CTkLabel(row, text="", text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
-            lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-            labels.append(lbl)
-
-        actions = ctk.CTkFrame(row, fg_color="transparent")
-        actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
-
-        btn_edit = ctk.CTkButton(
-            actions, text="✎", width=36, height=32, corner_radius=10,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-            text_color="#ffffff"
-        )
-        btn_edit.grid(row=0, column=0, padx=4)
-
-        btn_delete = ctk.CTkButton(
-            actions, text="🗑️", width=36, height=32, corner_radius=10,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-            text_color="#ffffff"
-        )
-        btn_delete.grid(row=0, column=1, padx=4)
-
-        return {
-            "frame": row,
-            "labels": labels,
-            "edit_btn": btn_edit,
-            "delete_btn": btn_delete,
-        }
-
-    def _update_row_widget(self, row_info, prof, idx):
-        row = row_info["frame"]
-        row.configure(fg_color=self.app.COLOR_PANEL)
-        values = self._row_values(prof)
-
-        for col, val in enumerate(values):
-            lbl = row_info["labels"][col]
-            lbl.configure(text=str(val))
-            lbl.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
-
-        row_info["edit_btn"].configure(command=lambda i=idx: self._edit_row(i))
-        row_info["delete_btn"].configure(command=lambda i=idx: self._delete_row(i))
-        row.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
 
     def _set_data(self, rows):
-        self._build_table_shell()
-        self._selected_idx = None
-        self._rows.clear()
         data = list(rows or [])
 
         self._render_seq += 1
         render_seq = self._render_seq
 
-        for row_info in self._row_pool:
-            try:
-                row_info["frame"].grid_remove()
-            except Exception:
-                pass
+        # limpiar tree
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._iid_to_index.clear()
+        self._selected_idx = None
 
         if not data:
-            if self._empty_label and self._empty_label.winfo_exists():
-                self._empty_label.grid()
+            self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
             return
+        self._empty_label.place_forget()
 
-        if self._empty_label and self._empty_label.winfo_exists():
-            self._empty_label.grid_remove()
-
-        def paint_batch(start=0):
+        def insert_chunk(start=0):
             if render_seq != self._render_seq:
                 return
-            if not self._rows_container.winfo_exists():
-                return
-
-            end = min(start + self.ROW_BATCH_SIZE, len(data))
+            end = min(start + self.TREE_INSERT_CHUNK, len(data))
             for idx in range(start, end):
-                if idx >= len(self._row_pool):
-                    self._row_pool.append(self._create_row_widget())
-                row_info = self._row_pool[idx]
-                self._update_row_widget(row_info, data[idx], idx)
-                row_info["frame"].grid(row=idx + 1, column=0, padx=8, pady=4, sticky="ew")
-                self._rows.append(row_info["frame"])
-
+                iid = f"r{idx}"
+                self._iid_to_index[iid] = idx
+                self.tree.insert("", "end", iid=iid, values=self._row_values(data[idx]))
             if end < len(data):
-                self.after(self.ROW_BATCH_DELAY, lambda: paint_batch(end))
+                self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
-        paint_batch(0)
-
-    def _select_row(self, idx):
-        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
-            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
-        if 0 <= idx < len(self._rows):
-            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
-            self._selected_idx = idx
+        insert_chunk(0)
 
     # =====================================================
     #                    ACCIONES
@@ -389,9 +355,17 @@ class InstructoresView(BaseModuleFrame):
     def _nuevo(self):
         self.form.show_create()
 
-    def _edit_row(self, idx):
-        self._select_row(idx)
-        self.form.show_edit(self._data[idx])
+    def _editar(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un profesor en la tabla primero.")
+            return
+        self.form.show_edit(self._data[self._selected_idx])
+
+    def _eliminar_seleccionado(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un profesor en la tabla primero.")
+            return
+        self._delete_row(self._selected_idx)
 
     def _cancel_inline(self):
         self.form.hide()
@@ -480,12 +454,11 @@ class InstructoresView(BaseModuleFrame):
             messagebox.showerror("Profesores", f"Operación fallida:\n{e}", parent=self)
 
     def _delete_row(self, idx):
-        self._select_row(idx)
         prof = self._data[idx]
         name = f"{prof.get('nombre','')} {prof.get('apellido','')}".strip()
         ced = prof.get("cedula", "")
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar al profesor:\n{name} (Cédula: {ced})"):
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar al profesor:\n{name} (Cédula: {ced})", parent=self):
             self.app._info("Operación cancelada.")
             return
 

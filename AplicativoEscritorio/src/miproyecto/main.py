@@ -55,7 +55,7 @@ class HaroDesktopApp(ctk.CTk):
 
 
     # API
-    API_BASE_URL = "http://localhost:8082/api"
+    API_BASE_URL = "http://localhost:8083/api"
     AUTH_MODE = "basic"
     JWT_LOGIN_PATH = "auth/login"
     JWT_USER_FIELD = "username"

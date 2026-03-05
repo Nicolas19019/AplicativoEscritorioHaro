@@ -1,9 +1,11 @@
 ﻿import customtkinter as ctk
 from tkinter import messagebox
+from tkinter import ttk
 import threading
 import time
 
 from modules.base import BaseModuleFrame
+
 
 def _to_bool(value, default=False):
     if value is None:
@@ -18,6 +20,7 @@ def _to_bool(value, default=False):
     if value_str in {"0", "false", "f", "no", "off"}:
         return False
     return default
+
 
 def _normalize_tipo_pase(raw_value):
     if raw_value is None:
@@ -34,6 +37,7 @@ def _normalize_tipo_pase(raw_value):
             tokens.append("moto")
     return ",".join(tokens)
 
+
 # === StudentInlineForm (idéntico al tuyo original) ===
 class StudentInlineForm(ctk.CTkFrame):
     """
@@ -41,8 +45,6 @@ class StudentInlineForm(ctk.CTkFrame):
     Devuelve SIEMPRE campos en camelCase como los pide la API.
 
     NOTA: ahora incluye "categoria".
-    Si tu backend usa otro nombre (p.ej. "categoriaLicencia"),
-    puedes mapearlo en _collect() duplicando el valor.
     """
     def __init__(self, master, app, on_submit, on_cancel):
         super().__init__(
@@ -56,7 +58,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
 
-        self.grid_columnconfigure((0,1,2,3), weight=1)
+        self.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         def BorderedEntry(parent, **kw):
             return ctk.CTkEntry(
@@ -68,14 +70,14 @@ class StudentInlineForm(ctk.CTkFrame):
             )
 
         # --------- Fila 0: Documento ---------
-        ctk.CTkLabel(self, text="Tipo Documento").grid(row=0, column=0, padx=12, pady=(12,6), sticky="w")
-        self.cb_tipo = ctk.CTkComboBox(self, values=["CC","TI","CE","PA"], width=120)
+        ctk.CTkLabel(self, text="Tipo Documento").grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
+        self.cb_tipo = ctk.CTkComboBox(self, values=["CC", "TI", "CE", "PA"], width=120)
         self.cb_tipo.set("CC")
-        self.cb_tipo.grid(row=0, column=1, padx=12, pady=(12,6), sticky="w")
+        self.cb_tipo.grid(row=0, column=1, padx=12, pady=(12, 6), sticky="w")
 
-        ctk.CTkLabel(self, text="Número Documento").grid(row=0, column=2, padx=12, pady=(12,6), sticky="w")
+        ctk.CTkLabel(self, text="Número Documento").grid(row=0, column=2, padx=12, pady=(12, 6), sticky="w")
         self.en_doc = BorderedEntry(self, placeholder_text="1012345678")
-        self.en_doc.grid(row=0, column=3, padx=12, pady=(12,6), sticky="ew")
+        self.en_doc.grid(row=0, column=3, padx=12, pady=(12, 6), sticky="ew")
 
         # --------- Fila 1: Nombre / Apellido ---------
         ctk.CTkLabel(self, text="Nombre").grid(row=1, column=0, padx=12, pady=6, sticky="w")
@@ -107,7 +109,7 @@ class StudentInlineForm(ctk.CTkFrame):
 
         # --------- Fila 4: Categoría / Tipo Estudiante ---------
         ctk.CTkLabel(self, text="Categoría").grid(row=4, column=0, padx=12, pady=6, sticky="w")
-        self.cb_categoria = ctk.CTkComboBox(self, values=["A2","B1","C1"], width=140)
+        self.cb_categoria = ctk.CTkComboBox(self, values=["A2", "B1", "C1"], width=140)
         self.cb_categoria.set("A2")
         self.cb_categoria.grid(row=4, column=1, padx=12, pady=6, sticky="w")
 
@@ -149,12 +151,14 @@ class StudentInlineForm(ctk.CTkFrame):
 
         # --------- Fila 7: Botones ---------
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=7, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
+        btns.grid(row=7, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
 
         def red_btn(text, cmd):
-            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
-                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                                 text_color="#ffffff", command=cmd)
+            return ctk.CTkButton(
+                btns, text=text, height=36, corner_radius=12,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd
+            )
 
         red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
         red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
@@ -163,18 +167,16 @@ class StudentInlineForm(ctk.CTkFrame):
         self.sw_visible.select()
 
     def _force_entry_placeholders(self):
-        """Fuerza a que los placeholders de CTkEntry se muestren correctamente al cargar."""
         try:
             for attr in dir(self):
                 widget = getattr(self, attr)
                 if isinstance(widget, ctk.CTkEntry):
-                    widget.focus()          # activa el entry
-                    widget.master.focus()   # quita el foco inmediatamente
+                    widget.focus()
+                    widget.master.focus()
             self.update_idletasks()
         except Exception as e:
             print(f"[WARN] Error forzando placeholders en {self.__class__.__name__}: {e}")
 
-    # -------- API pública --------
     def show_create(self):
         self.mode = "create"
         self._fill({})
@@ -190,7 +192,6 @@ class StudentInlineForm(ctk.CTkFrame):
     def hide(self):
         self.grid_remove()
 
-    # -------- Internos --------
     def _fill(self, d):
         for w in (
             self.en_doc, self.en_nombre, self.en_apellido, self.en_tel,
@@ -236,7 +237,6 @@ class StudentInlineForm(ctk.CTkFrame):
         else:
             self.sw_visible.deselect()
 
-        # categoría admite varios nombres que pueda traer tu API
         cat_val = (
             d.get("categoria")
             or d.get("categoriaLicencia")
@@ -249,7 +249,6 @@ class StudentInlineForm(ctk.CTkFrame):
         self.cb_categoria.set(str(cat_val).upper())
 
     def _collect(self):
-        # Devuelve CAMELCASE, exactamente como tu API + 'categoria'
         categoria = (self.cb_categoria.get() or "").strip().upper()
         tipo_pase = []
         if _to_bool(self.ck_tipo_pase_carro.get()):
@@ -280,11 +279,10 @@ class StudentInlineForm(ctk.CTkFrame):
             "aproboExamenTeorico": _to_bool(self.sw_aprobo_teorico.get()),
             "visible": _to_bool(self.sw_visible.get(), default=True),
             "estado": self.cb_estado.get().strip(),
-            "categoria": categoria,                # <--- NUEVO (clave base)
+            "categoria": categoria,
             "usuario": None,
             "contrasena": None,
         }
-
         return data
 
     def _validate(self, d):
@@ -301,7 +299,7 @@ class StudentInlineForm(ctk.CTkFrame):
             return False, "El Teléfono debe ser numérico."
         if "@" not in d["email"] or "." not in d["email"].split("@")[-1]:
             return False, "Email no válido."
-        if d["categoria"].upper() not in {"A2","B1","C1"}:
+        if d["categoria"].upper() not in {"A2", "B1", "C1"}:
             return False, "La categoría debe ser A2, B1 o C1."
         if d.get("tipoPase") not in {"carro", "moto", "carro,moto"}:
             return False, "Tipo Pase debe ser carro, moto o ambos."
@@ -330,79 +328,167 @@ class StudentInlineForm(ctk.CTkFrame):
         self.hide()
 
 
-# === EstudiantesView (tu clase exacta) ===
+# === EstudiantesView (render optimizado con Treeview) ===
 class EstudiantesView(BaseModuleFrame):
-    DEBOUNCE_MS = 250  # retardo para búsqueda en vivo
-    ROW_BATCH_SIZE = 30
-    ROW_BATCH_DELAY = 4
+    DEBOUNCE_MS = 250
     MIN_REFRESH_INTERVAL = 500  # ms
     RENDER_DELAY_MS = 16
+    TREE_INSERT_CHUNK = 250      # inserta por trozos para no congelar si escala
+    TREE_INSERT_DELAY = 1        # ms
 
     def __init__(self, master):
         super().__init__(master, "Estudiantes", "Gestione matrículas y datos del alumno")
 
-        # ---------- Estado (DECLARAR PRIMERO para evitar carreras) ----------
-        self._all_data = []   # todo lo que viene de la API
-        self._data = []       # datos filtrados para pintar
-        self._rows = []
+        # ---------- Estado ----------
+        self._all_data = []
+        self._data = []
         self._selected_idx = None
         self._debounce_id = None
         self._render_after_id = None
         self._render_seq = 0
-        self._row_pool = []
-        self._empty_label = None
         self._loading_overlay = None
         self._last_refresh_ts = 0
+
+        # mapeo Tree IID -> idx actual en self._data
+        self._iid_to_index = {}
 
         # ===== Toolbar =====
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
-        tb.grid_columnconfigure((0,1,2), weight=0)
-        tb.grid_columnconfigure(3, weight=1)
+        tb.grid_columnconfigure((0, 1, 2, 3, 4, 5), weight=0)
+        tb.grid_columnconfigure(6, weight=1)
 
         def red_btn(parent, text, cmd):
-            return ctk.CTkButton(parent, text=text, height=40, corner_radius=18,
-                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                                 text_color="#ffffff", command=cmd, anchor="w")
-        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
-        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+            return ctk.CTkButton(
+                parent, text=text, height=40, corner_radius=18,
+                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+                text_color="#ffffff", command=cmd, anchor="w"
+            )
+
+        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        red_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
         # ===== Form inline =====
         self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
-        self.form.grid(row=2, column=0, padx=16, pady=(0,10), sticky="ew")
+        self.form.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
         self.form.hide()
 
-        # ===== Filtros Pro =====
-        self.filters = self._make_filters_bar(self)  # crea widgets y bindings
-        self.filters.grid(row=3, column=0, padx=16, pady=(0,10), sticky="ew")
-        self._refresh_category_options()  # inicializa opciones (A2/B1/C1 + las que vengan)
+        # ===== Filtros =====
+        self.filters = self._make_filters_bar(self)
+        self.filters.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
+        self._refresh_category_options()
 
-        # ===== Tabla =====
-        self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        self.table.grid(row=4, column=0, padx=16, pady=(0,16), sticky="nsew")
+        # ===== Tabla (Treeview) =====
+        self.table = ctk.CTkFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
+        self.table.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="nsew")
         self.grid_rowconfigure(4, weight=1)
+        self.table.grid_rowconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
         self._COLS = [
-            ("Documento",   130,  0),
-            ("Nombre completo", 220,  1),
-            ("Categoría",   90, 0),
-            ("Sede",       120, 0),
-            ("Horas",       70, 0),
-            ("Tipo pase",  100, 0),
-            ("Teórico",     90, 0),
-            ("Estado",     110, 0),
-            ("Acciones",   120, 0),
+            ("Documento", 130),
+            ("Nombre completo", 220),
+            ("Categoría", 90),
+            ("Sede", 140),
+            ("Horas", 70),
+            ("Tipo pase", 110),
+            ("Teórico", 90),
+            ("Estado", 110),
         ]
 
-        
-        self._render_table()
+        self._build_tree()
+
         self.after(150, self._refrescar)
+
+    # ---------- Treeview (rápido) ----------
+    def _build_tree(self):
+        # Estilos ttk para que no se vea “feo” dentro del CTkFrame
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        mode = ctk.get_appearance_mode()  # "Light" o "Dark"
+
+        if mode == "Light":
+            bg = "#ffffff"
+            panel = "#ffffff"
+            text = "#111111"
+            muted = "#444444"
+            divider = "#e5e7eb"
+            sel_bg = "#f1f5f9"
+        else:
+            bg = getattr(self.app, "COLOR_BG", "#111111")
+            panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")
+            text = getattr(self.app, "COLOR_TEXT", "#ffffff")
+            muted = getattr(self.app, "COLOR_MUTED", "#cfcfcf")
+            divider = getattr(self.app, "COLOR_DIVIDER", "#2a2a2a")
+            sel_bg = divider
+
+        style.configure(
+            "Haro.Treeview",
+            background=panel,
+            fieldbackground=panel,
+            foreground=text,
+            bordercolor=divider,
+            lightcolor=divider,
+            darkcolor=divider,
+            rowheight=28,
+        )
+        style.map(
+            "Haro.Treeview",
+            background=[("selected", sel_bg)],
+            foreground=[("selected", text)],
+        )
+        style.configure(
+            "Haro.Treeview.Heading",
+            background=bg,
+            foreground=muted,
+            relief="flat",
+            font=("Segoe UI", 10, "bold"),
+        )
+
+        cols = [c[0] for c in self._COLS]
+        self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+
+        # Scrollbars
+        vsb = ttk.Scrollbar(self.table, orient="vertical", command=self.tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns", padx=(6, 10), pady=10)
+        hsb = ttk.Scrollbar(self.table, orient="horizontal", command=self.tree.xview)
+        hsb.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        # Config columnas
+        for name, w in self._COLS:
+            self.tree.heading(name, text=name)
+            # stretch=True para que se adapte al ancho; anchor=w para alinear izquierda
+            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.7)), stretch=True, anchor="w")
+
+        # Eventos
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", lambda e: self._editar())
+
+        # Label “vacío”
+        self._empty_label = ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)
+        self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
+        self._empty_label.place_forget()
+
+    def _on_tree_select(self, _evt=None):
+        sel = self.tree.selection()
+        if not sel:
+            self._selected_idx = None
+            return
+        iid = sel[0]
+        idx = self._iid_to_index.get(iid)
+        self._selected_idx = idx
 
     # ---------- UI: Filtros ----------
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
-        # 0: doc, 1: nombre, 2: estado, 3: categoria, 4: botones
         bar.grid_columnconfigure(0, weight=1)
         bar.grid_columnconfigure(1, weight=1)
         bar.grid_columnconfigure(2, weight=0)
@@ -416,48 +502,45 @@ class EstudiantesView(BaseModuleFrame):
                 border_width=2, border_color=self.app.COLOR_DIVIDER
             )
 
-        # Documento
-        ctk.CTkLabel(bar, text="Documento").grid(row=0, column=0, padx=(12,8), pady=(10,4), sticky="w")
+        ctk.CTkLabel(bar, text="Documento").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
         self.f_doc = entry("Ej: 1012345678")
-        self.f_doc.grid(row=1, column=0, padx=(12,8), pady=(0,10), sticky="ew")
+        self.f_doc.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="ew")
 
-        # Nombre
-        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=1, padx=(8,8), pady=(10,4), sticky="w")
+        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_nombre = entry("Nombre o apellido")
-        self.f_nombre.grid(row=1, column=1, padx=(8,8), pady=(0,10), sticky="ew")
+        self.f_nombre.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="ew")
 
-        # Estado
-        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=2, padx=(8,8), pady=(10,4), sticky="w")
+        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_estado = ctk.CTkComboBox(
             bar,
             values=["Todos", "Pendiente", "Activo", "Inactivo", "Suspendido"],
             width=160
         )
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=2, padx=(8,8), pady=(0,10), sticky="w")
+        self.f_estado.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="w")
 
-        # Categoría
-        ctk.CTkLabel(bar, text="Categoría").grid(row=0, column=3, padx=(8,8), pady=(10,4), sticky="w")
+        ctk.CTkLabel(bar, text="Categoría").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_categoria = ctk.CTkComboBox(
             bar,
-            values=["Todas", "A2", "B1", "C1"],  # visibles desde el inicio
+            values=["Todas", "A2", "B1", "C1"],
             width=160
         )
         self.f_categoria.set("Todas")
-        self.f_categoria.grid(row=1, column=3, padx=(8,8), pady=(0,10), sticky="w")
+        self.f_categoria.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
 
-        # Botones (columna 4 — no pises la 3)
         btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=1, column=4, padx=(8,12), pady=(0,10), sticky="e")
+        btns.grid(row=1, column=4, padx=(8, 12), pady=(0, 10), sticky="e")
 
         def light_btn(text, cmd):
-            return ctk.CTkButton(btns, text=text, height=36, corner_radius=10,
-                                 fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
-                                 text_color=self.app.COLOR_TEXT, command=cmd)
+            return ctk.CTkButton(
+                btns, text=text, height=36, corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
+                text_color=self.app.COLOR_TEXT, command=cmd
+            )
+
         light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
         light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
 
-        # Bindings (búsqueda en vivo con debounce)
         for w in (self.f_doc, self.f_nombre):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())
         self.f_estado.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
@@ -482,12 +565,14 @@ class EstudiantesView(BaseModuleFrame):
 
     def _debounced_apply_filters(self):
         if self._debounce_id:
-            try: self.after_cancel(self._debounce_id)
-            except Exception: pass
+            try:
+                self.after_cancel(self._debounce_id)
+            except Exception:
+                pass
         self._debounce_id = self.after(self.DEBOUNCE_MS, self._apply_filters_now)
 
     def _apply_filters_now(self):
-        src = getattr(self, "_all_data", []) or []   # a prueba de inicialización temprana
+        src = getattr(self, "_all_data", []) or []
         self._data = self._apply_filters(src, self._collect_filters())
         self._queue_render(self._data)
 
@@ -505,10 +590,8 @@ class EstudiantesView(BaseModuleFrame):
         self._set_data(self._data)
 
     def _apply_filters(self, data_list, f):
-        """Filtra localmente por documento, nombre, estado y categoría. Insensible a mayúsculas."""
         if not data_list:
             return []
-
         d_sub = f["doc"].lower()
         n_sub = f["nombre"].lower()
         estado = f["estado"]
@@ -516,11 +599,11 @@ class EstudiantesView(BaseModuleFrame):
 
         out = []
         for stu in data_list:
-            doc = str(stu.get("numeroDocumento","") or "").lower()
-            nombre = (stu.get("nombre","") or "").strip()
-            apellido = (stu.get("apellido","") or "").strip()
+            doc = str(stu.get("numeroDocumento", "") or "").lower()
+            nombre = (stu.get("nombre", "") or "").strip()
+            apellido = (stu.get("apellido", "") or "").strip()
             full = f"{nombre} {apellido}".strip().lower()
-            est = (stu.get("estado","") or "").strip()
+            est = (stu.get("estado", "") or "").strip()
             categoria = (
                 stu.get("categoria")
                 or stu.get("categoriaLicencia")
@@ -544,8 +627,7 @@ class EstudiantesView(BaseModuleFrame):
         return out
 
     def _refresh_category_options(self):
-        """Completa el combo con categorías detectadas en los datos, sin perder A2/B1/C1."""
-        base = {"A2","B1","C1"}
+        base = {"A2", "B1", "C1"}
         cats = set()
         for stu in (getattr(self, "_all_data", []) or []):
             c = (
@@ -569,10 +651,6 @@ class EstudiantesView(BaseModuleFrame):
             pass
 
     # ---------- helpers de tabla ----------
-    def _apply_colspecs(self, container):
-        for i, (_, minw, weight) in enumerate(self._COLS):
-            container.grid_columnconfigure(i, minsize=minw, weight=weight or 1)
-
     def _student_row_values(self, stu):
         full_name = "{} {}".format(stu.get("nombre", ""), stu.get("apellido", "")).strip()
         categoria = (
@@ -589,7 +667,8 @@ class EstudiantesView(BaseModuleFrame):
         teorico_ok = _to_bool(stu.get("aproboExamenTeorico"), default=False)
         horas = stu.get("horas")
         horas_disp = "-" if horas is None else str(horas)
-        return [
+
+        return (
             stu.get("numeroDocumento", ""),
             full_name,
             categoria_disp,
@@ -598,141 +677,40 @@ class EstudiantesView(BaseModuleFrame):
             tipo_pase_disp or "-",
             "Aprobado" if teorico_ok else "Pendiente",
             stu.get("estado", ""),
-        ]
-
-    def _render_table(self):
-        self._queue_render(self._data)
-
-    def _build_table_shell(self):
-        if getattr(self, "_table_header", None) and self._table_header.winfo_exists():
-            return
-
-        for w in self.table.winfo_children():
-            w.destroy()
-        self._row_pool = []
-
-        self._table_header = ctk.CTkFrame(self.table, fg_color=self.app.COLOR_INPUT_BG, corner_radius=10)
-        self._table_header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
-        self._apply_colspecs(self._table_header)
-        for i, (nombre, _, _) in enumerate(self._COLS):
-            ctk.CTkLabel(
-                self._table_header,
-                text=nombre,
-                text_color=self.app.COLOR_MUTED,
-                anchor="w",
-                justify="left"
-            ).grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-
-        self._rows_container = ctk.CTkFrame(self.table, fg_color="transparent")
-        self._rows_container.grid(row=1, column=0, sticky="nsew")
-        self.table.grid_rowconfigure(1, weight=1)
-        self._rows_container.grid_columnconfigure(0, weight=1)
-
-        self._empty_label = ctk.CTkLabel(
-            self._rows_container,
-            text="Sin resultados",
-            text_color=self.app.COLOR_MUTED
         )
-        self._empty_label.grid(row=0, column=0, padx=8, pady=12, sticky="w")
-        self._empty_label.grid_remove()
-
-    def _create_row_widget(self):
-        row = ctk.CTkFrame(self._rows_container, fg_color=self.app.COLOR_PANEL, corner_radius=10)
-        self._apply_colspecs(row)
-
-        labels = []
-        for i in range(len(self._COLS) - 1):
-            lbl = ctk.CTkLabel(row, text="", text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
-            lbl.grid(row=0, column=i, padx=12, pady=10, sticky="ew")
-            labels.append(lbl)
-
-        actions = ctk.CTkFrame(row, fg_color="transparent")
-        actions.grid(row=0, column=len(self._COLS) - 1, padx=8, pady=6, sticky="e")
-
-        btn_edit = ctk.CTkButton(
-            actions, text="✎", width=36, height=32, corner_radius=10,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-            text_color="#ffffff"
-        )
-        btn_edit.grid(row=0, column=0, padx=4)
-
-        btn_delete = ctk.CTkButton(
-            actions, text="🗑️", width=36, height=32, corner_radius=10,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-            text_color="#ffffff"
-        )
-        btn_delete.grid(row=0, column=1, padx=4)
-
-        return {
-            "frame": row,
-            "labels": labels,
-            "edit_btn": btn_edit,
-            "delete_btn": btn_delete,
-        }
-
-    def _update_row_widget(self, row_info, stu, idx):
-        row = row_info["frame"]
-        row.configure(fg_color=self.app.COLOR_PANEL)
-        values = self._student_row_values(stu)
-
-        for col, val in enumerate(values):
-            lbl = row_info["labels"][col]
-            lbl.configure(text=str(val))
-            lbl.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
-
-        row_info["edit_btn"].configure(command=lambda i=idx: self._edit_row(i))
-        row_info["delete_btn"].configure(command=lambda i=idx: self._delete_row(i))
-        row.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
 
     def _set_data(self, rows):
-        self._build_table_shell()
-        self._selected_idx = None
-        self._rows.clear()
         data = list(rows or [])
 
+        # cancelar inserciones previas
         self._render_seq += 1
         render_seq = self._render_seq
 
-        for row_info in self._row_pool:
-            try:
-                row_info["frame"].grid_remove()
-            except Exception:
-                pass
+        # limpiar tree
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._iid_to_index.clear()
+        self._selected_idx = None
 
         if not data:
-            if self._empty_label and self._empty_label.winfo_exists():
-                self._empty_label.grid()
+            self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
             return
 
-        if self._empty_label and self._empty_label.winfo_exists():
-            self._empty_label.grid_remove()
+        self._empty_label.place_forget()
 
-        def paint_batch(start=0):
+        def insert_chunk(start=0):
             if render_seq != self._render_seq:
                 return
-            if not self._rows_container.winfo_exists():
-                return
-
-            end = min(start + self.ROW_BATCH_SIZE, len(data))
+            end = min(start + self.TREE_INSERT_CHUNK, len(data))
             for idx in range(start, end):
-                if idx >= len(self._row_pool):
-                    self._row_pool.append(self._create_row_widget())
-                row_info = self._row_pool[idx]
-                self._update_row_widget(row_info, data[idx], idx)
-                row_info["frame"].grid(row=idx + 1, column=0, padx=8, pady=4, sticky="ew")
-                self._rows.append(row_info["frame"])
-
+                stu = data[idx]
+                iid = f"r{idx}"
+                self._iid_to_index[iid] = idx
+                self.tree.insert("", "end", iid=iid, values=self._student_row_values(stu))
             if end < len(data):
-                self.after(self.ROW_BATCH_DELAY, lambda: paint_batch(end))
+                self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
-        paint_batch(0)
-
-    def _select_row(self, idx):
-        if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
-            self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
-        if 0 <= idx < len(self._rows):
-            self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
-            self._selected_idx = idx
+        insert_chunk(0)
 
     # ---------- acciones UI ----------
     def _nuevo(self):
@@ -742,11 +720,13 @@ class EstudiantesView(BaseModuleFrame):
         if self._selected_idx is None:
             self.app._info("Selecciona un estudiante en la tabla primero.")
             return
-        self._edit_row(self._selected_idx)
+        self.form.show_edit(self._data[self._selected_idx])
 
-    def _edit_row(self, idx):
-        self._select_row(idx)
-        self.form.show_edit(self._data[idx])  # el form espera camelCase
+    def _eliminar_seleccionado(self):
+        if self._selected_idx is None:
+            self.app._info("Selecciona un estudiante en la tabla primero.")
+            return
+        self._delete_row(self._selected_idx)
 
     def _cancel_inline(self):
         self.form.hide()
@@ -766,6 +746,7 @@ class EstudiantesView(BaseModuleFrame):
             try:
                 self.after(0, lambda: self._show_loading(True))
                 q = self._collect_filters()
+
                 can_query = hasattr(self.app.api, "get_all") and getattr(self.app.api, "supports_query", False)
                 if can_query and (q["doc"] or q["nombre"] or q["estado"] not in ("", "Todos") or q["categoria"] != "Todas"):
                     params = {}
@@ -798,7 +779,7 @@ class EstudiantesView(BaseModuleFrame):
 
                 self.after(0, apply_data)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Estudiantes", "No fue posible consultar la API:\n{}".format(e), parent=self))
+                self.after(0, lambda: messagebox.showerror("Estudiantes", f"No fue posible consultar la API:\n{e}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 
@@ -826,15 +807,16 @@ class EstudiantesView(BaseModuleFrame):
                 self.app._info("No hay cliente API activo. Inicia sesión.")
                 return
 
-        # --- payload base ---
             payload = dict(payload)
             payload["tipoPase"] = _normalize_tipo_pase(payload.get("tipoPase"))
             payload["aproboExamenTeorico"] = _to_bool(payload.get("aproboExamenTeorico"), default=False)
             payload["visible"] = _to_bool(payload.get("visible"), default=True)
+
             doc = (payload.get("numeroDocumento") or "").strip()
             if not doc:
                 messagebox.showerror("Validación", "El Número de Documento es obligatorio.", parent=self)
                 return
+
             if payload.get("usuario") in (None, ""):
                 payload["usuario"] = doc
             if payload.get("contrasena") in (None, ""):
@@ -850,53 +832,47 @@ class EstudiantesView(BaseModuleFrame):
                     self.app._info("Selecciona un estudiante para actualizar.")
                     return
 
-                # id del estudiante
                 student_id = self._data[idx].get("id") or self._data[idx].get("idEstudiante")
                 if not student_id:
                     self.app._info("No se encontró el ID del estudiante.")
                     return
 
-                # --- MUY IMPORTANTE ---
-                # Algunos backends esperan el objeto completo. Mergeamos el registro original + payload nuevo
-                merged = dict(self._data[idx])   # copia del registro actual
-                merged.update(payload)           # aplica cambios del form
+                merged = dict(self._data[idx])
+                merged.update(payload)
 
-                # Asegurar que categoria va en el body (por si el form no la trae por alguna razón)
                 cat = (payload.get("categoria") or merged.get("categoria") or "").strip().upper()
                 if not cat:
-                    # intenta leer de aliases del registro existente
-                    cat = str(merged.get("categoriaLicencia") or merged.get("licenciaCategoria")
-                            or merged.get("tipoLicencia") or "").strip().upper()
+                    cat = str(
+                        merged.get("categoriaLicencia")
+                        or merged.get("licenciaCategoria")
+                        or merged.get("tipoLicencia")
+                        or ""
+                    ).strip().upper()
                 if cat:
                     merged["categoria"] = cat
-                    # también replicas de cortesía
                     merged["categoriaLicencia"] = cat
                     merged["licenciaCategoria"] = cat
                     merged["tipoLicencia"] = cat
 
-                # No mandes el id en el cuerpo si tu backend no lo necesita
                 body = {k: v for k, v in merged.items() if k not in ("id", "idEstudiante")}
-
-                # PUT /api/estudiantes/{id}
                 self.app.api.update("estudiantes", student_id, body)
                 self.app._info("Estudiante actualizado.")
 
-
             self._last_refresh_ts = 0
-            self._refrescar()  # refrescar conservando filtros
+            self._refrescar()
 
         except Exception as e:
             messagebox.showerror("Estudiantes", f"Operación fallida:\n{e}", parent=self)
 
     def _delete_row(self, idx):
-        self._select_row(idx)
         stu = self._data[idx]
-        full_name = "{} {}".format(stu.get("nombre",""), stu.get("apellido","")).strip()
+        full_name = "{} {}".format(stu.get("nombre", ""), stu.get("apellido", "")).strip()
         doc = stu.get("numeroDocumento", "")
         if not doc:
             self.app._info("El registro no tiene 'numeroDocumento'.")
             return
-        if not messagebox.askyesno("Confirmar", "¿Eliminar al estudiante:\n{} (Doc: {})".format(full_name, doc)):
+
+        if not messagebox.askyesno("Confirmar", f"¿Eliminar al estudiante:\n{full_name} (Doc: {doc})", parent=self):
             self.app._info("Operación cancelada.")
             return
 
@@ -904,13 +880,16 @@ class EstudiantesView(BaseModuleFrame):
             if not self.app.api:
                 self.app._info("No hay cliente API activo. Inicia sesión.")
                 return
+
             student_id = stu.get("id") or stu.get("idEstudiante")
             if not student_id:
                 self.app._info("No se encontró el ID del estudiante.")
                 return
+
             self.app.api.delete("estudiantes", student_id)
             self.app._info("Estudiante eliminado.")
             self._last_refresh_ts = 0
             self._refrescar()
+
         except Exception as e:
-            messagebox.showerror("Estudiantes", "No fue posible eliminar:\n{}".format(e), parent=self)
+            messagebox.showerror("Estudiantes", f"No fue posible eliminar:\n{e}", parent=self)
