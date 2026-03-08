@@ -1,0 +1,444 @@
+2026-03-08 12:38:22 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:22 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:22 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:38:22 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:23 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:23 | Content-Type: application/json
+2026-03-08 12:38:23 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:38:23 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:38:23 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:23 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:38:23 | Content-Type: application/json
+2026-03-08 12:38:23 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:38:24 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:38:24 | Content-Type: application/json
+2026-03-08 12:38:24 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:38:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:38:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:24 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:38:24 | Content-Type: application/json
+2026-03-08 12:38:24 | Body: []
+2026-03-08 12:38:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:38:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:25 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:38:25 | Content-Type: application/json
+2026-03-08 12:38:25 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:38:26 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:26 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:27 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:27 | Content-Type: application/json
+2026-03-08 12:38:27 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:38:36 | HTTP REQUEST -> PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:38:36 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:36 | Payload: {"cedula": "79845612", "nombre": "Carlos", "apellido": "Perez", "correo": "nicolasmachado19292@gmail.com", "especialidad": "moto", "categoria": "moto", "telefono": "3119876543", "email": "nicolasmachado19292@gmail.com", "usuario": "carlos.perez", "visible": true, "contrasena": null}
+2026-03-08 12:38:37 | HTTP RESPONSE <- 200 PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:38:37 | Content-Type: application/json
+2026-03-08 12:38:37 | Body: {"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}
+2026-03-08 12:38:37 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:37 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:38:38 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:38:38 | Content-Type: application/json
+2026-03-08 12:38:38 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:01 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:01 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:02 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:02 | Content-Type: application/json
+2026-03-08 12:39:02 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:02 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:02 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:02 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:02 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:02 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:02 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:03 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:03 | Content-Type: application/json
+2026-03-08 12:39:03 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:03 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:03 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:03 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:03 | Content-Type: application/json
+2026-03-08 12:39:03 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:03 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:03 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:03 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:03 | Content-Type: application/json
+2026-03-08 12:39:03 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:03 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:03 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:04 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:04 | Content-Type: application/json
+2026-03-08 12:39:04 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:04 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:04 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:04 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:04 | Content-Type: application/json
+2026-03-08 12:39:04 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:04 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:04 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:04 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:04 | Content-Type: application/json
+2026-03-08 12:39:04 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:04 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:04 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:05 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:05 | Content-Type: application/json
+2026-03-08 12:39:05 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:39:05 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:05 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:05 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:05 | Content-Type: application/json
+2026-03-08 12:39:05 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:39:05 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:05 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:05 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:05 | Content-Type: application/json
+2026-03-08 12:39:05 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:39:05 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:05 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:05 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:05 | Content-Type: application/json
+2026-03-08 12:39:05 | Body: []
+2026-03-08 12:39:05 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:05 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:06 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:06 | Content-Type: application/json
+2026-03-08 12:39:06 | Body: []
+2026-03-08 12:39:06 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:06 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:06 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:06 | Content-Type: application/json
+2026-03-08 12:39:06 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:39:06 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:06 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:06 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:06 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:06 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:06 | Content-Type: application/json
+2026-03-08 12:39:06 | Body: []
+2026-03-08 12:39:06 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:06 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:07 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:07 | Content-Type: application/json
+2026-03-08 12:39:07 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:39:07 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:07 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:07 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:07 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:07 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:07 | Content-Type: application/json
+2026-03-08 12:39:07 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:07 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:07 | Content-Type: application/json
+2026-03-08 12:39:07 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:07 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:07 | Content-Type: application/json
+2026-03-08 12:39:07 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:39:07 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:07 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:07 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:07 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:08 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:08 | Content-Type: application/json
+2026-03-08 12:39:08 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:08 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:08 | Content-Type: application/json
+2026-03-08 12:39:08 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:08 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:08 | Content-Type: application/json
+2026-03-08 12:39:08 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:09 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:09 | Content-Type: application/json
+2026-03-08 12:39:09 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:39 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:39 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:39 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:39 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:40 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:39:40 | Content-Type: application/json
+2026-03-08 12:39:40 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:39:40 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:40 | Content-Type: application/json
+2026-03-08 12:39:40 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:39:40 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:40 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:41 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:39:41 | Content-Type: application/json
+2026-03-08 12:39:41 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:39:41 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:41 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:42 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:39:42 | Content-Type: application/json
+2026-03-08 12:39:42 | Body: []
+2026-03-08 12:39:42 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:42 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:43 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:39:43 | Content-Type: application/json
+2026-03-08 12:39:43 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:39:46 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:46 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:39:47 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:39:47 | Content-Type: application/json
+2026-03-08 12:39:47 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:43:31 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:43:31 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:32 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:43:32 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:32 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:43:32 | Content-Type: application/json
+2026-03-08 12:43:32 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:43:32 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:43:32 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:33 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:43:33 | Content-Type: application/json
+2026-03-08 12:43:33 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"laura.gomez@email.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:43:33 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:43:33 | Content-Type: application/json
+2026-03-08 12:43:33 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:43:33 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:43:33 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:34 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:43:34 | Content-Type: application/json
+2026-03-08 12:43:34 | Body: []
+2026-03-08 12:43:34 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:43:34 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:35 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:43:35 | Content-Type: application/json
+2026-03-08 12:43:35 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:43:48 | HTTP REQUEST -> PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes/1
+2026-03-08 12:43:48 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:48 | Payload: {"nombre": "Laura Angelica", "apellido": "Gomez", "tipoEstudiante": "prospecto", "tipoDocumento": "CC", "numeroDocumento": "1032456789", "categoria": "A2", "sede": "1 de mayo", "horas": 32, "tipoPase": "moto", "aproboExamenTeorico": false, "telefono": "3001234567", "email": "danielapinher@gmail.com", "direccion": "Calle 10 #20-30", "fotoPerfil": null, "estado": "Pendiente", "visible": true, "usuario": "1032456789", "contrasena": "1032456789", "categoriaLicencia": "A2", "licenciaCategoria": "A2", "tipoLicencia": "A2"}
+2026-03-08 12:43:49 | HTTP RESPONSE <- 200 PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes/1
+2026-03-08 12:43:49 | Content-Type: application/json
+2026-03-08 12:43:49 | Body: {"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}
+2026-03-08 12:43:49 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:43:49 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:50 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:43:50 | Content-Type: application/json
+2026-03-08 12:43:50 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:43:53 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:43:53 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:43:54 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:43:54 | Content-Type: application/json
+2026-03-08 12:43:54 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:44:02 | HTTP REQUEST -> PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:44:02 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:44:02 | Payload: {"cedula": "79845612", "nombre": "Carlos", "apellido": "Perez", "correo": "nicolasmachado19292@gmail.com", "especialidad": "moto", "categoria": "moto", "telefono": "3119876543", "usuario": "carlos.perez", "visible": true, "contrasena": null}
+2026-03-08 12:44:03 | HTTP RESPONSE <- 200 PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:44:03 | Content-Type: application/json
+2026-03-08 12:44:03 | Body: {"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}
+2026-03-08 12:44:03 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:44:03 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:44:04 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:44:04 | Content-Type: application/json
+2026-03-08 12:44:04 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:44:07 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:44:07 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:44:08 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:44:08 | Content-Type: application/json
+2026-03-08 12:44:08 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:48:42 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:48:42 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:42 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:48:42 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:43 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:48:43 | Content-Type: application/json
+2026-03-08 12:48:43 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:48:43 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:48:43 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:43 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:48:43 | Content-Type: application/json
+2026-03-08 12:48:43 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:48:44 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:48:44 | Content-Type: application/json
+2026-03-08 12:48:44 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:48:44 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:48:44 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:45 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:48:45 | Content-Type: application/json
+2026-03-08 12:48:45 | Body: []
+2026-03-08 12:48:45 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:48:45 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:46 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:48:46 | Content-Type: application/json
+2026-03-08 12:48:46 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:48:47 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:48:47 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:47 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:48:47 | Content-Type: application/json
+2026-03-08 12:48:47 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:48:54 | HTTP REQUEST -> PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:48:54 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:48:54 | Payload: {"cedula": "79845612", "nombre": "Carlos", "apellido": "Perez", "correo": "nicolasmachado19292@gmail.com", "especialidad": "moto", "categoria": "moto", "telefono": "3119876543", "usuario": "carlos.perez", "visible": true, "contrasena": null}
+2026-03-08 12:48:55 | HTTP RESPONSE <- 200 PUT https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores/1
+2026-03-08 12:48:55 | Content-Type: application/json
+2026-03-08 12:48:55 | Body: {"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}
+2026-03-08 12:56:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:56:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:56:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:56:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:56:25 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:56:25 | Content-Type: application/json
+2026-03-08 12:56:25 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:56:25 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:56:25 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:56:25 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:56:25 | Content-Type: application/json
+2026-03-08 12:56:25 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:56:26 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:56:26 | Content-Type: application/json
+2026-03-08 12:56:26 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:56:26 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:56:26 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:56:27 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:56:27 | Content-Type: application/json
+2026-03-08 12:56:27 | Body: []
+2026-03-08 12:56:27 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:56:27 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:56:28 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 12:56:28 | Content-Type: application/json
+2026-03-08 12:56:28 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 12:57:14 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:57:15 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:15 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:57:15 | Content-Type: application/json
+2026-03-08 12:57:15 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:57:22 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:57:22 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:23 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 12:57:23 | Content-Type: application/json
+2026-03-08 12:57:23 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 12:57:23 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:57:23 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:24 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 12:57:24 | Content-Type: application/json
+2026-03-08 12:57:24 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 12:57:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:57:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:24 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 12:57:24 | Content-Type: application/json
+2026-03-08 12:57:24 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 12:57:24 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:57:24 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:25 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:57:25 | Content-Type: application/json
+2026-03-08 12:57:25 | Body: []
+2026-03-08 12:57:47 | HTTP REQUEST -> POST https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:57:47 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 12:57:47 | Payload: {"id_estudiante": 1, "id_profesor": 1, "placa_vehiculo": "ABC123", "fecha": "2026-03-10", "horaInicio": "10:00", "horaFin": "12:00", "estado": "Programada"}
+2026-03-08 12:57:47 | HTTP RESPONSE <- 400 POST https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 12:57:47 | Content-Type: application/json
+2026-03-08 12:57:47 | Body: area es obligatoria
+2026-03-08 12:57:47 | HTTP ERROR Exception: Error inesperado: HTTP 400: area es obligatoria | POST https://harorepositoty2-590358146556.europe-west1.run.app/api/clases
+2026-03-08 13:13:13 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:13:13 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:13:13 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:13 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:14 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:13:14 | Content-Type: application/json
+2026-03-08 13:13:14 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 13:13:14 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:13:14 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:14 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:13:14 | Content-Type: application/json
+2026-03-08 13:13:14 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 13:13:15 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:13:15 | Content-Type: application/json
+2026-03-08 13:13:15 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 13:13:15 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:13:15 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:16 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:13:16 | Content-Type: application/json
+2026-03-08 13:13:16 | Body: []
+2026-03-08 13:13:16 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:13:16 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:17 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:13:17 | Content-Type: application/json
+2026-03-08 13:13:17 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 13:13:18 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:13:18 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:19 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:13:19 | Content-Type: application/json
+2026-03-08 13:13:19 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 13:13:19 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:13:19 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:20 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:13:20 | Content-Type: application/json
+2026-03-08 13:13:20 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 13:13:20 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:13:20 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:21 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:13:21 | Content-Type: application/json
+2026-03-08 13:13:21 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 13:13:21 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:13:21 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:13:22 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:13:22 | Content-Type: application/json
+2026-03-08 13:13:22 | Body: []
+2026-03-08 13:14:16 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:14:16 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:14:17 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:14:17 | Content-Type: application/json
+2026-03-08 13:14:17 | Body: []
+2026-03-08 13:14:22 | HTTP REQUEST -> POST https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:14:22 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:14:22 | Payload: {"id_estudiante": 1, "id_profesor": 1, "placa_vehiculo": "ABC123", "fecha": "2026-03-10", "horaInicio": "10:00", "horaFin": "12:00", "estado": "Programada"}
+2026-03-08 13:14:23 | HTTP RESPONSE <- 201 POST https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:14:23 | Content-Type: application/json
+2026-03-08 13:14:23 | Body: {"id":1,"id_estudiante":1,"id_profesor":1,"placa_vehiculo":"ABC123","fecha":"2026-03-10","horaInicio":"10:00","horaFin":"12:00","estado":"Programada","estadoClase":null}
+2026-03-08 13:14:23 | HTTP REQUEST -> POST https://harorepositoty2-590358146556.europe-west1.run.app/api/calendar/reuniones
+2026-03-08 13:14:23 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:14:23 | Payload: {"titulo": "Clase de conducción - Laura Angelica Gomez", "descripcion": "Clase CEA HARO\nEstudiante: Laura Angelica Gomez\nDocumento: 1032456789\nInstructor: Carlos Perez\nVehículo: ABC123\nSede vehículo: N/A\nEstado: Programada", "inicio": "2026-03-10T10:00:00-05:00", "fin": "2026-03-10T12:00:00-05:00", "zonaHoraria": "America/Bogota", "calendarId": "primary", "asistentes": ["danielapinher@gmail.com", "nicolasmachado19292@gmail.com"]}
+2026-03-08 13:14:24 | HTTP RESPONSE <- 400 POST https://harorepositoty2-590358146556.europe-west1.run.app/api/calendar/reuniones
+2026-03-08 13:14:24 | Content-Type: application/json
+2026-03-08 13:14:24 | Body: No se pudo completar OAuth de Google Calendar. Verifica client secrets y que el redirect local este habilitado.
+2026-03-08 13:14:24 | HTTP ERROR Exception: Error inesperado: HTTP 400: No se pudo completar OAuth de Google Calendar. Verifica client secrets y que el redirect local este habilitado. | POST https://harorepositoty2-590358146556.europe-west1.run.app/api/calendar/reuniones
+2026-03-08 13:43:41 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:43:41 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:41 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:43:41 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:42 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:43:42 | Content-Type: application/json
+2026-03-08 13:43:42 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 13:43:42 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:43:42 | Content-Type: application/json
+2026-03-08 13:43:42 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 13:43:42 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:43:42 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:43 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:43:43 | Content-Type: application/json
+2026-03-08 13:43:43 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 13:43:43 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:43:43 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:44 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:43:44 | Content-Type: application/json
+2026-03-08 13:43:44 | Body: [{"id":1,"id_estudiante":1,"id_profesor":1,"placa_vehiculo":"ABC123","fecha":"2026-03-10","horaInicio":"10:00","horaFin":"12:00","estado":"Programada","estadoClase":null}]
+2026-03-08 13:43:44 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:43:44 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:44 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:43:44 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:45 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:43:45 | Content-Type: application/json
+2026-03-08 13:43:45 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 13:43:45 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:43:45 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:45 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estados-cuenta
+2026-03-08 13:43:45 | Content-Type: application/json
+2026-03-08 13:43:45 | Body: [{"id":1,"idEstudiante":1,"montoTotal":920.00,"montoPagado":920.00,"multas":0.00,"estado":"Pagado"}]
+2026-03-08 13:43:46 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/estudiantes
+2026-03-08 13:43:46 | Content-Type: application/json
+2026-03-08 13:43:46 | Body: [{"id":1,"nombre":"Laura Angelica","apellido":"Gomez","tipoEstudiante":"prospecto","tipoDocumento":"CC","numeroDocumento":"1032456789","categoria":"A2","sede":"1 de mayo","horas":32,"tipoPase":"moto","aproboExamenTeorico":false,"telefono":"3001234567","email":"danielapinher@gmail.com","direccion":"Calle 10 #20-30","fotoPerfil":null,"estado":"Pendiente","visible":true,"usuario":"1032456789"}]
+2026-03-08 13:43:46 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:43:46 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:47 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/profesores
+2026-03-08 13:43:47 | Content-Type: application/json
+2026-03-08 13:43:47 | Body: [{"id":1,"cedula":"79845612","nombre":"Carlos","apellido":"Perez","correo":"carlos.perez@ceaharo.com","especialidad":"moto","categoria":"moto","telefono":"3119876543","email":"nicolasmachado19292@gmail.com","usuario":"carlos.perez","visible":true}]
+2026-03-08 13:43:47 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:43:47 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:48 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/vehiculos
+2026-03-08 13:43:48 | Content-Type: application/json
+2026-03-08 13:43:48 | Body: [{"placa":"ABC123","marca":"Chevrolet","modelo":"Onix","anio":2024,"sede":null,"estado":"Activo","visible":true}]
+2026-03-08 13:43:48 | HTTP REQUEST -> GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:43:48 | Headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': '***REDACTED***'}
+2026-03-08 13:43:49 | HTTP RESPONSE <- 200 GET https://harorepositoty2-590358146556.europe-west1.run.app/api/clases-practicas
+2026-03-08 13:43:49 | Content-Type: application/json
+2026-03-08 13:43:49 | Body: [{"id":1,"id_estudiante":1,"id_profesor":1,"placa_vehiculo":"ABC123","fecha":"2026-03-10","horaInicio":"10:00","horaFin":"12:00","estado":"Programada","estadoClase":null}]

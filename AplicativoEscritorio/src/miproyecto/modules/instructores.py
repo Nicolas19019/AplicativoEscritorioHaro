@@ -70,8 +70,11 @@ class InstructoresView(BaseModuleFrame):
             ("Cédula", 120),
             ("Nombre", 260),
             ("Especialidad", 180),
+            ("Categoría", 110),
             ("Teléfono", 130),
-            ("Email", 240),
+            ("Email", 220),
+            ("Usuario", 140),
+            ("Visible", 90),
         ]
 
         self._build_tree()
@@ -83,13 +86,11 @@ class InstructoresView(BaseModuleFrame):
     # =====================================================
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
-        # 0 cedula, 1 nombre, 2 apellido, 3 estado, 4 especialidad, 5 botones
+        # Fila 1: cedula/nombre/apellido (responsivos)
+        # Fila 2: estado/especialidad/categoria + botones
         bar.grid_columnconfigure(0, weight=1)
         bar.grid_columnconfigure(1, weight=1)
         bar.grid_columnconfigure(2, weight=1)
-        bar.grid_columnconfigure(3, weight=0)
-        bar.grid_columnconfigure(4, weight=0)
-        bar.grid_columnconfigure(5, weight=0)
 
         def entry(ph):
             return ctk.CTkEntry(
@@ -110,18 +111,31 @@ class InstructoresView(BaseModuleFrame):
         self.f_apellido = entry("Apellido")
         self.f_apellido.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
-        self.f_estado = ctk.CTkComboBox(bar, values=["Todos", "Activo", "Inactivo", "Suspendido"], width=160)
+        row2 = ctk.CTkFrame(bar, fg_color="transparent")
+        row2.grid(row=2, column=0, columnspan=3, padx=(12, 12), pady=(0, 10), sticky="ew")
+        row2.grid_columnconfigure(0, weight=0)
+        row2.grid_columnconfigure(1, weight=0)
+        row2.grid_columnconfigure(2, weight=0)
+        row2.grid_columnconfigure(3, weight=1)  # separador flexible
+        row2.grid_columnconfigure(4, weight=0)
+
+        ctk.CTkLabel(row2, text="Estado").grid(row=0, column=0, padx=(0, 8), pady=(0, 4), sticky="w")
+        self.f_estado = ctk.CTkComboBox(row2, values=["Todos", "Activo", "Inactivo", "Suspendido"], width=150)
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_estado.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="w")
 
-        ctk.CTkLabel(bar, text="Especialidad").grid(row=0, column=4, padx=(8, 8), pady=(10, 4), sticky="w")
-        self.f_especialidad = ctk.CTkComboBox(bar, values=["Todas"], width=170)
+        ctk.CTkLabel(row2, text="Especialidad").grid(row=0, column=1, padx=(8, 8), pady=(0, 4), sticky="w")
+        self.f_especialidad = ctk.CTkComboBox(row2, values=["Todas"], width=170)
         self.f_especialidad.set("Todas")
-        self.f_especialidad.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_especialidad.grid(row=1, column=1, padx=(8, 8), pady=(0, 0), sticky="w")
 
-        btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=1, column=5, padx=(8, 12), pady=(0, 10), sticky="e")
+        ctk.CTkLabel(row2, text="Categoría").grid(row=0, column=2, padx=(8, 8), pady=(0, 4), sticky="w")
+        self.f_categoria = ctk.CTkComboBox(row2, values=["Todas"], width=130)
+        self.f_categoria.set("Todas")
+        self.f_categoria.grid(row=1, column=2, padx=(8, 8), pady=(0, 0), sticky="w")
+
+        btns = ctk.CTkFrame(row2, fg_color="transparent")
+        btns.grid(row=1, column=4, padx=(12, 0), pady=(0, 0), sticky="e")
 
         def light_btn(text, cmd):
             return ctk.CTkButton(
@@ -130,13 +144,14 @@ class InstructoresView(BaseModuleFrame):
                 text_color=self.app.COLOR_TEXT, command=cmd
             )
 
-        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
-        light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
+        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=(0, 8))
+        light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=(8, 0))
 
         for w in (self.f_cedula, self.f_nombre, self.f_apellido):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())
         self.f_estado.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
         self.f_especialidad.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
+        self.f_categoria.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
 
         return bar
 
@@ -147,6 +162,7 @@ class InstructoresView(BaseModuleFrame):
             "apellido": (self.f_apellido.get() or "").strip(),
             "estado": (self.f_estado.get() or "Todos").strip(),
             "especialidad": (self.f_especialidad.get() or "Todas").strip(),
+            "categoria": (self.f_categoria.get() or "Todas").strip(),
         }
 
     def _clear_filters(self):
@@ -155,6 +171,7 @@ class InstructoresView(BaseModuleFrame):
         self.f_apellido.delete(0, "end")
         self.f_estado.set("Todos")
         self.f_especialidad.set("Todas")
+        self.f_categoria.set("Todas")
         self._apply_filters_now()
 
     def _debounced_apply_filters(self):
@@ -183,6 +200,81 @@ class InstructoresView(BaseModuleFrame):
         self._render_after_id = None
         self._set_data(self._data)
 
+    @staticmethod
+    def _categoria_value(prof):
+        categoria = (
+            prof.get("categoria")
+            or prof.get("categoriaLicencia")
+            or prof.get("licenciaCategoria")
+            or ""
+        )
+        return str(categoria).strip().upper()
+
+    @staticmethod
+    def _email_value(prof):
+        return str(prof.get("email") or "").strip()
+
+    @staticmethod
+    def _usuario_value(prof):
+        return str(prof.get("usuario") or "").strip()
+
+    @staticmethod
+    def _visible_value(prof):
+        raw = str(prof.get("visible", True)).strip().lower()
+        return "Sí" if raw in {"true", "1", "si", "yes"} else "No"
+
+    @staticmethod
+    def _to_bool(v, default=True):
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return default
+        return str(v).strip().lower() in {"true", "1", "si", "yes"}
+
+    def _normalize_profesor_payload(self, payload):
+        src = dict(payload or {})
+
+        cedula = str(src.get("cedula", "") or "").strip()
+        nombre = str(src.get("nombre", "") or "").strip()
+        apellido = str(src.get("apellido", "") or "").strip()
+        telefono = str(src.get("telefono", "") or "").strip()
+        usuario = str(src.get("usuario", "") or "").strip()
+
+        email = str(src.get("email", "") or "").strip()
+
+        especialidad = str(src.get("especialidad", "") or "").strip().lower()
+        categoria = str(src.get("categoria", "") or "").strip().lower()
+        if especialidad not in {"carro", "moto"}:
+            especialidad = "moto" if "moto" in especialidad else "carro"
+        if categoria not in {"carro", "moto"}:
+            categoria = "moto" if "moto" in categoria else especialidad
+
+        visible = self._to_bool(src.get("visible"), default=True)
+
+        return {
+            "cedula": cedula,
+            "nombre": nombre,
+            "apellido": apellido,
+            "email": email,
+            "especialidad": especialidad,
+            "categoria": categoria,
+            "telefono": telefono,
+            "usuario": usuario,
+            "visible": visible,
+            "contrasena": src.get("contrasena", None),
+        }
+
+    @staticmethod
+    def _assert_email_updated(server_obj, expected_email):
+        if not isinstance(server_obj, dict):
+            return
+        exp = str(expected_email or "").strip().lower()
+        got = str(server_obj.get("email") or "").strip().lower()
+        if exp and got and exp != got:
+            raise RuntimeError(
+                f"El servidor no actualizó 'email'. Esperado: {expected_email} | Recibido: {server_obj.get('email')}"
+            )
+
     def _apply_filters(self, data_list, f):
         if not data_list:
             return []
@@ -192,6 +284,7 @@ class InstructoresView(BaseModuleFrame):
         ape_sub = f["apellido"].lower()
         estado = f["estado"]
         esp = f["especialidad"].strip().lower()
+        cat = f["categoria"].strip().upper()
 
         out = []
         for prof in data_list:
@@ -200,6 +293,7 @@ class InstructoresView(BaseModuleFrame):
             ape = str(prof.get("apellido", "") or "").strip().lower()
             est = str(prof.get("estado", "") or "").strip()
             especialidad = str(prof.get("especialidad", "") or "").strip().lower()
+            categoria = self._categoria_value(prof)
 
             if ced_sub and ced_sub not in ced:
                 continue
@@ -210,6 +304,8 @@ class InstructoresView(BaseModuleFrame):
             if estado != "Todos" and est != estado:
                 continue
             if esp != "todas" and especialidad != esp:
+                continue
+            if cat != "TODAS" and categoria != cat:
                 continue
 
             out.append(prof)
@@ -226,6 +322,20 @@ class InstructoresView(BaseModuleFrame):
             self.f_especialidad.configure(values=values)
             if self.f_especialidad.get() not in values:
                 self.f_especialidad.set("Todas")
+        except Exception:
+            pass
+
+    def _refresh_categoria_options(self):
+        cats = set()
+        for p in (self._all_data or []):
+            c = self._categoria_value(p)
+            if c:
+                cats.add(c)
+        values = ["Todas"] + sorted(cats)
+        try:
+            self.f_categoria.configure(values=values)
+            if self.f_categoria.get() not in values:
+                self.f_categoria.set("Todas")
         except Exception:
             pass
 
@@ -315,8 +425,11 @@ class InstructoresView(BaseModuleFrame):
             prof.get("cedula", ""),
             full_name,
             prof.get("especialidad", ""),
+            self._categoria_value(prof),
             prof.get("telefono", ""),
-            prof.get("email", ""),
+            self._email_value(prof),
+            self._usuario_value(prof),
+            self._visible_value(prof),
         )
 
     def _set_data(self, rows):
@@ -399,6 +512,7 @@ class InstructoresView(BaseModuleFrame):
                 def apply_data():
                     self._all_data = raw or []
                     self._refresh_especialidad_options()
+                    self._refresh_categoria_options()
                     self._data = self._apply_filters(self._all_data, self._collect_filters())
                     self._queue_render(self._data)
 
@@ -432,19 +546,23 @@ class InstructoresView(BaseModuleFrame):
                 self.app._info("No hay cliente API activo. Inicia sesión.")
                 return
 
+            payload = self._normalize_profesor_payload(payload)
+
             if mode == "create":
-                self.app.api.create("profesores", payload)
+                created = self.app.api.create("profesores", payload)
+                self._assert_email_updated(created, payload.get("email"))
                 self.app._info("Profesor creado.")
             else:
                 idx = self._selected_idx
                 if idx is None:
                     self.app._info("Selecciona un profesor para actualizar.")
                     return
-                prof_id = self._data[idx].get("id")
+                prof_id = self._data[idx].get("id") or self._data[idx].get("idProfesor")
                 if not prof_id:
                     self.app._info("No se encontró el ID del profesor.")
                     return
-                self.app.api.update("profesores", prof_id, payload)
+                updated = self.app.api.update("profesores", prof_id, payload)
+                self._assert_email_updated(updated, payload.get("email"))
                 self.app._info("Profesor actualizado.")
 
             self._last_refresh_ts = 0
@@ -463,7 +581,7 @@ class InstructoresView(BaseModuleFrame):
             return
 
         try:
-            prof_id = prof.get("id")
+            prof_id = prof.get("id") or prof.get("idProfesor")
             if not prof_id:
                 self.app._info("No se encontró el ID del profesor.")
                 return

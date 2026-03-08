@@ -3213,7 +3213,7 @@ class HaroDesktopApp(ctk.CTk):
     _LOGO_PATH  = _SCRIPT_DIR / "media" / "LogoHARO.png"
 
     # API
-    API_BASE_URL = "http://localhost:8081/api"
+    API_BASE_URL = "https://harorepositoty2-590358146556.europe-west1.run.app/api"
     AUTH_MODE = "basic"         # si usas JWT, cambia a "jwt"
     JWT_LOGIN_PATH = "auth/login"
     JWT_USER_FIELD = "username"

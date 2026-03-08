@@ -18,6 +18,7 @@ class ClasesView(BaseModuleFrame):
     ROW_BATCH_SIZE = 30
     ROW_BATCH_DELAY = 5
     MIN_REFRESH_INTERVAL = 500  # ms
+    CLASES_RESOURCE = "clases-practicas"
 
     # Layout general
     HEADER_PADY = (10, 6)
@@ -565,7 +566,7 @@ class ClasesView(BaseModuleFrame):
             return
         try:
             if self.app and getattr(self.app, "api", None) and rec.get("id"):
-                self.app.api.delete("clases", rec["id"])
+                self.app.api.delete(self.CLASES_RESOURCE, rec["id"])
                 self.app._info("Clase eliminada.")
             else:
                 self._data = [d for d in self._data if self._row_key(d) != self._selected_id]
@@ -579,13 +580,13 @@ class ClasesView(BaseModuleFrame):
         try:
             if self.app and getattr(self.app, "api", None):
                 if mode == "create":
-                    self.app.api.create("clases", payload)
+                    self.app.api.create(self.CLASES_RESOURCE, payload)
                     self.app._info("Clase creada.")
                     self._try_sync_google_calendar(payload)
                 else:
                     rec = next((r for r in self._data if self._row_key(r) == self._selected_id), None)
                     if rec and rec.get("id"):
-                        self.app.api.update("clases", rec["id"], payload)
+                        self.app.api.update(self.CLASES_RESOURCE, rec["id"], payload)
                         self.app._info("Clase actualizada.")
             else:
                 if mode == "create":
@@ -770,7 +771,7 @@ class ClasesView(BaseModuleFrame):
         def worker():
             try:
                 self.after(0, lambda: self._show_loading(True))
-                raw = self.app.api.get_all("clases", force_refresh=force_refresh) or []
+                raw = self.app.api.get_all(self.CLASES_RESOURCE, force_refresh=force_refresh) or []
                 if isinstance(raw, dict):
                     for key in ("content", "items", "clases", "data", "results"):
                         if isinstance(raw.get(key), list):

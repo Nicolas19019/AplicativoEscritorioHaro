@@ -3,6 +3,8 @@ import copy
 import json
 import threading
 import time
+from datetime import datetime
+from pathlib import Path
 
 try:
     import requests
@@ -47,8 +49,40 @@ class ApiClient:
 
         self._basic_header = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
         self._bearer = None
+
+        # Debug HTTP: registra intercambio request/response para diagnostico.
+        self._debug_http = True
+        self._debug_console = True
+        self._debug_log_file = Path(__file__).resolve().parent / "logs" / "api_debug.log"
+        try:
+            self._debug_log_file.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
         if self.auth_mode == "jwt":
             self._login_jwt()
+
+    def _log_debug(self, message: str):
+        if not self._debug_http:
+            return
+        line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {message}"
+        if self._debug_console:
+            try:
+                print(line)
+            except Exception:
+                pass
+        try:
+            with self._debug_log_file.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _short_text(value, max_len=1800):
+        txt = str(value or "")
+        if len(txt) <= max_len:
+            return txt
+        return txt[:max_len] + f"... [truncado {len(txt) - max_len} chars]"
 
     def _login_jwt(self):
         payload = {self.user_field: self.user, self.pass_field: self.password}
@@ -122,8 +156,25 @@ class ApiClient:
             raise RuntimeError(self.last_error)
 
         try:
+            if self._debug_http:
+                safe_headers = dict(headers)
+                if "Authorization" in safe_headers:
+                    safe_headers["Authorization"] = "***REDACTED***"
+                self._log_debug(f"HTTP REQUEST -> {method.upper()} {url}")
+                self._log_debug(f"Headers: {safe_headers}")
+                if params:
+                    self._log_debug(f"Params: {self._short_text(json.dumps(params, ensure_ascii=False))}")
+                if data is not None:
+                    self._log_debug(f"Payload: {self._short_text(json.dumps(data, ensure_ascii=False))}")
+
             func = getattr(requests, method.lower())
             resp = func(url, headers=headers, json=data, params=params, timeout=self.request_timeout)
+
+            if self._debug_http:
+                content_type = resp.headers.get("Content-Type", "")
+                self._log_debug(f"HTTP RESPONSE <- {resp.status_code} {method.upper()} {url}")
+                self._log_debug(f"Content-Type: {content_type}")
+                self._log_debug(f"Body: {self._short_text(resp.text)}")
 
             if resp.status_code in (401, 403):
                 self.last_error = f"No autorizado (HTTP {resp.status_code})."
@@ -144,17 +195,22 @@ class ApiClient:
 
         except requests.exceptions.ConnectionError:
             self.last_error = "No se pudo conectar con la API. Verifique el servidor."
+            self._log_debug(f"HTTP ERROR ConnectionError: {self.last_error} | {method.upper()} {url}")
             raise RuntimeError(self.last_error)
         except requests.exceptions.Timeout:
             self.last_error = "La API tardo demasiado en responder. Intenta de nuevo en unos segundos."
+            self._log_debug(f"HTTP ERROR Timeout: {self.last_error} | {method.upper()} {url}")
             raise RuntimeError(self.last_error)
         except requests.exceptions.RequestException as e:
             self.last_error = f"Error en la solicitud: {e}"
+            self._log_debug(f"HTTP ERROR RequestException: {self.last_error} | {method.upper()} {url}")
             raise RuntimeError(self.last_error) from e
         except AuthError:
+            self._log_debug(f"HTTP ERROR AuthError: {self.last_error} | {method.upper()} {url}")
             raise
         except Exception as e:
             self.last_error = f"Error inesperado: {e}"
+            self._log_debug(f"HTTP ERROR Exception: {self.last_error} | {method.upper()} {url}")
             raise RuntimeError(self.last_error) from e
 
     # CRUD helpers

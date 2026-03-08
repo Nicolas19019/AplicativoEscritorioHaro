@@ -2,7 +2,6 @@
 from tkinter import messagebox, ttk
 import threading
 import time
-import traceback
 from modules.forms_inlines import VehiculoInlineForm
 from modules.base import BaseModuleFrame
 
@@ -61,12 +60,15 @@ class VehiculosView(BaseModuleFrame):
         self.table.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="nsew")
         self.grid_rowconfigure(3, weight=1)
         self.grid_columnconfigure(0, weight=1)
+        self.table.grid_rowconfigure(0, weight=1)
+        self.table.grid_columnconfigure(0, weight=1)
 
         self._COLS = [
             ("Placa", 120),
-            ("Marca", 160),
-            ("Modelo", 160),
+            ("Marca", 170),
+            ("Modelo", 170),
             ("Año", 90),
+            ("Sede", 170),
             ("Estado", 120),
         ]
 
@@ -78,28 +80,39 @@ class VehiculosView(BaseModuleFrame):
     # =====================================================
     def _build_tree(self):
         style = ttk.Style()
-        style.theme_use("clam")
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
 
         mode = ctk.get_appearance_mode()
 
         if mode == "Light":
+            bg = "#ffffff"
             panel = "#ffffff"
             text = "#111111"
             muted = "#444444"
             divider = "#e5e7eb"
             sel_bg = "#f1f5f9"
+            even_bg = "#ffffff"
+            odd_bg = "#f8fafc"
         else:
+            bg = getattr(self.app, "COLOR_BG", "#111111")
             panel = self.app.COLOR_PANEL
             text = self.app.COLOR_TEXT
             muted = self.app.COLOR_MUTED
             divider = self.app.COLOR_DIVIDER
             sel_bg = divider
+            even_bg = panel
+            odd_bg = "#222222"
 
         style.configure(
             "Haro.Treeview",
             background=panel,
             fieldbackground=panel,
             foreground=text,
+            lightcolor=divider,
+            darkcolor=divider,
             rowheight=28,
             bordercolor=divider
         )
@@ -112,21 +125,35 @@ class VehiculosView(BaseModuleFrame):
 
         style.configure(
             "Haro.Treeview.Heading",
-            background=panel,
+            background=bg,
             foreground=muted,
             font=("Segoe UI", 10, "bold")
         )
 
         cols = [c[0] for c in self._COLS]
         self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+
+        vsb = ttk.Scrollbar(self.table, orient="vertical", command=self.tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns", padx=(6, 10), pady=10)
+        hsb = ttk.Scrollbar(self.table, orient="horizontal", command=self.tree.xview)
+        hsb.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
         for name, width in self._COLS:
             self.tree.heading(name, text=name)
-            self.tree.column(name, width=width, anchor="w")
+            anchor = "center" if name in {"Año", "Estado"} else "w"
+            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.7)), stretch=True, anchor=anchor)
+
+        self.tree.tag_configure("even", background=even_bg, foreground=text)
+        self.tree.tag_configure("odd", background=odd_bg, foreground=text)
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda e: self._editar())
+
+        self._empty_label = ctk.CTkLabel(self.table, text="Sin resultados", text_color=self.app.COLOR_MUTED)
+        self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
+        self._empty_label.place_forget()
 
     def _on_tree_select(self, _=None):
         sel = self.tree.selection()
@@ -135,6 +162,18 @@ class VehiculosView(BaseModuleFrame):
             return
         iid = sel[0]
         self._selected_idx = self._iid_to_index.get(iid)
+
+    def _row_values(self, vh):
+        estado = str(vh.get("estado", "") or "").strip()
+        estado_disp = estado.capitalize() if estado else ""
+        return (
+            str(vh.get("placa", "") or "").strip().upper(),
+            vh.get("marca", "") or "",
+            vh.get("modelo", "") or "",
+            vh.get("anio", "") if vh.get("anio", "") is not None else "",
+            vh.get("sede", "") or "",
+            estado_disp,
+        )
 
     def _set_data(self, rows):
         for iid in self.tree.get_children():
@@ -145,7 +184,9 @@ class VehiculosView(BaseModuleFrame):
 
         data = list(rows or [])
         if not data:
+            self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
             return
+        self._empty_label.place_forget()
 
         def insert_chunk(start=0):
             end = min(start + self.TREE_INSERT_CHUNK, len(data))
@@ -156,13 +197,8 @@ class VehiculosView(BaseModuleFrame):
                 self.tree.insert(
                     "", "end",
                     iid=iid,
-                    values=(
-                        vh.get("placa", ""),
-                        vh.get("marca", ""),
-                        vh.get("modelo", ""),
-                        vh.get("anio", ""),
-                        vh.get("estado", "")
-                    )
+                    values=self._row_values(vh),
+                    tags=("even" if idx % 2 == 0 else "odd",)
                 )
             if end < len(data):
                 self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))

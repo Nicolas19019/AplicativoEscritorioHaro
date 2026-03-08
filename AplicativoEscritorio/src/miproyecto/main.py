@@ -55,14 +55,14 @@ class HaroDesktopApp(ctk.CTk):
 
 
     # API
-    API_BASE_URL = "https://harorepositoty-1-dnhf.onrender.com/api"
+    API_BASE_URL = "https://harorepositoty2-590358146556.europe-west1.run.app/api"
     AUTH_MODE = "basic"
     JWT_LOGIN_PATH = "auth/login"
     JWT_USER_FIELD = "username"
     JWT_PASS_FIELD = "password"
     JWT_TOKEN_FIELD = "token"
     API_TIMEOUT_SECONDS = 25
-    GOOGLE_CALENDAR_ENABLED = True
+    GOOGLE_CALENDAR_ENABLED = False
     GOOGLE_CALENDAR_ENDPOINT = "calendar/reuniones"
     GOOGLE_CALENDAR_ID = "primary"
     GOOGLE_CALENDAR_TIMEZONE = "America/Bogota"
@@ -412,7 +412,7 @@ class HaroDesktopApp(ctk.CTk):
             return
 
         # Prefetch de catalogos para evitar sensacion de recarga al abrir modulos.
-        resources = ("profesores", "vehiculos", "clases", "estados-cuenta")
+        resources = ("profesores", "vehiculos", "clases-practicas", "estados-cuenta")
 
         def worker():
             unauthorized = False
@@ -508,7 +508,7 @@ class HaroDesktopApp(ctk.CTk):
             return
 
         self._info("Sincronizando datos con la base de datos...")
-        resources = ("estudiantes", "profesores", "vehiculos", "clases", "estados-cuenta")
+        resources = ("estudiantes", "profesores", "vehiculos", "clases-practicas", "estados-cuenta")
 
         def worker():
             errors = []
