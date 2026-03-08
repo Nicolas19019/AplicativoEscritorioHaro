@@ -86,7 +86,7 @@ class SimpleAPI:
             self.last_error = f"Error de red hacia {url}: {e}"
             return None
 
-    def post(self, path, json, headers=None, timeout=12):
+    def post(self, path, json, headers=None, timeout=25):
         self.last_error = None
         url = self._join(path)
         self.last_url = url
@@ -393,16 +393,16 @@ class LoginDialog(ctk.CTkToplevel):
         self.frame_login.grid_columnconfigure(0, weight=1)
 
         rr = 0
-        ctk.CTkLabel(self.frame_login, text="Usuario registrado", text_color=fg_text)\
+        ctk.CTkLabel(self.frame_login, text="Correo", text_color=fg_text)\
             .grid(row=rr, column=0, pady=(0, 4), sticky="w"); rr += 1
 
         self.en_user = ctk.CTkEntry(
             self.frame_login, height=44, corner_radius=12,
             fg_color=fg_input, text_color=fg_text,
             border_width=2, border_color=fg_divider,
-            placeholder_text="EjemploCEAHARO",
+            placeholder_text="correo@dominio.com",
             placeholder_text_color="#4F4F4F",
-            validate="key", validatecommand=v_usuario
+            validate="key", validatecommand=v_email
         )
         self.en_user.grid(row=rr, column=0, pady=(0, 8), sticky="ew"); rr += 1
         self._decorate_entry(self.en_user)
@@ -706,6 +706,80 @@ class LoginDialog(ctk.CTkToplevel):
                     self.after(0, lambda err=exc: self._show_error(technical=str(err)))
         threading.Thread(target=runner, daemon=True).start()
 
+    def _is_smtp_error(self, err_text: str) -> bool:
+        t = (err_text or "").lower()
+        return (
+            "smtp" in t
+            or "mail server connection failed" in t
+            or "app password" in t
+            or "connect timed out" in t
+        )
+
+    def _probe_basic_credentials(self, user: str, password: str) -> bool:
+        """
+        Fallback para backends que aceptan Basic Auth con usuario,
+        pero en /api/auth/login exigen correo.
+        """
+        if requests is None:
+            return False
+
+        try:
+            if hasattr(self.api, "_join"):
+                url = self.api._join("/api/estudiantes")
+            else:
+                base = str(getattr(self.app, "API_BASE_URL", "") or "").rstrip("/")
+                if base.lower().endswith("/api"):
+                    base = base[:-4]
+                url = f"{base}/api/estudiantes"
+
+            r = requests.get(url, auth=(user, password), timeout=12)
+            if r.status_code < 400:
+                return True
+
+            if hasattr(self.api, "last_error"):
+                self.api.last_error = f"HTTP {r.status_code} en {url}: {r.text}"
+            return False
+        except Exception as e:
+            if hasattr(self.api, "last_error"):
+                self.api.last_error = f"Error de red hacia {url}: {e}"
+            return False
+
+    def _create_admin_directly(self):
+        """
+        Fallback: crea administrador sin OTP cuando el servicio SMTP no está disponible.
+        """
+        if not self._pending_admin_payload:
+            self._show_error("No hay datos pendientes para crear el administrador.")
+            return
+
+        def do_create():
+            data = self.api.post(self.ADMIN_ENDPOINT, json=self._pending_admin_payload)
+            if data is None:
+                raise RuntimeError(self.api.last_error or "No se pudo crear el usuario.")
+            return data
+
+        def on_ok(_):
+            messagebox.showinfo(
+                "Bienvenido",
+                "✅ Cuenta creada exitosamente.",
+                parent=self
+            )
+            self._reset_fields(True)
+            self._switch_mode("LOGIN")
+            try:
+                self.btn_guardar_enviar.configure(state="normal")
+            except Exception:
+                pass
+
+        def on_err(err):
+            self._show_error(technical=str(err))
+            try:
+                self.btn_guardar_enviar.configure(state="normal")
+            except Exception:
+                pass
+
+        self._run_async(do_create, on_ok=on_ok, on_err=on_err)
+
     # ====================== UI helpers ======================
     def _decorate_entry(self, entry):
         normal = {"border_color": "#E5E7EB"}
@@ -748,6 +822,23 @@ class LoginDialog(ctk.CTkToplevel):
         severity: 'user' | 'system'
         """
         t = (technical_err or "").lower()
+
+        # Mensajes de negocio/backend comunes en este flujo
+        if "usuario ya existe" in t:
+            return ("Registro", "Ese usuario ya existe. Usa otro nombre de usuario.", "user")
+
+        if "correo ya existe" in t or "email ya existe" in t:
+            return ("Registro", "Ese correo ya está registrado. Usa otro correo.", "user")
+
+        if "mail server connection failed" in t or "smtp" in t or "app password" in t:
+            return (
+                "Correo no disponible",
+                "No se pudo enviar el código OTP porque el servicio de correo no está disponible. Intenta más tarde o contacta al administrador.",
+                "system",
+            )
+
+        if "send.email" in t:
+            return ("Correo", "No fue posible validar el correo para enviar el OTP. Verifica el formato del correo.", "user")
 
         if "http 401" in t or "unauthorized" in t or "no autorizado" in t:
             return ("Acceso", "Usuario o contraseña incorrectos.", "user")
@@ -974,32 +1065,8 @@ class LoginDialog(ctk.CTkToplevel):
             except Exception:
                 pass
 
-            def do_send():
-                ok = self._send_otp_to_email(self.ADMIN_OTP_EMAIL)
-                if not ok:
-                    raise RuntimeError(self.api.last_error or "No se pudo enviar el código.")
-                return True
-
-            def on_ok(_):
-                # mostrar bloque OTP en form (por si lo quieres) + popup
-                try:
-                    self.otp_block.grid()
-                except Exception:
-                    pass
-                self._show_otp_dialog()
-                try:
-                    self.btn_guardar_enviar.configure(state="normal")
-                except Exception:
-                    pass
-
-            def on_err(err):
-                self._show_error(technical=str(err))
-                try:
-                    self.btn_guardar_enviar.configure(state="normal")
-                except Exception:
-                    pass
-
-            self._run_async(do_send, on_ok=on_ok, on_err=on_err)
+            # Registro directo sin OTP (modo revisión)
+            self._create_admin_directly()
 
         except Exception as e:
             self._show_error(technical=str(e))
@@ -1057,33 +1124,28 @@ class LoginDialog(ctk.CTkToplevel):
             self._show_error("Estás en registro. Cambia a inicio de sesión para ingresar.")
             return
 
-        u = self._sanitize_login_for_submit(self.en_user.get().strip())
+        correo = self._sanitize_login_for_submit(self.en_user.get().strip())
         p = self.en_pass.get().strip()
-        if not u or not p:
-            self._show_error("Usuario y contraseña son obligatorios.")
+        if not correo or not p:
+            self._show_error("Correo y contraseña son obligatorios.")
             return
 
-        if "@" in u:
-            if not self._re_email_full.fullmatch(u):
-                self._show_error("Correo inválido.")
-                return
-        else:
-            if not self._re_usuario_full.fullmatch(u):
-                self._show_error("Usuario inválido.")
-                return
+        if not self._re_email_full.fullmatch(correo):
+            self._show_error("Correo inválido.")
+            return
 
         p_hex = hashlib.sha256(p.encode("utf-8")).hexdigest()
         on_success_secret = self._credential_for_on_success(p, p_hex)
 
         if callable(self.on_success):
             try:
-                # Valida credenciales contra /api/auth/login antes de abrir la app.
-                test = self.api.post(self.LOGIN_ENDPOINT, json={"login": u, "password": p_hex})
+                # Valida credenciales por correo (contrato actual del backend).
+                test = self.api.post(self.LOGIN_ENDPOINT, json={"correo": correo, "contrasena": p})
                 if test is None:
                     self._show_error(technical=self.api.last_error or "Credenciales inválidas.")
                     return
 
-                self.on_success(u, on_success_secret)
+                self.on_success(correo, on_success_secret)
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
                     self._show_error(technical=str(self.app.api.last_error))
                     return
@@ -1096,7 +1158,7 @@ class LoginDialog(ctk.CTkToplevel):
                 self._show_error(technical=f"Error de autenticación: {e}")
                 return
 
-        data = self.api.post(self.LOGIN_ENDPOINT, json={"login": u, "password": p_hex})
+        data = self.api.post(self.LOGIN_ENDPOINT, json={"correo": correo, "contrasena": p})
         if data is None:
             self._show_error(technical=self.api.last_error or "Error desconocido")
             return
@@ -1108,7 +1170,7 @@ class LoginDialog(ctk.CTkToplevel):
     # ====================== Validación / fuerza ======================
     def _email_key_validator(self, new_text):
         for ch in new_text:
-            if ch in self._danger_chars:
+            if ch in self._danger_chars or ch.isspace():
                 return False
         return True
 

@@ -55,12 +55,13 @@ class HaroDesktopApp(ctk.CTk):
 
 
     # API
-    API_BASE_URL = "http://localhost:8083/api"
+    API_BASE_URL = "https://harorepositoty-1-dnhf.onrender.com/api"
     AUTH_MODE = "basic"
     JWT_LOGIN_PATH = "auth/login"
     JWT_USER_FIELD = "username"
     JWT_PASS_FIELD = "password"
     JWT_TOKEN_FIELD = "token"
+    API_TIMEOUT_SECONDS = 25
     GOOGLE_CALENDAR_ENABLED = True
     GOOGLE_CALENDAR_ENDPOINT = "calendar/reuniones"
     GOOGLE_CALENDAR_ID = "primary"
@@ -392,7 +393,8 @@ class HaroDesktopApp(ctk.CTk):
                 jwt_login_path=self.JWT_LOGIN_PATH,
                 user_field=self.JWT_USER_FIELD,
                 pass_field=self.JWT_PASS_FIELD,
-                token_field=self.JWT_TOKEN_FIELD
+                token_field=self.JWT_TOKEN_FIELD,
+                request_timeout=self.API_TIMEOUT_SECONDS
             )
         except Exception as e:
             self.api = None

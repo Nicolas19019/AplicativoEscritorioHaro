@@ -26,6 +26,7 @@ class ApiClient:
         user_field: str = "username",
         pass_field: str = "password",
         token_field: str = "token",
+        request_timeout: float = 25.0,
     ):
         self.app = app
         self.base_url = base_url.rstrip("/")
@@ -36,6 +37,7 @@ class ApiClient:
         self.user_field = user_field
         self.pass_field = pass_field
         self.token_field = token_field
+        self.request_timeout = max(float(request_timeout), 4.0)
         self.last_error = None
 
         # Cache simple para GET: ayuda a que el cambio de modulos se vea fluido.
@@ -52,7 +54,7 @@ class ApiClient:
         payload = {self.user_field: self.user, self.pass_field: self.password}
         url = f"{self.base_url}/{self.jwt_login_path.lstrip('/')}"
         if requests:
-            r = requests.post(url, json=payload, timeout=15)
+            r = requests.post(url, json=payload, timeout=self.request_timeout)
             if r.status_code in (401, 403):
                 raise AuthError("Credenciales invalidas.")
             token = r.json().get(self.token_field) if r.text else None
@@ -65,7 +67,7 @@ class ApiClient:
             req.add_header("Accept", "application/json")
             req.add_header("Content-Type", "application/json")
             try:
-                with urllib.request.urlopen(req, timeout=15) as resp:
+                with urllib.request.urlopen(req, timeout=self.request_timeout) as resp:
                     txt = resp.read().decode("utf-8")
                     token = _json.loads(txt).get(self.token_field) if txt else None
             except urllib.error.HTTPError as e:
@@ -121,7 +123,7 @@ class ApiClient:
 
         try:
             func = getattr(requests, method.lower())
-            resp = func(url, headers=headers, json=data, params=params, timeout=4)
+            resp = func(url, headers=headers, json=data, params=params, timeout=self.request_timeout)
 
             if resp.status_code in (401, 403):
                 self.last_error = f"No autorizado (HTTP {resp.status_code})."
@@ -144,7 +146,7 @@ class ApiClient:
             self.last_error = "No se pudo conectar con la API. Verifique el servidor."
             raise RuntimeError(self.last_error)
         except requests.exceptions.Timeout:
-            self.last_error = "La API tardo demasiado en responder."
+            self.last_error = "La API tardo demasiado en responder. Intenta de nuevo en unos segundos."
             raise RuntimeError(self.last_error)
         except requests.exceptions.RequestException as e:
             self.last_error = f"Error en la solicitud: {e}"
