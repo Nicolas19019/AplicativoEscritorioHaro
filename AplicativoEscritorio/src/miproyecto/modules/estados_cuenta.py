@@ -22,15 +22,21 @@ class EstadosCuentaView(BaseModuleFrame):
             tb.grid_columnconfigure(c, weight=0)
         tb.grid_columnconfigure(5, weight=1)
 
-        def red_btn(text, cmd):
+        def action_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                tb, text=text, height=40, corner_radius=18,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd, anchor="w"
+                tb,
+                text=text,
+                height=40,
+                corner_radius=18,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
+                anchor="w",
             )
 
-        red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8))
-        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8)
+        action_btn("＋ Nuevo", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=0, padx=(0,8))
+        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=8)
 
         # Buscador (por nombre de estudiante)
         self.en_buscar = ctk.CTkEntry(
@@ -169,15 +175,22 @@ class EstadosCuentaView(BaseModuleFrame):
         btns = ctk.CTkFrame(self.form, fg_color="transparent")
         btns.grid(row=4, column=0, columnspan=4, padx=10, pady=(6,12), sticky="e")
 
-        def red_btn_small(text, cb):
+        def form_btn(text, cb, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                btns, text=text, height=34, corner_radius=10,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cb
+                btns,
+                text=text,
+                height=34,
+                corner_radius=10,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cb,
             )
 
-        red_btn_small("Cancelar", self._cancelar).grid(row=0, column=0, padx=6)
-        red_btn_small("Guardar", self._guardar).grid(row=0, column=1, padx=6)
+        form_btn("Cancelar", self._cancelar, self.app.COLOR_INPUT_BG, self.app.COLOR_DIVIDER, txt=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=6)
+        form_btn("Guardar", self._guardar, self.app.COLOR_GREEN, self.app.GREEN_HOVER)\
+            .grid(row=0, column=1, padx=6)
 
         self._form_mode = "create"
         self._editing_idx = None
@@ -417,8 +430,18 @@ class EstadosCuentaView(BaseModuleFrame):
             "pagado": pagado,
             "saldo": saldo,
             "estado": estado,
-            "saldo_color": "#d9534f" if saldo > 0 else "#28a745",
+            "saldo_color": self.app.COLOR_RED if saldo > 0 else self.app.COLOR_GREEN,
         }
+
+    def _estado_badge_style(self, estado: str):
+        t = str(estado or "").strip().lower()
+        if "pagado" in t:
+            return self.app.GREEN_SOFT_BG, self.app.COLOR_GREEN
+        if any(k in t for k in ("deuda", "mora", "saldo", "venc")):
+            return self.app.RED_SOFT_BG, self.app.COLOR_RED
+        if "pend" in t:
+            return self.app.MUSTARD_SOFT_BG, self.app.MUSTARD_MAIN
+        return self.app.COLOR_INPUT_BG, self.app.COLOR_TEXT
 
     def _build_table_shell(self):
         if getattr(self, "_table_header", None) and self._table_header.winfo_exists():
@@ -470,7 +493,18 @@ class EstadosCuentaView(BaseModuleFrame):
         lbl_saldo = ctk.CTkLabel(row, text="", text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
         lbl_saldo.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
-        lbl_estado = ctk.CTkLabel(row, text="", text_color=self.app.COLOR_TEXT, anchor="w", justify="left")
+        lbl_estado = ctk.CTkLabel(
+            row,
+            text="",
+            text_color=self.app.COLOR_TEXT,
+            fg_color=self.app.COLOR_INPUT_BG,
+            corner_radius=999,
+            width=104,
+            height=28,
+            anchor="center",
+            justify="center",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
         lbl_estado.grid(row=0, column=4, padx=12, pady=10, sticky="ew")
 
         actions = ctk.CTkFrame(row, fg_color="transparent")
@@ -478,14 +512,14 @@ class EstadosCuentaView(BaseModuleFrame):
 
         btn_edit = ctk.CTkButton(
             actions, text="✎", width=36, height=32, corner_radius=8,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+            fg_color=self.app.COLOR_BLUE, hover_color=self.app.BLUE_HOVER,
             text_color="#ffffff"
         )
         btn_edit.grid(row=0, column=0, padx=4)
 
         btn_delete = ctk.CTkButton(
             actions, text="🗑️", width=36, height=32, corner_radius=8,
-            fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
+            fg_color=self.app.COLOR_RED, hover_color=self.app.RED_HOVER,
             text_color="#ffffff"
         )
         btn_delete.grid(row=0, column=1, padx=4)
@@ -501,14 +535,17 @@ class EstadosCuentaView(BaseModuleFrame):
 
     def _update_row_widget(self, row_info, rec, idx):
         row = row_info["frame"]
-        row.configure(fg_color=self.app.COLOR_PANEL)
         values = self._row_values(rec)
+        row_bg = self.app.COLOR_PANEL if idx % 2 == 0 else self.app.COLOR_INPUT_BG
+        row.configure(fg_color=row_bg)
 
         row_info["labels"][0].configure(text=values["est"], text_color=self.app.COLOR_TEXT)
         row_info["labels"][1].configure(text=f"{values['total']:,.2f}", text_color=self.app.COLOR_TEXT)
         row_info["labels"][2].configure(text=f"{values['pagado']:,.2f}", text_color=self.app.COLOR_TEXT)
         row_info["labels"][3].configure(text=f"{values['saldo']:,.2f}", text_color=values["saldo_color"])
-        row_info["labels"][4].configure(text=values["estado"], text_color=self.app.COLOR_TEXT)
+
+        b_bg, b_txt = self._estado_badge_style(values["estado"])
+        row_info["labels"][4].configure(text=values["estado"], fg_color=b_bg, text_color=b_txt)
 
         for lbl in row_info["labels"]:
             lbl.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
@@ -573,7 +610,7 @@ class EstadosCuentaView(BaseModuleFrame):
         total_total = sum(float(r.get("montoTotal") or 0) for r in self._data)
         total_pagado = sum(float(r.get("montoPagado") or 0) for r in self._data)
         total_saldo = total_total - total_pagado
-        saldo_color = "#d9534f" if total_saldo > 0 else "#28a745"
+        saldo_color = self.app.COLOR_RED if total_saldo > 0 else self.app.COLOR_GREEN
 
         self._totals_frame = ctk.CTkFrame(self, fg_color="transparent")
         self._totals_frame.grid(row=5, column=0, padx=16, pady=(0, 12), sticky="ew")
@@ -622,12 +659,14 @@ class EstadosCuentaView(BaseModuleFrame):
     def _select_row(self, idx: int):
         if self._selected_idx is not None and 0 <= self._selected_idx < len(self._rows):
             try:
-                self._rows[self._selected_idx].configure(fg_color=self.app.COLOR_PANEL)
+                prev = self._selected_idx
+                prev_bg = self.app.COLOR_PANEL if prev % 2 == 0 else self.app.COLOR_INPUT_BG
+                self._rows[prev].configure(fg_color=prev_bg)
             except Exception:
                 pass
         if 0 <= idx < len(self._rows):
             try:
-                self._rows[idx].configure(fg_color=self.app.COLOR_DIVIDER)
+                self._rows[idx].configure(fg_color=self.app.MUSTARD_SOFT_BG)
             except Exception:
                 pass
             self._selected_idx = idx

@@ -14,7 +14,7 @@ class InstructorInlineForm(ctk.CTkFrame):
     Claves exactas del backend:
     {
       "cedula", "nombre", "apellido", "email", "especialidad", "categoria",
-      "telefono", "usuario", "visible", "contrasena"
+      "telefono", "usuario", "sede", "visible", "contrasena"
     }
     """
     def __init__(self, master, app, on_submit, on_cancel):
@@ -79,21 +79,25 @@ class InstructorInlineForm(ctk.CTkFrame):
         self.cb_visible = ctk.CTkComboBox(self, values=["true", "false"], width=120)
         self.cb_visible.set("true")
         self.cb_visible.grid(row=4, column=1, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Sede").grid(row=4, column=2, padx=12, pady=6, sticky="w")
+        self.en_sede = BorderedEntry(self, placeholder_text="Sede principal")
+        self.en_sede.grid(row=4, column=3, padx=12, pady=6, sticky="ew")
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=5, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
-        def red_btn(text, cmd):
+        def form_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
                 btns,
                 text=text,
                 height=36,
                 corner_radius=12,
-                fg_color=self.app.COLOR_RED,
-                hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff",
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
                 command=cmd,
             )
-        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
-        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+        form_btn("Cancelar", self._cancel, self.app.COLOR_INPUT_BG, self.app.COLOR_DIVIDER, txt=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=6)
+        form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
         self.mode = "create"
     def _reset_fields(self):
         try:
@@ -104,6 +108,7 @@ class InstructorInlineForm(ctk.CTkFrame):
                 self.en_tel,
                 self.en_email,
                 self.en_usuario,
+                self.en_sede,
             ):
                 w.delete(0, "end")
             self.cb_esp.set("carro")
@@ -141,6 +146,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             self.en_tel,
             self.en_email,
             self.en_usuario,
+            self.en_sede,
         ):
             w.delete(0, "end")
         self.en_ced.insert(0, d.get("cedula", ""))
@@ -153,6 +159,10 @@ class InstructorInlineForm(ctk.CTkFrame):
         email_val = d.get("email", "")
         self.en_email.insert(0, email_val)
         self.en_usuario.insert(0, d.get("usuario", ""))
+        sede_val = d.get("sede", "") or ""
+        if isinstance(sede_val, dict):
+            sede_val = sede_val.get("nombre") or sede_val.get("name") or sede_val.get("descripcion") or ""
+        self.en_sede.insert(0, str(sede_val).strip())
         categoria_raw = (
             d.get("categoria")
             or d.get("categoriaLicencia")
@@ -180,6 +190,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             "categoria": categoria,
             "telefono": self.en_tel.get().strip(),
             "usuario": self.en_usuario.get().strip(),
+            "sede": (self.en_sede.get() or "").strip(),
             "visible": visible_raw in {"true", "1", "si", "yes"},
             "contrasena": None,
         }
@@ -188,6 +199,8 @@ class InstructorInlineForm(ctk.CTkFrame):
             "cedula", "nombre", "apellido", "email", "especialidad",
             "categoria", "telefono", "usuario"
         ]
+        if getattr(self, "mode", "create") == "create":
+            req.append("sede")
         for k in req:
             if not d.get(k):
                 return False, f"El campo '{k}' es obligatorio."
@@ -282,13 +295,21 @@ class VehiculoInlineForm(ctk.CTkFrame):
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=3, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
 
-        def red_btn(text, cmd):
-            return ctk.CTkButton(btns, text=text, height=36, corner_radius=12,
-                                 fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                                 text_color="#ffffff", command=cmd)
+        def form_btn(text, cmd, fg, hover, txt="#ffffff"):
+            return ctk.CTkButton(
+                btns,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
+            )
 
-        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
-        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+        form_btn("Cancelar", self._cancel, self.app.COLOR_INPUT_BG, self.app.COLOR_DIVIDER, txt=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=6)
+        form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
 
         self.mode = "create"
 
@@ -606,15 +627,21 @@ class ClaseInlineForm(ctk.CTkFrame):
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=5, column=0, columnspan=4, padx=12, pady=(8,12), sticky="e")
 
-        def red_btn(text, cmd):
+        def form_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                btns, text=text, height=36, corner_radius=12,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd
+                btns,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
-        
-        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
-        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+
+        form_btn("Cancelar", self._cancel, self.app.COLOR_INPUT_BG, self.app.COLOR_DIVIDER, txt=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=6)
+        form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
 
     def _has_class_on(self, date_obj):
         """

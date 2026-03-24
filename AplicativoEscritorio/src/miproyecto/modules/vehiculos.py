@@ -32,19 +32,22 @@ class VehiculosView(BaseModuleFrame):
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
 
-        def red_btn(text, cmd):
+        def action_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                tb, text=text, height=40, corner_radius=18,
-                fg_color=self.app.COLOR_RED,
-                hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff",
-                command=cmd
+                tb,
+                text=text,
+                height=40,
+                corner_radius=18,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
 
-        red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=6)
-        red_btn("✎ Editar", self._editar).grid(row=0, column=1, padx=6)
-        red_btn("🗑️ Eliminar", self._eliminar_seleccionado).grid(row=0, column=2, padx=6)
-        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=6)
+        action_btn("＋ Nuevo", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=0, padx=6)
+        action_btn("✎ Editar", self._editar, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=1, padx=6)
+        action_btn("🗑️ Eliminar", self._eliminar_seleccionado, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=2, padx=6)
+        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=6)
 
         # ================= FORM =================
         self.form = VehiculoInlineForm(
@@ -93,7 +96,7 @@ class VehiculosView(BaseModuleFrame):
             text = "#111111"
             muted = "#444444"
             divider = "#e5e7eb"
-            sel_bg = "#f1f5f9"
+            sel_bg = "#FFF8E1"
             even_bg = "#ffffff"
             odd_bg = "#f8fafc"
         else:
@@ -163,6 +166,30 @@ class VehiculosView(BaseModuleFrame):
         iid = sel[0]
         self._selected_idx = self._iid_to_index.get(iid)
 
+    @staticmethod
+    def _sede_value(vh):
+        for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
+            if key not in vh:
+                continue
+            val = vh.get(key)
+            if val in ("", None):
+                continue
+            if isinstance(val, dict):
+                for k2 in ("nombre", "name", "descripcion", "sede"):
+                    v2 = val.get(k2)
+                    if v2 not in ("", None):
+                        return str(v2).strip()
+                if val.get("id") not in ("", None):
+                    return str(val.get("id")).strip()
+                return ""
+            return str(val).strip()
+
+        for key in ("idSede", "sedeId", "sede_id"):
+            val = vh.get(key)
+            if val not in ("", None):
+                return str(val).strip()
+        return ""
+
     def _row_values(self, vh):
         estado = str(vh.get("estado", "") or "").strip()
         estado_disp = estado.capitalize() if estado else ""
@@ -171,7 +198,7 @@ class VehiculosView(BaseModuleFrame):
             vh.get("marca", "") or "",
             vh.get("modelo", "") or "",
             vh.get("anio", "") if vh.get("anio", "") is not None else "",
-            vh.get("sede", "") or "",
+            self._sede_value(vh),
             estado_disp,
         )
 

@@ -10,7 +10,7 @@ class BaseModuleFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         header = self._make_header_bar(title, subtitle)
-        header.grid(row=0, column=0, padx=16, pady=(16, 10), sticky="ew")
+        header.grid(row=0, column=0, padx=16, pady=(12, 8), sticky="ew")
 
     def _find_app(self, widget):
         w = widget
@@ -21,14 +21,40 @@ class BaseModuleFrame(ctk.CTkFrame):
         return widget
 
     def _make_header_bar(self, title: str, subtitle: str = ""):
-        bar = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=16)
-        bar.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(bar, text=title,
-                     font=ctk.CTkFont(size=18, weight="bold"),
-                     text_color=self.app.COLOR_TEXT, anchor="w").grid(row=0, column=0, padx=16, pady=(14, 4), sticky="w")
+        try:
+            accent, soft_bg, soft_border = self.app.module_theme(title)
+        except Exception:
+            accent, soft_bg, soft_border = (self.app.COLOR_RED, self.app.RED_SOFT_BG, self.app.RED_SOFT_BORDER)
+
+        bar = ctk.CTkFrame(
+            self,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=14,
+            border_width=1,
+            border_color=soft_border,
+        )
+        bar.grid_columnconfigure(0, weight=0)
+        bar.grid_columnconfigure(1, weight=1)
+
+        strip = ctk.CTkFrame(bar, fg_color=accent, corner_radius=999, width=6, height=1)
+        strip.grid(row=0, column=0, rowspan=2 if subtitle else 1, sticky="nsw", padx=(14, 10), pady=10)
+        strip.grid_propagate(False)
+
+        ctk.CTkLabel(
+            bar,
+            text=title,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.app.COLOR_TEXT,
+            anchor="w",
+        ).grid(row=0, column=1, padx=(0, 14), pady=(10, 2), sticky="w")
         if subtitle:
-            ctk.CTkLabel(bar, text=subtitle, font=ctk.CTkFont(size=12),
-                         text_color=self.app.COLOR_MUTED, anchor="w").grid(row=1, column=0, padx=16, pady=(0, 14), sticky="w")
+            ctk.CTkLabel(
+                bar,
+                text=subtitle,
+                font=ctk.CTkFont(size=11),
+                text_color=self.app.COLOR_MUTED,
+                anchor="w",
+            ).grid(row=1, column=1, padx=(0, 14), pady=(0, 10), sticky="w")
         return bar
 
     def _make_toolbar(self, master, on_new, on_edit, on_delete, on_refresh):
@@ -36,17 +62,23 @@ class BaseModuleFrame(ctk.CTkFrame):
         tb.grid_columnconfigure((0,1,2,3), weight=0)
         tb.grid_columnconfigure(4, weight=1)
 
-        def red_btn(text, cmd):
+        def action_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                tb, text=text, height=40, corner_radius=18,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd, anchor="w"
+                tb,
+                text=text,
+                height=40,
+                corner_radius=18,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
+                anchor="w",
             )
 
-        red_btn("＋ Nuevo", on_new).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
-        red_btn("✎ Editar", on_edit).grid(row=0, column=1, padx=8, pady=6, sticky="w")
-        red_btn("🗑 Eliminar", on_delete).grid(row=0, column=2, padx=8, pady=6, sticky="w")
-        red_btn("↻ Refrescar", on_refresh).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        action_btn("＋ Nuevo", on_new, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=0, padx=(0,8), pady=6, sticky="w")
+        action_btn("✎ Editar", on_edit, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        action_btn("🗑 Eliminar", on_delete, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        action_btn("↻ Refrescar", on_refresh, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=8, pady=6, sticky="w")
         return tb
 
     def _make_filters(self, master, p1="Buscar…", p2="Filtro"):
@@ -66,16 +98,22 @@ class BaseModuleFrame(ctk.CTkFrame):
         )
         e2.grid(row=0, column=1, padx=8, pady=6, sticky="w")
 
-        def red_small(text, cmd):
+        def small_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                bar, text=text, height=36, corner_radius=12,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd
+                bar,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
 
-        red_small("Aplicar", lambda: self.app._info(f"Aplicar filtros: {e1.get()} / {e2.get()}"))\
+        small_btn("Aplicar", lambda: self.app._info(f"Aplicar filtros: {e1.get()} / {e2.get()}"), self.app.MUSTARD_MAIN, self.app.MUSTARD_HOVER, txt="#111111")\
             .grid(row=0, column=2, padx=8, pady=6, sticky="w")
-        red_small("Limpiar", lambda: (e1.delete(0, "end"), e2.delete(0, "end"))).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        small_btn("Limpiar", lambda: (e1.delete(0, "end"), e2.delete(0, "end")), self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
+            .grid(row=0, column=3, padx=8, pady=6, sticky="w")
         return bar
 
     def _make_filters_pro(self, master, campos=("Documento","Nombre","Apellidos"),
@@ -123,18 +161,23 @@ class BaseModuleFrame(ctk.CTkFrame):
         cb_estado.set(estados[0])
         cb_estado.grid(row=r, column=5, padx=(0,12), pady=8, sticky="w")
 
-        def red_btn(text, cmd):
+        def action_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                panel, text=text, height=36, corner_radius=12,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd
+                panel,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
 
-        red_btn("Aplicar", lambda: self.app._info(
+        action_btn("Aplicar", lambda: self.app._info(
             f"Filtrar: {cb_campo.get()} ~ '{en_valor.get()}' / Estado={cb_estado.get()}"
-        )).grid(row=r, column=6, padx=(4,4), pady=8, sticky="ew")
+        ), self.app.MUSTARD_MAIN, self.app.MUSTARD_HOVER, txt="#111111").grid(row=r, column=6, padx=(4,4), pady=8, sticky="ew")
 
-        red_btn("Limpiar", lambda: (cb_campo.set(campos[0]), en_valor.delete(0, "end"), cb_estado.set(estados[0])))\
+        action_btn("Limpiar", lambda: (cb_campo.set(campos[0]), en_valor.delete(0, "end"), cb_estado.set(estados[0])), self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
             .grid(row=r, column=7, padx=(4,12), pady=8, sticky="ew")
 
 

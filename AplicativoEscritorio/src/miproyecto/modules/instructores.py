@@ -37,17 +37,27 @@ class InstructoresView(BaseModuleFrame):
         tb.grid_columnconfigure((0, 1, 2, 3, 4), weight=0)
         tb.grid_columnconfigure(5, weight=1)
 
-        def red_btn(parent, text, cmd):
+        def action_btn(parent, text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                parent, text=text, height=40, corner_radius=18,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd, anchor="w"
+                parent,
+                text=text,
+                height=40,
+                corner_radius=18,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
+                anchor="w",
             )
 
-        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
-        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
-        red_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado).grid(row=0, column=2, padx=8, pady=6, sticky="w")
-        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        action_btn(tb, "＋ Nuevo", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER)\
+            .grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+        action_btn(tb, "✎ Editar", self._editar, self.app.COLOR_BLUE, self.app.BLUE_HOVER)\
+            .grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        action_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado, self.app.COLOR_RED, self.app.RED_HOVER)\
+            .grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        action_btn(tb, "↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
+            .grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
         # ===== Formulario inline =====
         self.form = InstructorInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
@@ -71,6 +81,7 @@ class InstructoresView(BaseModuleFrame):
             ("Nombre", 260),
             ("Especialidad", 180),
             ("Categoría", 110),
+            ("Sede", 170),
             ("Teléfono", 130),
             ("Email", 220),
             ("Usuario", 140),
@@ -219,6 +230,30 @@ class InstructoresView(BaseModuleFrame):
         return str(prof.get("usuario") or "").strip()
 
     @staticmethod
+    def _sede_value(prof):
+        for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
+            if key not in prof:
+                continue
+            val = prof.get(key)
+            if val in ("", None):
+                continue
+            if isinstance(val, dict):
+                for k2 in ("nombre", "name", "descripcion", "sede"):
+                    v2 = val.get(k2)
+                    if v2 not in ("", None):
+                        return str(v2).strip()
+                if val.get("id") not in ("", None):
+                    return str(val.get("id")).strip()
+                return ""
+            return str(val).strip()
+
+        for key in ("idSede", "sedeId", "sede_id"):
+            val = prof.get(key)
+            if val not in ("", None):
+                return str(val).strip()
+        return ""
+
+    @staticmethod
     def _visible_value(prof):
         raw = str(prof.get("visible", True)).strip().lower()
         return "Sí" if raw in {"true", "1", "si", "yes"} else "No"
@@ -240,6 +275,11 @@ class InstructoresView(BaseModuleFrame):
         telefono = str(src.get("telefono", "") or "").strip()
         usuario = str(src.get("usuario", "") or "").strip()
 
+        sede_raw = src.get("sede", "") or ""
+        if isinstance(sede_raw, dict):
+            sede_raw = sede_raw.get("nombre") or sede_raw.get("name") or sede_raw.get("descripcion") or ""
+        sede = str(sede_raw or "").strip()
+
         email = str(src.get("email", "") or "").strip()
 
         especialidad = str(src.get("especialidad", "") or "").strip().lower()
@@ -251,7 +291,7 @@ class InstructoresView(BaseModuleFrame):
 
         visible = self._to_bool(src.get("visible"), default=True)
 
-        return {
+        out = {
             "cedula": cedula,
             "nombre": nombre,
             "apellido": apellido,
@@ -263,6 +303,9 @@ class InstructoresView(BaseModuleFrame):
             "visible": visible,
             "contrasena": src.get("contrasena", None),
         }
+        if sede:
+            out["sede"] = sede
+        return out
 
     @staticmethod
     def _assert_email_updated(server_obj, expected_email):
@@ -358,7 +401,7 @@ class InstructoresView(BaseModuleFrame):
             text = "#111111"
             muted = "#444444"
             divider = "#e5e7eb"
-            sel_bg = "#f1f5f9"
+            sel_bg = "#FFF8E1"
         else:
             bg = getattr(self.app, "COLOR_BG", "#111111")
             panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")
@@ -426,6 +469,7 @@ class InstructoresView(BaseModuleFrame):
             full_name,
             prof.get("especialidad", ""),
             self._categoria_value(prof),
+            self._sede_value(prof),
             prof.get("telefono", ""),
             self._email_value(prof),
             self._usuario_value(prof),

@@ -185,15 +185,21 @@ class StudentInlineForm(ctk.CTkFrame):
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=7, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
 
-        def red_btn(text, cmd):
+        def form_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                btns, text=text, height=36, corner_radius=12,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd
+                btns,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
 
-        red_btn("Cancelar", self._cancel).grid(row=0, column=0, padx=6)
-        red_btn("Guardar", self._save).grid(row=0, column=1, padx=6)
+        form_btn("Cancelar", self._cancel, self.app.COLOR_INPUT_BG, self.app.COLOR_DIVIDER, txt=self.app.COLOR_TEXT)\
+            .grid(row=0, column=0, padx=6)
+        form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
 
         self.mode = "create"
         self.sw_visible.select()
@@ -390,17 +396,27 @@ class EstudiantesView(BaseModuleFrame):
         tb.grid_columnconfigure((0, 1, 2, 3, 4, 5), weight=0)
         tb.grid_columnconfigure(6, weight=1)
 
-        def red_btn(parent, text, cmd):
+        def action_btn(parent, text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                parent, text=text, height=40, corner_radius=18,
-                fg_color=self.app.COLOR_RED, hover_color=self.app.COLOR_YELLOW,
-                text_color="#ffffff", command=cmd, anchor="w"
+                parent,
+                text=text,
+                height=40,
+                corner_radius=18,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
+                anchor="w",
             )
 
-        red_btn(tb, "＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
-        red_btn(tb, "✎ Editar", self._editar).grid(row=0, column=1, padx=8, pady=6, sticky="w")
-        red_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado).grid(row=0, column=2, padx=8, pady=6, sticky="w")
-        red_btn(tb, "↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8, pady=6, sticky="w")
+        action_btn(tb, "＋ Nuevo", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER)\
+            .grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+        action_btn(tb, "✎ Editar", self._editar, self.app.COLOR_BLUE, self.app.BLUE_HOVER)\
+            .grid(row=0, column=1, padx=8, pady=6, sticky="w")
+        action_btn(tb, "🗑️ Eliminar", self._eliminar_seleccionado, self.app.COLOR_RED, self.app.RED_HOVER)\
+            .grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        action_btn(tb, "↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
+            .grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
         # ===== Form inline =====
         self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
@@ -451,7 +467,7 @@ class EstudiantesView(BaseModuleFrame):
             text = "#111111"
             muted = "#444444"
             divider = "#e5e7eb"
-            sel_bg = "#f1f5f9"
+            sel_bg = "#FFF8E1"
         else:
             bg = getattr(self.app, "COLOR_BG", "#111111")
             panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")

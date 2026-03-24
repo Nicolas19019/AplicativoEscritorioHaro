@@ -62,24 +62,29 @@ class ClasesView(BaseModuleFrame):
         bar = ctk.CTkFrame(tb, fg_color="transparent")
         bar.grid(row=0, column=0, sticky="w")
 
-        def red_btn(text, cmd):
+        def action_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
-                bar, text=text, height=36, corner_radius=12,
-                fg_color=self._ACCENT, hover_color=self._YELLOW,
-                text_color="#ffffff", command=cmd
+                bar,
+                text=text,
+                height=36,
+                corner_radius=12,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt,
+                command=cmd,
             )
 
         self.btn_calendar = ctk.CTkButton(
             bar, text="📅 Calendario", height=36, corner_radius=12,
-            fg_color=self._INPUT, hover_color=self._DIV,
-            text_color=self._TEXT, command=self._toggle_calendar_mode
+            fg_color=self.app.BLUE_SOFT_BG, hover_color=self.app.BLUE_SOFT_BORDER,
+            text_color=self.app.COLOR_BLUE, command=self._toggle_calendar_mode
         )
         self.btn_calendar.grid(row=0, column=0, padx=(0, 8))
 
-        red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=1, padx=(0, 8))
-        red_btn("✎ Editar", self._editar).grid(row=0, column=2, padx=(0, 8))
-        red_btn("🗑️ Eliminar", self._eliminar).grid(row=0, column=3, padx=(0, 8))
-        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=4, padx=(0, 8))
+        action_btn("＋ Nuevo", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=(0, 8))
+        action_btn("✎ Editar", self._editar, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=2, padx=(0, 8))
+        action_btn("🗑️ Eliminar", self._eliminar, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=3, padx=(0, 8))
+        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=4, padx=(0, 8))
         ctk.CTkButton(
             bar, text="Restablecer filtros", height=36, corner_radius=12,
             fg_color=self._INPUT, hover_color=self._DIV,
@@ -169,7 +174,7 @@ class ClasesView(BaseModuleFrame):
             text = "#111111"
             muted = "#444444"
             divider = "#e5e7eb"
-            sel_bg = "#f1f5f9"
+            sel_bg = "#FFF8E1"
         else:
             bg = "#0f0f10"
             panel = "#151517"
@@ -643,6 +648,12 @@ class ClasesView(BaseModuleFrame):
 
     def _on_submit(self, payload, mode):
         try:
+            if mode == "create":
+                ok, msg = self._validate_same_sede_on_create(payload or {})
+                if not ok:
+                    messagebox.showerror("Validación de sede", msg, parent=self)
+                    return
+
             if self.app and getattr(self.app, "api", None):
                 if mode == "create":
                     self.app.api.create(self.CLASES_RESOURCE, payload)
@@ -967,6 +978,8 @@ class ClasesView(BaseModuleFrame):
                 v = value.get(k)
                 if v is not None and str(v).strip():
                     return str(v).strip()
+            if value.get("id") not in ("", None):
+                return str(value.get("id")).strip()
             return ""
         txt = str(value).strip()
         return txt
@@ -984,6 +997,81 @@ class ClasesView(BaseModuleFrame):
             return sede or "—"
         except Exception:
             return "—"
+
+    def _record_sede(self, rec) -> str:
+        if not isinstance(rec, dict):
+            return ""
+
+        for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
+            val = rec.get(key)
+            if val not in ("", None):
+                return self._extract_sede_value(val)
+
+        for key in ("idSede", "sedeId", "sede_id"):
+            val = rec.get(key)
+            if val not in ("", None):
+                return str(val).strip()
+
+        return ""
+
+    @staticmethod
+    def _norm_sede(sede: str) -> str:
+        return str(sede or "").strip().lower()
+
+    def _validate_same_sede_on_create(self, payload):
+        """
+        Valida que estudiante, instructor y vehículo pertenezcan a la misma sede.
+        Retorna (ok: bool, msg: str).
+        """
+        try:
+            est_id = payload.get("id_estudiante") or payload.get("idEstudiante")
+            prof_id = (
+                payload.get("id_profesor") or payload.get("idProfesor")
+                or payload.get("id_instructor") or payload.get("idInstructor")
+            )
+            placa = payload.get("placa_vehiculo") or payload.get("placaVehiculo")
+
+            est = self._find_by_id(self._estudiantes, est_id, ("id", "idEstudiante"))
+            prof = self._find_by_id(self._profesores, prof_id, ("id", "idProfesor"))
+            veh = self._find_by_placa(self._vehiculos, placa)
+
+            sede_est = self._record_sede(est)
+            sede_prof = self._record_sede(prof)
+            sede_veh = self._record_sede(veh)
+
+            missing = []
+            if not sede_est:
+                missing.append("estudiante")
+            if not sede_prof:
+                missing.append("instructor")
+            if not sede_veh:
+                missing.append("vehículo")
+
+            if missing:
+                return (
+                    False,
+                    "No se pudo validar la sede porque falta en: "
+                    + ", ".join(missing)
+                    + ".\n\n"
+                    "Asigna la sede en Estudiantes/Instructores/Vehículos y vuelve a intentar.",
+                )
+
+            if len({self._norm_sede(sede_est), self._norm_sede(sede_prof), self._norm_sede(sede_veh)}) != 1:
+                est_name = self._person_name(est, fallback=str(est_id or "Estudiante"))
+                prof_name = self._person_name(prof, fallback=str(prof_id or "Instructor"))
+                placa_txt = str(placa or "").strip().upper() or "—"
+                return (
+                    False,
+                    "La clase práctica debe quedar en una sola sede.\n\n"
+                    f"Estudiante ({est_name}): {sede_est or '—'}\n"
+                    f"Instructor ({prof_name}): {sede_prof or '—'}\n"
+                    f"Vehículo ({placa_txt}): {sede_veh or '—'}\n\n"
+                    "Selecciona estudiante/instructor/vehículo de la misma sede.",
+                )
+
+            return True, ""
+        except Exception as e:
+            return False, f"No fue posible validar la sede:\n{e}"
 
     # ============================
     # Documento robusto
