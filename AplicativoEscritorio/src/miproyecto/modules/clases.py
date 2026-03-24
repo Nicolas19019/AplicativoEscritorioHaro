@@ -1,7 +1,7 @@
 ﻿# modules/clases.py
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import datetime, calendar, threading, time
 
 from modules.base import BaseModuleFrame
@@ -17,6 +17,8 @@ class ClasesView(BaseModuleFrame):
 
     ROW_BATCH_SIZE = 30
     ROW_BATCH_DELAY = 5
+    TREE_INSERT_CHUNK = 250
+    TREE_INSERT_DELAY = 1  # ms
     MIN_REFRESH_INTERVAL = 500  # ms
     CLASES_RESOURCE = "clases-practicas"
 
@@ -75,12 +77,14 @@ class ClasesView(BaseModuleFrame):
         self.btn_calendar.grid(row=0, column=0, padx=(0, 8))
 
         red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=1, padx=(0, 8))
-        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=2, padx=(0, 8))
+        red_btn("✎ Editar", self._editar).grid(row=0, column=2, padx=(0, 8))
+        red_btn("🗑️ Eliminar", self._eliminar).grid(row=0, column=3, padx=(0, 8))
+        red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=4, padx=(0, 8))
         ctk.CTkButton(
             bar, text="Restablecer filtros", height=36, corner_radius=12,
             fg_color=self._INPUT, hover_color=self._DIV,
             text_color=self._TEXT, command=self._restablecer_filtros
-        ).grid(row=0, column=3, padx=(0, 8))
+        ).grid(row=0, column=5, padx=(0, 8))
 
         # ===== Form inline =====
         try:
@@ -120,188 +124,149 @@ class ClasesView(BaseModuleFrame):
         self.view_normal.grid_columnconfigure(0, weight=1)
         self.view_normal.grid_rowconfigure(0, weight=1)
 
-        self.table = ctk.CTkScrollableFrame(self.view_normal, fg_color=self._BG, corner_radius=12)
+        # Tabla optimizada (Treeview) como Vehículos/Instructores
+        self.table = ctk.CTkFrame(self.view_normal, fg_color=self._BG, corner_radius=12)
         self.table.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+        self.table.grid_rowconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
-        inner = getattr(self.table, "_scrollable_frame", None) or getattr(self.table, "scrollable_frame", None)
-        if inner:
-            inner.grid_columnconfigure(0, weight=1)
-
-        # Columnas PRO: (nombre, width)
+        # Columnas: (nombre, width)
         self._COLS = [
             ("Estudiante", 260),
             ("Documento",  160),
             ("Instructor", 220),
             ("Placa",      110),
+            ("Sede",       140),
             ("Fecha",      130),
             ("Estado",     150),
-            ("Acciones",   140),
         ]
-        self._col_widths = [w for _, w in self._COLS]
-
-        # Pool / render state
-        self._row_pool = []
-        self._row_map = {}     # rid -> row_info
-        self._row_order = []   # orden visible
-        self._table_header = None
-        self._rows_container = None
+        self.tree = None
+        self._iid_to_key = {}
+        self._key_to_iid = {}
         self._empty_label = None
 
     def _build_table_shell(self):
-        if getattr(self, "_table_header", None) and self._table_header.winfo_exists():
+        if getattr(self, "tree", None) and self.tree.winfo_exists():
             return
 
         for w in self.table.winfo_children():
             w.destroy()
 
-        # Header
-        self._table_header = ctk.CTkFrame(self.table, fg_color=self._INPUT, corner_radius=10)
-        self._table_header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
+        self._iid_to_key = {}
+        self._key_to_iid = {}
 
-        for i, (nombre, width) in enumerate(self._COLS):
-            ctk.CTkLabel(
-                self._table_header,
-                text=nombre,
-                text_color=self._MUTED,
-                anchor="w",
-                width=width,
-                font=ctk.CTkFont(size=13, weight="bold")
-            ).grid(row=0, column=i, padx=8, pady=10, sticky="w")
+        # Estilos ttk (similar a Vehículos/Instructores)
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
 
-        # Container rows
-        self._rows_container = ctk.CTkFrame(self.table, fg_color="transparent")
-        self._rows_container.grid(row=1, column=0, sticky="nsew")
-        self.table.grid_rowconfigure(1, weight=1)
-        self._rows_container.grid_columnconfigure(0, weight=1)
+        mode = ctk.get_appearance_mode()
+        if mode == "Light":
+            bg = "#ffffff"
+            panel = "#ffffff"
+            text = "#111111"
+            muted = "#444444"
+            divider = "#e5e7eb"
+            sel_bg = "#f1f5f9"
+        else:
+            bg = "#0f0f10"
+            panel = "#151517"
+            text = "#F5F7FA"
+            muted = "#AAB2C0"
+            divider = "#23262b"
+            sel_bg = divider
 
-        self._empty_label = ctk.CTkLabel(
-            self._rows_container,
-            text="Sin registros de clases",
-            text_color=self._MUTED
+        style.configure(
+            "Haro.Treeview",
+            background=panel,
+            fieldbackground=panel,
+            foreground=text,
+            bordercolor=divider,
+            lightcolor=divider,
+            darkcolor=divider,
+            rowheight=28,
         )
-        self._empty_label.grid(row=0, column=0, padx=8, pady=12, sticky="w")
-        self._empty_label.grid_remove()
-
-    def _create_row_widget(self):
-        row = ctk.CTkFrame(self._rows_container, fg_color=self._PANEL, corner_radius=10)
-        row.grid_columnconfigure(tuple(range(len(self._COLS))), weight=0)
-
-        labels = []
-        # columnas: Estudiante..Fecha (5)
-        for i in range(len(self._COLS) - 2):
-            lbl = ctk.CTkLabel(
-                row,
-                text="",
-                text_color=self._TEXT,
-                anchor="w",
-                width=self._col_widths[i],
-                font=ctk.CTkFont(size=13)
-            )
-            lbl.grid(row=0, column=i, padx=8, pady=10, sticky="w")
-            labels.append(lbl)
-
-        # Estado
-        estado_cell = ctk.CTkFrame(row, fg_color="transparent", width=self._col_widths[-2])
-        estado_cell.grid(row=0, column=len(self._COLS) - 2, padx=8, pady=6, sticky="w")
-
-        # Acciones
-        actions = ctk.CTkFrame(row, fg_color="transparent", width=self._col_widths[-1])
-        actions.grid(row=0, column=len(self._COLS) - 1, padx=8, pady=6, sticky="e")
-
-        btn_edit = ctk.CTkButton(
-            actions, text="✎", width=36, height=32, corner_radius=10,
-            fg_color=self._ACCENT, hover_color=self._YELLOW, text_color="#ffffff"
+        style.map(
+            "Haro.Treeview",
+            background=[("selected", sel_bg)],
+            foreground=[("selected", text)],
         )
-        btn_edit.grid(row=0, column=0, padx=4)
-
-        btn_delete = ctk.CTkButton(
-            actions, text="🗑️", width=36, height=32, corner_radius=10,
-            fg_color=self._ACCENT, hover_color=self._YELLOW, text_color="#ffffff"
+        style.configure(
+            "Haro.Treeview.Heading",
+            background=bg,
+            foreground=muted,
+            relief="flat",
+            font=("Segoe UI", 10, "bold"),
         )
-        btn_delete.grid(row=0, column=1, padx=4)
 
-        return {
-            "frame": row,
-            "labels": labels,
-            "estado_cell": estado_cell,
-            "estado_widget": None,
-            "edit_btn": btn_edit,
-            "delete_btn": btn_delete,
-            "rid": None,
-        }
+        cols = [c[0] for c in self._COLS]
+        self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
 
-    def _update_row_widget(self, row_info, rec, idx):
-        row = row_info["frame"]
-        values = self._row_values(rec)  # [est, doc, prof, placa, fecha, estado, "acciones"]
-        rid = self._row_key(rec)
-        row_info["rid"] = rid
+        vsb = ttk.Scrollbar(self.table, orient="vertical", command=self.tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns", padx=(6, 10), pady=10)
+        hsb = ttk.Scrollbar(self.table, orient="horizontal", command=self.tree.xview)
+        hsb.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        # highlight
-        row.configure(fg_color=self._DIV if self._selected_id == rid else self._PANEL)
+        for name, width in self._COLS:
+            self.tree.heading(name, text=name)
+            anchor = "center" if name in {"Placa", "Fecha", "Estado"} else "w"
+            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.7)), stretch=True, anchor=anchor)
 
-        # textos (hasta Fecha)
-        for col, val in enumerate(values[:-2]):
-            lbl = row_info["labels"][col]
-            lbl.configure(text=str(val or ""), width=self._col_widths[col])
-            lbl.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", lambda e: self._editar())
 
-        # estado
-        if row_info["estado_widget"] and row_info["estado_widget"].winfo_exists():
-            row_info["estado_widget"].destroy()
-        badge = self._status_badge(row_info["estado_cell"], values[-2])
-        badge.grid(row=0, column=0, sticky="w")
-        row_info["estado_widget"] = badge
+        self._empty_label = ctk.CTkLabel(self.table, text="Sin registros de clases", text_color=self._MUTED)
+        self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
+        self._empty_label.place_forget()
 
-        # acciones
-        row_info["edit_btn"].configure(command=lambda r_id=rid: (self._select_row(r_id), self._editar()))
-        row_info["delete_btn"].configure(command=lambda r_id=rid: (self._select_row(r_id), self._eliminar()))
-
-        # click fila
-        row.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
+    def _on_tree_select(self, _evt=None):
+        try:
+            sel = self.tree.selection()
+            if not sel:
+                self._selected_id = None
+                return
+            iid = sel[0]
+            self._selected_id = self._iid_to_key.get(iid)
+        except Exception:
+            self._selected_id = None
 
     def _set_table_data(self, rows):
-        """Set data SOLO para vista normal (tabla PRO)."""
+        """Set data SOLO para vista normal (Treeview)."""
         self._build_table_shell()
 
         data = list(rows or [])
+        self._selected_id = None
 
-        # ocultar todo el pool primero
-        for row_info in self._row_pool:
-            try:
-                row_info["frame"].grid_remove()
-            except Exception:
-                pass
-
-        self._row_map = {}
-        self._row_order = []
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self._iid_to_key.clear()
+        self._key_to_iid.clear()
 
         if not data:
             if self._empty_label and self._empty_label.winfo_exists():
-                self._empty_label.grid()
+                self._empty_label.place(relx=0.5, rely=0.5, anchor="center")
             return
 
         if self._empty_label and self._empty_label.winfo_exists():
-            self._empty_label.grid_remove()
+            self._empty_label.place_forget()
 
-        def paint_batch(start=0):
-            end = min(start + self.ROW_BATCH_SIZE, len(data))
+        def insert_chunk(start=0):
+            end = min(start + self.TREE_INSERT_CHUNK, len(data))
             for idx in range(start, end):
-                if idx >= len(self._row_pool):
-                    self._row_pool.append(self._create_row_widget())
-
-                row_info = self._row_pool[idx]
-                self._update_row_widget(row_info, data[idx], idx)
-                row_info["frame"].grid(row=idx + 1, column=0, padx=8, pady=4, sticky="ew")
-
-                rid = row_info["rid"]
-                self._row_map[rid] = row_info
-                self._row_order.append(rid)
-
+                rec = data[idx]
+                rid = self._row_key(rec)
+                iid = f"r{idx}"
+                self._iid_to_key[iid] = rid
+                self._key_to_iid[rid] = iid
+                self.tree.insert("", "end", iid=iid, values=self._row_values(rec))
             if end < len(data):
-                self.after(self.ROW_BATCH_DELAY, lambda: paint_batch(end))
+                self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
-        paint_batch(0)
+        insert_chunk(0)
 
     # ============================
     # VISTA CALENDARIO
@@ -339,10 +304,11 @@ class ClasesView(BaseModuleFrame):
 
         header = ctk.CTkFrame(self.table_right, fg_color=self._INPUT, corner_radius=12)
         header.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
-        ctk.CTkLabel(
+        self.lbl_day_header = ctk.CTkLabel(
             header, text="Clases del día", text_color=self._MUTED,
             anchor="w", font=ctk.CTkFont(size=13, weight="bold")
-        ).grid(row=0, column=0, padx=12, pady=8, sticky="w")
+        )
+        self.lbl_day_header.grid(row=0, column=0, padx=12, pady=8, sticky="w")
 
         self.cards_container_right = ctk.CTkFrame(self.table_right, fg_color="transparent")
         self.cards_container_right.grid(row=1, column=0, sticky="nsew")
@@ -356,6 +322,16 @@ class ClasesView(BaseModuleFrame):
             except Exception:
                 pass
 
+        # Header dinámico (fecha + conteos)
+        try:
+            if hasattr(self, "lbl_day_header") and self.lbl_day_header.winfo_exists():
+                if self.fecha_filtrada:
+                    self.lbl_day_header.configure(text=f"Clases del día — {self.fecha_filtrada}")
+                else:
+                    self.lbl_day_header.configure(text="Clases del día")
+        except Exception:
+            pass
+
         if not records:
             empty_text = (
                 "Selecciona un día en el calendario para ver clases."
@@ -366,97 +342,183 @@ class ClasesView(BaseModuleFrame):
                 .grid(row=0, column=0, padx=16, pady=16, sticky="w")
             return
 
-        for i, rec in enumerate(records):
-            rid = self._row_key(rec)  # key interna, NO se muestra
+        # Agrupar por área (Carro/Moto) y por estudiante para que el resumen sea más compacto.
+        grouped = {"carro": {}, "moto": {}, "mixto": {}, "otros": {}}
+        for rec in (records or []):
+            sid = self._take_id_est(rec)
+            area_key, _ = self._student_area(sid)
+            grouped.setdefault(area_key, {}).setdefault(sid, []).append(rec)
 
-            card = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=14,
-                                border_width=2, border_color=self._DIV)
-            card.grid(row=i, column=0, padx=8, pady=(6 if i else 4, 8), sticky="ew")
-            card.grid_columnconfigure(0, weight=1)
+        counts = {k: sum(len(v) for v in (grouped.get(k) or {}).values()) for k in grouped.keys()}
+        try:
+            if hasattr(self, "lbl_day_header") and self.lbl_day_header.winfo_exists() and self.fecha_filtrada:
+                parts = []
+                if counts.get("carro"):
+                    parts.append(f"Carro: {counts['carro']}")
+                if counts.get("moto"):
+                    parts.append(f"Moto: {counts['moto']}")
+                if counts.get("mixto"):
+                    parts.append(f"Mixto: {counts['mixto']}")
+                if counts.get("otros"):
+                    parts.append(f"Otros: {counts['otros']}")
+                if parts:
+                    self.lbl_day_header.configure(text=f"Clases del día — {self.fecha_filtrada} ({' | '.join(parts)})")
+        except Exception:
+            pass
 
-            # Cabecera strip
-            strip = ctk.CTkFrame(card, fg_color=self._ACCENT, height=6, corner_radius=14)
-            strip.grid(row=0, column=0, sticky="ew")
+        def time_sort_key(r):
+            return (str(r.get("horaInicio") or ""), str(r.get("horaFin") or ""))
 
-            est = rec.get("nombre_estudiante") or self.estudiantes_id_to_name.get(self._take_id_est(rec), "Estudiante")
-            head = ctk.CTkFrame(card, fg_color="transparent")
-            head.grid(row=1, column=0, padx=12, pady=(8, 6), sticky="ew")
-            head.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(head, text=est, text_color=self._TEXT,
-                         font=ctk.CTkFont(size=16, weight="bold"), anchor="w") \
-                .grid(row=0, column=0, sticky="w")
-            self._status_badge(head, rec.get("estado", "")).grid(row=0, column=1, padx=6, sticky="e")
+        row = 0
+        area_order = [
+            ("carro", "Carro"),
+            ("moto", "Moto"),
+            ("mixto", "Carro + Moto"),
+            ("otros", "Otros"),
+        ]
 
-            # Mini tabla estudiante (SIN ID)
-            std = self._find_estudiante_info(self._take_id_est(rec))
-            std_wrap = ctk.CTkFrame(card, fg_color=self._PANEL, corner_radius=10)
-            std_wrap.grid(row=2, column=0, padx=12, pady=(2, 10), sticky="ew")
+        for area_key, area_title in area_order:
+            stu_map = grouped.get(area_key) or {}
+            if not stu_map:
+                continue
 
-            th = ctk.CTkFrame(std_wrap, fg_color=self._INPUT, corner_radius=10)
-            th.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
-            for c in range(3):
-                th.grid_columnconfigure(c, weight=1)
-            self._th(th, "Documento", 0)
-            self._th(th, "Teléfono", 1)
-            self._th(th, "Email", 2)
+            area_count = sum(len(v) for v in stu_map.values())
+            ctk.CTkLabel(
+                parent,
+                text=f"{area_title} ({area_count})",
+                text_color=self._MUTED,
+                anchor="w",
+                font=ctk.CTkFont(size=13, weight="bold"),
+            ).grid(row=row, column=0, padx=16, pady=(10 if row else 4, 4), sticky="w")
+            row += 1
 
-            tr = ctk.CTkFrame(std_wrap, fg_color="transparent")
-            tr.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
-            for c in range(3):
-                tr.grid_columnconfigure(c, weight=1)
-            self._td(tr, std.get("documento") or "—", 0)
-            self._td(tr, std.get("telefono") or "—", 1)
-            self._td(tr, std.get("email") or "—", 2)
+            def student_sort_key(item):
+                sid, clases = item
+                earliest = min((str(x.get("horaInicio") or "") for x in (clases or [])), default="")
+                return (self._student_name(sid).lower(), earliest)
 
-            # Detalle clase
-            body = ctk.CTkFrame(card, fg_color="transparent")
-            body.grid(row=3, column=0, padx=12, pady=(0, 8), sticky="ew")
-            for c in range(3):
-                body.grid_columnconfigure(c, weight=1)
+            for sid, clases in sorted(stu_map.items(), key=student_sort_key):
+                clases_sorted = sorted(list(clases or []), key=time_sort_key)
 
-            def kv(r, c, label, value):
-                box = ctk.CTkFrame(body, fg_color="#FBFBFD", corner_radius=10)
-                box.grid(row=r, column=c, padx=6, pady=6, sticky="ew")
-                box.grid_columnconfigure(0, weight=1)
-                ctk.CTkLabel(box, text=label, text_color=self._MUTED, anchor="w") \
-                    .grid(row=0, column=0, padx=10, pady=(8, 0), sticky="w")
-                ctk.CTkLabel(box, text=value or "—", text_color=self._TEXT, anchor="w",
-                             font=ctk.CTkFont(size=13, weight="bold")) \
-                    .grid(row=1, column=0, padx=10, pady=(0, 10), sticky="w")
+                card = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=14,
+                                    border_width=2, border_color=self._DIV)
+                card.grid(row=row, column=0, padx=8, pady=(6, 8), sticky="ew")
+                card.grid_columnconfigure(0, weight=1)
+                row += 1
 
-            pid = rec.get("id_profesor") or rec.get("id_instructor")
-            pro = rec.get("nombre_instructor") or self.profesores_id_to_name.get(pid, "—")
+                strip = ctk.CTkFrame(card, fg_color=self._ACCENT, height=6, corner_radius=14)
+                strip.grid(row=0, column=0, sticky="ew")
 
-            kv(0, 0, "Instructor", pro)
-            kv(0, 1, "Placa", rec.get("placa_vehiculo", ""))
-            kv(0, 2, "Fecha", rec.get("fecha", ""))
-
-            # Notas (opcional)
-            notas = rec.get("notas") or rec.get("observaciones")
-            if notas:
-                notes = ctk.CTkFrame(card, fg_color="#FFF9E6", corner_radius=10)
-                notes.grid(row=4, column=0, padx=12, pady=(0, 10), sticky="ew")
-                ctk.CTkLabel(notes, text="Notas", text_color="#7A5B00",
-                             font=ctk.CTkFont(size=13, weight="bold"), anchor="w") \
-                    .grid(row=0, column=0, padx=10, pady=(8, 0), sticky="w")
-                ctk.CTkLabel(notes, text=notas, text_color="#4B3E1D", anchor="w", justify="left") \
-                    .grid(row=1, column=0, padx=10, pady=(2, 10), sticky="ew")
-
-            # Acciones
-            actions = ctk.CTkFrame(card, fg_color="transparent")
-            actions.grid(row=5, column=0, padx=12, pady=(0, 12), sticky="e")
-
-            def icon_btn(label, cmd):
-                return ctk.CTkButton(
-                    actions, text=label, width=110, height=32, corner_radius=12,
-                    fg_color=self._ACCENT, hover_color=self._YELLOW,
-                    text_color="#ffffff", command=cmd
+                est = self._student_name(sid)
+                head = ctk.CTkFrame(card, fg_color="transparent")
+                head.grid(row=1, column=0, padx=12, pady=(8, 6), sticky="ew")
+                head.grid_columnconfigure(0, weight=1)
+                name_lbl = ctk.CTkLabel(
+                    head, text=est, text_color=self._TEXT,
+                    font=ctk.CTkFont(size=16, weight="bold"), anchor="w"
                 )
+                name_lbl.grid(row=0, column=0, sticky="w")
+                try:
+                    name_lbl.configure(cursor="hand2")
+                except Exception:
+                    pass
+                name_lbl.bind("<Button-1>", lambda e, _sid=sid: self._open_student_popup(_sid))
+                ctk.CTkLabel(
+                    head,
+                    text=f"{len(clases_sorted)} clase(s)",
+                    fg_color=self._INPUT,
+                    text_color=self._TEXT,
+                    corner_radius=999,
+                    padx=12,
+                    pady=6
+                ).grid(row=0, column=1, padx=6, sticky="e")
+                ctk.CTkButton(
+                    head,
+                    text="Ver",
+                    width=60,
+                    height=30,
+                    corner_radius=10,
+                    fg_color=self._INPUT,
+                    hover_color=self._DIV,
+                    text_color=self._TEXT,
+                    command=lambda _sid=sid: self._open_student_popup(_sid),
+                ).grid(row=0, column=2, padx=(0, 2), sticky="e")
 
-            icon_btn("✎ Editar", lambda r_id=rid: (self._select_row(r_id), self._editar())).grid(row=0, column=0, padx=6)
-            icon_btn("🗑️ Eliminar", lambda r_id=rid: (self._select_row(r_id), self._eliminar())).grid(row=0, column=1, padx=6)
+                # Mini tabla estudiante (SIN ID)
+                std = self._find_estudiante_info(sid)
+                std_wrap = ctk.CTkFrame(card, fg_color=self._PANEL, corner_radius=10)
+                std_wrap.grid(row=2, column=0, padx=12, pady=(2, 10), sticky="ew")
 
-            card.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
+                th = ctk.CTkFrame(std_wrap, fg_color=self._INPUT, corner_radius=10)
+                th.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+                for c in range(3):
+                    th.grid_columnconfigure(c, weight=1)
+                self._th(th, "Documento", 0)
+                self._th(th, "Teléfono", 1)
+                self._th(th, "Email", 2)
+
+                tr = ctk.CTkFrame(std_wrap, fg_color="transparent")
+                tr.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
+                for c in range(3):
+                    tr.grid_columnconfigure(c, weight=1)
+                self._td(tr, std.get("documento") or "—", 0)
+                self._td(tr, std.get("telefono") or "—", 1)
+                self._td(tr, std.get("email") or "—", 2)
+
+                # Lista de clases del estudiante en el día (compacta)
+                clases_wrap = ctk.CTkFrame(card, fg_color="transparent")
+                clases_wrap.grid(row=3, column=0, padx=12, pady=(0, 12), sticky="ew")
+                clases_wrap.grid_columnconfigure(0, weight=1)
+
+                hdr = ctk.CTkFrame(clases_wrap, fg_color=self._INPUT, corner_radius=10)
+                hdr.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+                hdr.grid_columnconfigure(1, weight=1)
+                ctk.CTkLabel(hdr, text="Hora", text_color=self._MUTED, anchor="w").grid(row=0, column=0, padx=10, pady=8, sticky="w")
+                ctk.CTkLabel(hdr, text="Instructor", text_color=self._MUTED, anchor="w").grid(row=0, column=1, padx=10, pady=8, sticky="w")
+                ctk.CTkLabel(hdr, text="Placa", text_color=self._MUTED, anchor="w").grid(row=0, column=2, padx=10, pady=8, sticky="w")
+                ctk.CTkLabel(hdr, text="Sede", text_color=self._MUTED, anchor="w").grid(row=0, column=3, padx=10, pady=8, sticky="w")
+                ctk.CTkLabel(hdr, text="Estado", text_color=self._MUTED, anchor="w").grid(row=0, column=4, padx=10, pady=8, sticky="w")
+                ctk.CTkLabel(hdr, text="", text_color=self._MUTED, anchor="w").grid(row=0, column=5, padx=10, pady=8, sticky="e")
+
+                for j, r in enumerate(clases_sorted, start=1):
+                    rid = self._row_key(r)
+
+                    hi = (r.get("horaInicio") or "").strip()
+                    hf = (r.get("horaFin") or "").strip()
+                    hora = f"{hi} - {hf}".strip(" -") or "—"
+
+                    pid = r.get("id_profesor") or r.get("id_instructor")
+                    pro = r.get("nombre_instructor") or self.profesores_id_to_name.get(pid, "—")
+                    placa = (r.get("placa_vehiculo") or "").strip() or "—"
+                    sede = self._class_sede(r)
+
+                    line = ctk.CTkFrame(clases_wrap, fg_color="#FBFBFD", corner_radius=10, border_width=1, border_color=self._DIV)
+                    line.grid(row=j, column=0, sticky="ew", pady=4)
+                    line.grid_columnconfigure(1, weight=1)
+
+                    ctk.CTkLabel(line, text=hora, text_color=self._TEXT, anchor="w",
+                                 font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=0, padx=10, pady=10, sticky="w")
+                    ctk.CTkLabel(line, text=pro, text_color=self._TEXT, anchor="w").grid(row=0, column=1, padx=10, pady=10, sticky="w")
+                    ctk.CTkLabel(line, text=placa, text_color=self._TEXT, anchor="w").grid(row=0, column=2, padx=10, pady=10, sticky="w")
+                    ctk.CTkLabel(line, text=sede, text_color=self._TEXT, anchor="w").grid(row=0, column=3, padx=10, pady=10, sticky="w")
+                    self._status_badge(line, r.get("estado", "")).grid(row=0, column=4, padx=10, pady=6, sticky="w")
+
+                    actions = ctk.CTkFrame(line, fg_color="transparent")
+                    actions.grid(row=0, column=5, padx=8, pady=6, sticky="e")
+
+                    ctk.CTkButton(
+                        actions, text="✎", width=36, height=30, corner_radius=10,
+                        fg_color=self._ACCENT, hover_color=self._YELLOW, text_color="#ffffff",
+                        command=lambda r_id=rid: (self._select_row(r_id), self._editar())
+                    ).grid(row=0, column=0, padx=(0, 6))
+
+                    ctk.CTkButton(
+                        actions, text="🗑️", width=36, height=30, corner_radius=10,
+                        fg_color=self._ACCENT, hover_color=self._YELLOW, text_color="#ffffff",
+                        command=lambda r_id=rid: (self._select_row(r_id), self._eliminar())
+                    ).grid(row=0, column=1)
+
+                    line.bind("<Button-1>", lambda e, r_id=rid: self._select_row(r_id))
 
     # ============================
     # Mostrar vista
@@ -509,6 +571,7 @@ class ClasesView(BaseModuleFrame):
                     continue
                 nombre = f"{e.get('nombre','')} {e.get('apellido','')}".strip() or str(key)
                 self.estudiantes_id_to_name[key] = nombre
+                self.estudiantes_id_to_name[str(key)] = nombre
 
                 doc = (
                     e.get("documento") or e.get("documentoEstudiante") or
@@ -517,6 +580,7 @@ class ClasesView(BaseModuleFrame):
                     e.get("identificacion") or e.get("identificación")
                 )
                 self.estudiantes_id_to_doc[key] = self._normalize_doc(doc)
+                self.estudiantes_id_to_doc[str(key)] = self.estudiantes_id_to_doc[key]
 
             for p in self._profesores:
                 key = p.get("id") or p.get("idProfesor")
@@ -524,6 +588,7 @@ class ClasesView(BaseModuleFrame):
                     continue
                 nombre = f"{p.get('nombre','')} {p.get('apellido','')}".strip() or str(key)
                 self.profesores_id_to_name[key] = nombre
+                self.profesores_id_to_name[str(key)] = nombre
 
             if self.form:
                 self.form.set_options(self._estudiantes, self._profesores, self._vehiculos)
@@ -841,22 +906,84 @@ class ClasesView(BaseModuleFrame):
     # ============================
     def _row_values(self, rec):
         id_est = self._take_id_est(rec)
-        est = rec.get("nombre_estudiante") or self.estudiantes_id_to_name.get(id_est, "")
+        est = rec.get("nombre_estudiante") or self._student_name(id_est)
         doc = self._get_documento_from(rec)
         pid = rec.get("id_profesor") or rec.get("id_instructor")
         pro = rec.get("nombre_instructor") or self.profesores_id_to_name.get(pid, "")
+        sede = self._class_sede(rec)
         return [
             est,
             doc,
             pro,
             rec.get("placa_vehiculo", ""),
+            sede,
             rec.get("fecha", ""),
             rec.get("estado", ""),
-            "acciones",
         ]
 
     def _take_id_est(self, rec):
         return rec.get("id_estudiante") or rec.get("idEstudiante") or rec.get("estudianteId")
+
+    def _student_name(self, id_est):
+        if id_est in (None, ""):
+            return "Estudiante"
+        return (
+            self.estudiantes_id_to_name.get(id_est)
+            or self.estudiantes_id_to_name.get(str(id_est))
+            or "Estudiante"
+        )
+
+    def _student_area(self, id_est):
+        e = self._find_by_id(self._estudiantes, id_est, ("id", "idEstudiante"))
+        tipo = str((e or {}).get("tipoPase") or "").strip().lower()
+        cat = str(
+            (e or {}).get("categoria")
+            or (e or {}).get("categoriaLicencia")
+            or (e or {}).get("licenciaCategoria")
+            or ""
+        ).strip().upper()
+
+        if "carro" in tipo and "moto" in tipo:
+            return ("mixto", "Carro + Moto")
+        if "carro" in tipo:
+            return ("carro", "Carro")
+        if "moto" in tipo:
+            return ("moto", "Moto")
+
+        if cat:
+            if cat.startswith("A"):
+                return ("moto", "Moto")
+            if cat in {"B1", "C1"}:
+                return ("carro", "Carro")
+
+        return ("otros", "Otros")
+
+    @staticmethod
+    def _extract_sede_value(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, dict):
+            for k in ("nombre", "name", "sede", "descripcion"):
+                v = value.get(k)
+                if v is not None and str(v).strip():
+                    return str(v).strip()
+            return ""
+        txt = str(value).strip()
+        return txt
+
+    def _class_sede(self, rec) -> str:
+        try:
+            sid = self._take_id_est(rec)
+            est = self._find_by_id(self._estudiantes, sid, ("id", "idEstudiante"))
+            sede_est = self._extract_sede_value((est or {}).get("sede") or (est or {}).get("sedePrincipal"))
+
+            veh = self._find_by_placa(self._vehiculos, rec.get("placa_vehiculo"))
+            sede_veh = self._extract_sede_value((veh or {}).get("sede"))
+
+            sede = sede_est or sede_veh
+            return sede or "—"
+        except Exception:
+            return "—"
 
     # ============================
     # Documento robusto
@@ -910,21 +1037,16 @@ class ClasesView(BaseModuleFrame):
     # Selección / highlight
     # ============================
     def _select_row(self, rid):
-        prev = self._selected_id
         self._selected_id = rid
-
-        # si estamos en tabla, repinta solo prev y nuevo si existen
         if not self._calendar_mode:
-            if prev in self._row_map:
-                try:
-                    self._row_map[prev]["frame"].configure(fg_color=self._PANEL)
-                except Exception:
-                    pass
-            if rid in self._row_map:
-                try:
-                    self._row_map[rid]["frame"].configure(fg_color=self._DIV)
-                except Exception:
-                    pass
+            try:
+                if getattr(self, "tree", None) and self.tree.winfo_exists():
+                    iid = (self._key_to_iid or {}).get(rid)
+                    if iid:
+                        self.tree.selection_set(iid)
+                        self.tree.see(iid)
+            except Exception:
+                pass
 
     # ============================
     # Calendario
@@ -1097,7 +1219,7 @@ class ClasesView(BaseModuleFrame):
     def _find_estudiante_info(self, id_est):
         res = {}
         try:
-            e = next((x for x in self._estudiantes if (x.get("id") or x.get("idEstudiante")) == id_est), None)
+            e = self._find_by_id(self._estudiantes, id_est, ("id", "idEstudiante"))
             if not e:
                 return {}
             res["documento"] = self._normalize_doc(
@@ -1108,9 +1230,123 @@ class ClasesView(BaseModuleFrame):
             )
             res["telefono"] = e.get("telefono") or e.get("celular") or e.get("phone")
             res["email"] = e.get("email") or e.get("correo")
+            res["tipoPase"] = e.get("tipoPase")
+            res["categoria"] = e.get("categoria") or e.get("categoriaLicencia") or e.get("licenciaCategoria")
             return res
         except Exception:
             return {}
+
+    def _open_student_popup(self, id_est):
+        est = self._find_by_id(self._estudiantes, id_est, ("id", "idEstudiante"))
+        if not est:
+            messagebox.showinfo("Estudiante", "No se encontró el estudiante en los catálogos.", parent=self)
+            return
+
+        name = self._student_name(id_est)
+        sede = self._extract_sede_value(est.get("sede") or est.get("sedePrincipal")) or "—"
+        tipo = str(est.get("tipoPase") or "").strip() or "—"
+        categoria = str(
+            est.get("categoria")
+            or est.get("categoriaLicencia")
+            or est.get("licenciaCategoria")
+            or ""
+        ).strip().upper() or "—"
+
+        doc = (
+            est.get("numeroDocumento")
+            or est.get("documento")
+            or est.get("documentoEstudiante")
+            or est.get("cc")
+            or est.get("cedula")
+            or est.get("dni")
+            or est.get("identificacion")
+        )
+        doc = self._normalize_doc(doc)
+
+        tel = est.get("telefono") or est.get("celular") or est.get("phone") or "—"
+        email = est.get("email") or est.get("correo") or "—"
+        direccion = est.get("direccion") or est.get("dirección") or est.get("dir") or "—"
+        estado = est.get("estado") or "—"
+
+        top = ctk.CTkToplevel(self)
+        top.title(f"Estudiante — {name}")
+        top.geometry("560x440")
+        top.minsize(520, 420)
+        try:
+            top.configure(fg_color=self._BG)
+        except Exception:
+            pass
+        try:
+            top.transient(self.winfo_toplevel())
+        except Exception:
+            pass
+        try:
+            top.grab_set()
+        except Exception:
+            pass
+
+        wrap = ctk.CTkFrame(
+            top,
+            fg_color=self._PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=self._DIV,
+        )
+        wrap.pack(fill="both", expand=True, padx=16, pady=16)
+
+        strip = ctk.CTkFrame(wrap, fg_color=self._ACCENT, height=6, corner_radius=16)
+        strip.pack(fill="x")
+
+        head = ctk.CTkFrame(wrap, fg_color="transparent")
+        head.pack(fill="x", padx=14, pady=(12, 6))
+        head.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            head, text=name, text_color=self._TEXT,
+            font=ctk.CTkFont(size=18, weight="bold"), anchor="w"
+        ).grid(row=0, column=0, sticky="w")
+
+        meta = f"Sede: {sede} | Categoría: {categoria} | Tipo: {tipo}"
+        ctk.CTkLabel(head, text=meta, text_color=self._MUTED, anchor="w").grid(row=1, column=0, pady=(2, 0), sticky="w")
+
+        body = ctk.CTkScrollableFrame(wrap, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        inner = getattr(body, "_scrollable_frame", None) or getattr(body, "scrollable_frame", None) or body
+        inner.grid_columnconfigure(1, weight=1)
+
+        def field(r, label, value):
+            ctk.CTkLabel(inner, text=label, text_color=self._MUTED, anchor="w") \
+                .grid(row=r, column=0, padx=(10, 8), pady=6, sticky="w")
+            ctk.CTkLabel(
+                inner,
+                text=str(value or "—"),
+                text_color=self._TEXT,
+                anchor="w",
+                justify="left",
+                wraplength=360
+            ).grid(row=r, column=1, padx=(0, 10), pady=6, sticky="ew")
+
+        field(0, "Documento", doc)
+        field(1, "Teléfono", tel)
+        field(2, "Email", email)
+        field(3, "Dirección", direccion)
+        field(4, "Sede", sede)
+        field(5, "Categoría", categoria)
+        field(6, "Tipo pase", tipo)
+        field(7, "Estado", estado)
+
+        btns = ctk.CTkFrame(wrap, fg_color="transparent")
+        btns.pack(fill="x", padx=14, pady=(0, 12))
+        ctk.CTkButton(
+            btns,
+            text="Cerrar",
+            height=36,
+            corner_radius=12,
+            fg_color=self._ACCENT,
+            hover_color=self._YELLOW,
+            text_color="#ffffff",
+            command=top.destroy,
+        ).pack(side="right")
 
     def _th(self, parent, text, col):
         ctk.CTkLabel(
@@ -1121,5 +1357,12 @@ class ClasesView(BaseModuleFrame):
     def _td(self, parent, text, col):
         box = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=8, border_width=1, border_color=self._DIV)
         box.grid(row=0, column=col, padx=6, pady=2, sticky="ew")
-        ctk.CTkLabel(box, text=str(text or "—"), text_color=self._TEXT, anchor="w") \
-            .grid(row=0, column=0, padx=8, pady=6, sticky="w")
+        wrap = 120 if col == 0 else 140 if col == 1 else 260
+        ctk.CTkLabel(
+            box,
+            text=str(text or "—"),
+            text_color=self._TEXT,
+            anchor="w",
+            justify="left",
+            wraplength=wrap
+        ).grid(row=0, column=0, padx=8, pady=6, sticky="w")

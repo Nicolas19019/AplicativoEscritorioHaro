@@ -32,6 +32,19 @@ class EstadosCuentaView(BaseModuleFrame):
         red_btn("＋ Nuevo", self._nuevo).grid(row=0, column=0, padx=(0,8))
         red_btn("↻ Refrescar", self._refrescar).grid(row=0, column=3, padx=8)
 
+        # Buscador (por nombre de estudiante)
+        self.en_buscar = ctk.CTkEntry(
+            tb,
+            height=36,
+            corner_radius=12,
+            fg_color=self.app.COLOR_INPUT_BG,
+            text_color=self.app.COLOR_TEXT,
+            border_width=2,
+            border_color=self.app.COLOR_DIVIDER,
+            placeholder_text="Buscar estudiante…"
+        )
+        self.en_buscar.grid(row=0, column=5, padx=(8, 0), sticky="e")
+
         # ===== Formulario =====
         self._build_form()
         self.form.grid(row=2, column=0, padx=16, pady=(8,10), sticky="ew")
@@ -39,10 +52,12 @@ class EstadosCuentaView(BaseModuleFrame):
 
         # ===== Tabla =====
         self.table = ctk.CTkScrollableFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        self.table.grid(row=3, column=0, padx=16, pady=(0,8), sticky="nsew")
+        # Usa la fila 4 (la que expande BaseModuleFrame) para que se vean más filas.
+        self.table.grid(row=4, column=0, padx=16, pady=(0, 8), sticky="nsew")
         self.table.grid_columnconfigure(0, weight=1)
 
         # ===== Variables =====
+        self._all_data = []               # fuente sin filtrar
         self._data = []                   # type: list[Dict[str, Any]]
         self._rows = []                   # type: list[ctk.CTkFrame]
         self._selected_idx = None         # type: Optional[int]
@@ -56,9 +71,41 @@ class EstadosCuentaView(BaseModuleFrame):
         self._empty_label = None
         self._loading_overlay = None
         self._last_refresh_ts = 0
+        self._search_after_id = None
 
         self._render_table()
+        self.en_buscar.bind("<KeyRelease>", self._on_search_key)
         self.after(150, self._cargar_catalogos_y_listar)
+
+    def _take_estudiante_id(self, rec):
+        return rec.get("idEstudiante") or rec.get("id_estudiante") or rec.get("estudianteId")
+
+    def _student_name_for(self, estudiante_id) -> str:
+        if estudiante_id in (None, ""):
+            return "—"
+        name = self.estudiantes_id_to_name.get(estudiante_id)
+        if not name:
+            name = self.estudiantes_id_to_name.get(str(estudiante_id))
+        return name or "—"
+
+    def _apply_search(self, rows):
+        term = (self.en_buscar.get() or "").strip().lower()
+        if not term:
+            return list(rows or [])
+        out = []
+        for rec in (rows or []):
+            name = self._student_name_for(self._take_estudiante_id(rec))
+            if term in (name or "").lower():
+                out.append(rec)
+        return out
+
+    def _on_search_key(self, _evt=None):
+        if self._search_after_id:
+            try:
+                self.after_cancel(self._search_after_id)
+            except Exception:
+                pass
+        self._search_after_id = self.after(200, lambda: self._queue_render(self._apply_search(self._all_data)))
 
     # ===================== FORMULARIO =====================
     def _build_form(self):
@@ -173,7 +220,7 @@ class EstadosCuentaView(BaseModuleFrame):
             self.app._info("Selecciona un registro para eliminar.")
             return
         rec = self._data[self._selected_idx]
-        est_name = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), rec.get("idEstudiante"))
+        est_name = self._student_name_for(self._take_estudiante_id(rec))
         if not messagebox.askyesno("Confirmar", f"¿Eliminar estado de cuenta de {est_name}"):
             self.app._info("Operación cancelada.")
             return
@@ -181,10 +228,15 @@ class EstadosCuentaView(BaseModuleFrame):
             if getattr(self.app, "api", None) and rec.get("id"):
                 self.app.api.delete("estados-cuenta", rec.get("id"))
                 self.app._info("Registro eliminado.")
+                self._last_refresh_ts = 0
+                self._refrescar(force_refresh=True)
             else:
-                del self._data[self._selected_idx]
+                if rec in self._all_data:
+                    self._all_data.remove(rec)
+                else:
+                    del self._data[self._selected_idx]
                 self.app._info("Registro eliminado (local).")
-            self._refrescar(local_only=True)
+                self._refrescar(local_only=True)
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
 
@@ -202,10 +254,12 @@ class EstadosCuentaView(BaseModuleFrame):
                 if getattr(self.app, "api", None):
                     created = self.app.api.create("estados-cuenta", payload)  # <- backend calcula 'estado'
                     self.app._info("Estado de cuenta creado.")
+                    self._last_refresh_ts = 0
+                    self._refrescar(force_refresh=True)
                 else:
-                    payload["_local_id"] = (max([r.get("_local_id",0) for r in self._data] or [0]) + 1)
+                    payload["_local_id"] = (max([r.get("_local_id", 0) for r in self._all_data] or [0]) + 1)
                     payload["estado"] = self._preview_estado(payload)  # local-only
-                    self._data.append(payload)
+                    self._all_data.append(payload)
             else:
                 if self._editing_idx is None:
                     self.app._info("No se seleccionó registro para actualizar.")
@@ -214,12 +268,15 @@ class EstadosCuentaView(BaseModuleFrame):
                 if getattr(self.app, "api", None) and rec.get("id"):
                     updated = self.app.api.update("estados-cuenta", rec.get("id"), payload)
                     self.app._info("Estado de cuenta actualizado.")
+                    self._last_refresh_ts = 0
+                    self._refrescar(force_refresh=True)
                 else:
                     payload["estado"] = self._preview_estado(payload)  # local-only
                     self._data[self._editing_idx].update(payload)
 
             self._hide_form()
-            self._refrescar(local_only=True)
+            if not getattr(self.app, "api", None):
+                self._refrescar(local_only=True)
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible guardar:\n{e}", parent=self)
 
@@ -248,6 +305,7 @@ class EstadosCuentaView(BaseModuleFrame):
                 nombre = "{} {}".format(e.get("nombre",""), e.get("apellido","")).strip()
                 if eid is not None and nombre:
                     self.estudiantes_id_to_name[eid] = nombre
+                    self.estudiantes_id_to_name[str(eid)] = nombre
                     self.estudiantes_name_to_id[nombre] = eid
 
             self.cb_estudiante.configure(values=sorted(list(self.estudiantes_name_to_id.keys())))
@@ -260,7 +318,8 @@ class EstadosCuentaView(BaseModuleFrame):
 
     def _refrescar(self, local_only=False, force_refresh=True):
         if local_only:
-            self._queue_render(self._data)
+            base = self._all_data or self._data
+            self._queue_render(self._apply_search(base))
             self.app._info(f"Estados de cuenta: {len(self._data)} registros.")
             return
 
@@ -270,7 +329,8 @@ class EstadosCuentaView(BaseModuleFrame):
         self._last_refresh_ts = now
 
         if not getattr(self.app, "api", None):
-            self._queue_render(self._data)
+            base = self._all_data or self._data
+            self._queue_render(self._apply_search(base))
             self.app._info(f"Estados de cuenta: {len(self._data)} registros.")
             return
 
@@ -287,8 +347,8 @@ class EstadosCuentaView(BaseModuleFrame):
                         raw = []
 
                 def apply_data():
-                    self._data = raw or []
-                    self._queue_render(self._data)
+                    self._all_data = raw or []
+                    self._queue_render(self._apply_search(self._all_data))
                     self.app._info(f"Estados de cuenta: {len(self._data)} registros.")
 
                 self.after(0, apply_data)
@@ -346,7 +406,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._queue_render(self._data)
 
     def _row_values(self, rec):
-        est = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), str(rec.get("idEstudiante") or ""))
+        est = self._student_name_for(self._take_estudiante_id(rec))
         total = float(rec.get("montoTotal") or 0)
         pagado = float(rec.get("montoPagado") or 0)
         saldo = total - pagado
@@ -516,16 +576,47 @@ class EstadosCuentaView(BaseModuleFrame):
         saldo_color = "#d9534f" if total_saldo > 0 else "#28a745"
 
         self._totals_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self._totals_frame.grid(row=4, column=0, padx=16, pady=(0,12), sticky="ew")
+        self._totals_frame.grid(row=5, column=0, padx=16, pady=(0, 12), sticky="ew")
+        self._totals_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self._totals_frame, text=f"Totales — Registros: {len(self._data)}",
-                     text_color=self.app.COLOR_MUTED).grid(row=0, column=0, padx=(8,12), pady=8, sticky="w")
-        ctk.CTkLabel(self._totals_frame, text=f"Monto total: {total_total:,.2f}",
-                     text_color=self.app.COLOR_TEXT).grid(row=0, column=1, padx=12, pady=8, sticky="e")
-        ctk.CTkLabel(self._totals_frame, text=f"Pagado: {total_pagado:,.2f}",
-                     text_color=self.app.COLOR_TEXT).grid(row=0, column=2, padx=12, pady=8, sticky="e")
-        ctk.CTkLabel(self._totals_frame, text=f"Saldo: {total_saldo:,.2f}",
-                     text_color=saldo_color).grid(row=0, column=3, padx=12, pady=8, sticky="e")
+        box = ctk.CTkFrame(
+            self._totals_frame,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=12,
+            border_width=2,
+            border_color=self.app.COLOR_RED
+        )
+        box.grid(row=0, column=0, padx=8, pady=0)
+        box.grid_columnconfigure((0, 1, 2), weight=1)
+
+        ctk.CTkLabel(
+            box,
+            text=f"Totales — Registros: {len(self._data)}",
+            text_color=self.app.COLOR_MUTED,
+            anchor="center",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, columnspan=3, padx=16, pady=(12, 6), sticky="ew")
+
+        ctk.CTkLabel(
+            box,
+            text=f"Monto total: {total_total:,.2f}",
+            text_color=self.app.COLOR_TEXT,
+            anchor="center",
+        ).grid(row=1, column=0, padx=16, pady=(0, 12), sticky="ew")
+
+        ctk.CTkLabel(
+            box,
+            text=f"Pagado: {total_pagado:,.2f}",
+            text_color=self.app.COLOR_TEXT,
+            anchor="center",
+        ).grid(row=1, column=1, padx=16, pady=(0, 12), sticky="ew")
+
+        ctk.CTkLabel(
+            box,
+            text=f"Saldo: {total_saldo:,.2f}",
+            text_color=saldo_color,
+            anchor="center",
+        ).grid(row=1, column=2, padx=16, pady=(0, 12), sticky="ew")
 
     # ===================== SELECCIÓN =====================
     def _select_row(self, idx: int):
@@ -549,7 +640,7 @@ class EstadosCuentaView(BaseModuleFrame):
     def _delete_row(self, idx: int):
         self._select_row(idx)
         rec = self._data[idx]
-        est = self.estudiantes_id_to_name.get(rec.get("idEstudiante"), rec.get("idEstudiante"))
+        est = self._student_name_for(self._take_estudiante_id(rec))
         if not messagebox.askyesno("Confirmar", f"¿Eliminar registro de {est}"):
             self.app._info("Operación cancelada.")
             return
@@ -557,10 +648,15 @@ class EstadosCuentaView(BaseModuleFrame):
             if getattr(self.app, "api", None) and rec.get("id"):
                 self.app.api.delete("estados-cuenta", rec.get("id"))
                 self.app._info("Registro eliminado.")
+                self._last_refresh_ts = 0
+                self._refrescar(force_refresh=True)
             else:
-                del self._data[idx]
+                if rec in self._all_data:
+                    self._all_data.remove(rec)
+                else:
+                    del self._data[idx]
                 self.app._info("Registro eliminado (local).")
-            self._refrescar(local_only=True)
+                self._refrescar(local_only=True)
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
 

@@ -37,6 +37,38 @@ def _normalize_tipo_pase(raw_value):
             tokens.append("moto")
     return ",".join(tokens)
 
+def _extract_sede(data: dict) -> str:
+    """
+    Devuelve la sede en formato texto, soportando variaciones de la API:
+      - "sede" como string / id
+      - "sede" como objeto (p.ej. {"id": 1, "nombre": "..."})
+      - campos alternos: sedePrincipal, sedeNombre, nombreSede, campus...
+    """
+    if not isinstance(data, dict):
+        return ""
+
+    for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
+        if key not in data:
+            continue
+        val = data.get(key)
+        if val is None:
+            continue
+        if isinstance(val, dict):
+            for k2 in ("nombre", "name", "descripcion", "sede"):
+                v2 = val.get(k2)
+                if v2 is not None and str(v2).strip():
+                    return str(v2).strip()
+            txt = str(val).strip()
+            return txt
+        if isinstance(val, str):
+            if val.strip():
+                return val.strip()
+            continue
+        txt = str(val).strip()
+        if txt:
+            return txt
+    return ""
+
 
 # === StudentInlineForm (idéntico al tuyo original) ===
 class StudentInlineForm(ctk.CTkFrame):
@@ -210,7 +242,7 @@ class StudentInlineForm(ctk.CTkFrame):
         tipo_estudiante = (d.get("tipoEstudiante") or "prospecto").strip().lower()
         self.cb_tipo_estudiante.set(tipo_estudiante or "prospecto")
 
-        self.en_sede.insert(0, d.get("sede", "") or "")
+        self.en_sede.insert(0, _extract_sede(d))
 
         horas = d.get("horas", 0)
         self.en_horas.insert(0, "" if horas is None else str(horas))
@@ -672,7 +704,7 @@ class EstudiantesView(BaseModuleFrame):
             stu.get("numeroDocumento", ""),
             full_name,
             categoria_disp,
-            stu.get("sede", "") or "",
+            _extract_sede(stu),
             horas_disp,
             tipo_pase_disp or "-",
             "Aprobado" if teorico_ok else "Pendiente",

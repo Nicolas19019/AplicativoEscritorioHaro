@@ -76,7 +76,7 @@ class ReportesView(BaseModuleFrame):
             pagesize=LETTER,
             leftMargin=2.2 * cm,
             rightMargin=2.2 * cm,
-            topMargin=3.0 * cm,     # deja aire para el header + logo
+            topMargin=4.2 * cm,     # deja aire para el header + logo (evita que quede pegado arriba)
             bottomMargin=2.0 * cm
         )
 
@@ -131,13 +131,18 @@ class ReportesView(BaseModuleFrame):
                     logo_h = logo_w * aspect
 
                     x = doc.pagesize[0] - doc.rightMargin - logo_w
-                    y = doc.pagesize[1] - doc.topMargin + 0.75 * cm  # sube un poco
+                    # Coloca el logo dentro del margen superior con padding para que no quede pegado arriba.
+                    top_pad = 1.0 * cm
+                    y = doc.pagesize[1] - top_pad - logo_h
+                    min_y = doc.pagesize[1] - doc.topMargin + 0.15 * cm
+                    if y < min_y:
+                        y = min_y
                     canvas.drawImage(img, x, y, width=logo_w, height=logo_h, mask="auto")
                 except Exception as e:
                     print(f"[PDF] No se pudo dibujar logo: {e}")
 
             # --- línea sutil separadora ---
-            line_y = doc.pagesize[1] - doc.topMargin + 0.35 * cm
+            line_y = doc.pagesize[1] - doc.topMargin + 0.25 * cm
             canvas.setStrokeColor(colors.HexColor("#E5E7EB"))
             canvas.setLineWidth(1)
             canvas.line(doc.leftMargin, line_y, doc.pagesize[0] - doc.rightMargin, line_y)
