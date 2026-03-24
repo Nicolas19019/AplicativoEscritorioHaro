@@ -25,6 +25,18 @@ class HaroDesktopApp(ctk.CTk):
     RED_SOFT_BORDER   = ("#FDE3E3", "#3a1f1f")
     COLOR_RED         = ("#E53935", "#ff4c4c")   # acción/danger
     RED_HOVER         = ("#D7322F", "#ff5f5f")
+    GREEN_SOFT_BG     = RED_SOFT_BG
+    GREEN_SOFT_BORDER = RED_SOFT_BORDER
+    COLOR_GREEN       = COLOR_RED
+    GREEN_HOVER       = ("#D4A017", "#E0B43F")
+    BLUE_SOFT_BG      = ("#FFF8E1", "#2a2618")
+    BLUE_SOFT_BORDER  = ("#F7EAC1", "#3a3420")
+    COLOR_BLUE        = COLOR_RED
+    BLUE_HOVER        = ("#D4A017", "#E0B43F")
+    PURPLE_SOFT_BG    = ("#FFF8E1", "#2a2618")
+    PURPLE_SOFT_BORDER = ("#F7EAC1", "#3a3420")
+    COLOR_PURPLE      = COLOR_RED
+    PURPLE_HOVER      = ("#D4A017", "#E0B43F")
 
    # Mostaza (sutil, no chillón)
     MUSTARD_SOFT_BG     = ("#FFF8E1", "#2a2618")
@@ -69,6 +81,9 @@ class HaroDesktopApp(ctk.CTk):
 
     API_USER_DEFAULT = ""
     API_PASS_DEFAULT = ""
+    ADMIN_OTP_EMAIL = "haroacademiadecol@gmail.com"
+    SUPERADMIN_EMAIL = "haroacademiadecol@gmail.com"
+    SUPERADMIN_PASSWORD = "Harogestion2026"
 
     def __init__(self):
         super().__init__()
@@ -93,6 +108,7 @@ class HaroDesktopApp(ctk.CTk):
         self.api_user = None
         self.api_pass = None
         self.api: ApiClient | None = None
+        self.is_superadmin = False
         self.views = {}
         self._view_factories = {}
 
@@ -307,6 +323,7 @@ class HaroDesktopApp(ctk.CTk):
 
         specs = [
             ("Estudiantes", "👤"),
+            ("Administradores", "🛡"),
             ("Instructores", "🧑‍🏫"),
             ("Vehículos", "🚗"),
             ("Clases", "📅"),
@@ -315,6 +332,8 @@ class HaroDesktopApp(ctk.CTk):
         ]
         for i, (n, ic) in enumerate(specs, start=1):
             add_nav(i, n, ic)
+
+        self._apply_nav_visibility()
 
         ctk.CTkFrame(self.sidebar, height=1, fg_color=self.COLOR_DIVIDER, corner_radius=0) \
             .grid(row=len(specs) + 1, column=0, padx=12, pady=(16, 8), sticky="ew")
@@ -329,10 +348,50 @@ class HaroDesktopApp(ctk.CTk):
         self.content.grid(row=1, column=1, sticky="nsew")
         self.content.grid_rowconfigure(0, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
+        self._loading_overlay = None
+        self._loading_text = None
+
+    def _show_loading(self, text="Cargando..."):
+        try:
+            if self._loading_overlay and self._loading_overlay.winfo_exists():
+                if self._loading_text and self._loading_text.winfo_exists():
+                    self._loading_text.configure(text=text)
+                self._loading_overlay.lift()
+                return
+
+            self._loading_overlay = ctk.CTkFrame(
+                self.content,
+                fg_color=("#FFFFFF", "#151517"),
+                corner_radius=16,
+                border_width=1,
+                border_color=self.COLOR_DIVIDER,
+            )
+            self._loading_overlay.place(relx=0.5, rely=0.08, anchor="n")
+
+            self._loading_text = ctk.CTkLabel(
+                self._loading_overlay,
+                text=text,
+                text_color=self.COLOR_TEXT,
+                font=ctk.CTkFont(size=13, weight="bold"),
+            )
+            self._loading_text.pack(padx=18, pady=10)
+            self._loading_overlay.lift()
+        except Exception:
+            pass
+
+    def _hide_loading(self):
+        try:
+            if self._loading_overlay and self._loading_overlay.winfo_exists():
+                self._loading_overlay.destroy()
+        except Exception:
+            pass
+        self._loading_overlay = None
+        self._loading_text = None
 
     def _register_view_factories(self):
         self._view_factories = {
             "Estudiantes": self._create_estudiantes_view,
+            "Administradores": self._create_administradores_view,
             "Instructores": self._create_instructores_view,
             "Vehículos": self._create_vehiculos_view,
             "Clases": self._create_clases_view,
@@ -344,6 +403,10 @@ class HaroDesktopApp(ctk.CTk):
     def _create_estudiantes_view(self):
         from modules.estudiantes import EstudiantesView
         return EstudiantesView(self.content)
+
+    def _create_administradores_view(self):
+        from modules.administradores import AdministradoresView
+        return AdministradoresView(self.content)
 
     def _create_instructores_view(self):
         from modules.instructores import InstructoresView
@@ -381,12 +444,28 @@ class HaroDesktopApp(ctk.CTk):
         if self.API_PASS_DEFAULT:
             self.login_window.en_pass.insert(0, self.API_PASS_DEFAULT)
 
+    def _matches_superadmin(self, user: str, password: str) -> bool:
+        login = str(user or "").strip().lower()
+        secret = str(password or "").strip()
+        superadmin_email = str(self.SUPERADMIN_EMAIL or "").strip().lower()
+        return login == superadmin_email and secret == str(self.SUPERADMIN_PASSWORD or "")
+
+    def _apply_nav_visibility(self):
+        btn = getattr(self, "nav_buttons", {}).get("Administradores")
+        if not btn:
+            return
+        if getattr(self, "is_superadmin", False):
+            btn.grid()
+        else:
+            btn.grid_remove()
+
     def _on_login_ok(self, user, password):
         from api_client import ApiClient
 
         try:
             self.api_user = user
             self.api_pass = password
+            self.is_superadmin = self._matches_superadmin(user, password)
             self.api = ApiClient(
                 self, self.API_BASE_URL, user, password,
                 auth_mode=self.AUTH_MODE,
@@ -400,10 +479,16 @@ class HaroDesktopApp(ctk.CTk):
             self.api = None
             self.api_user = None
             self.api_pass = None
+            self.is_superadmin = False
             self._show_login_error(f"No fue posible iniciar sesión: {e}")
             return
 
+        self._apply_nav_visibility()
         self.deiconify()
+        try:
+            self.state("normal")
+        except Exception:
+            pass
         self.switch_view("Estudiantes")
         self.after(150, self._warm_api_cache_async)
 
@@ -435,6 +520,8 @@ class HaroDesktopApp(ctk.CTk):
             self.api = None
             self.api_user = None
             self.api_pass = None
+            self.is_superadmin = False
+            self._apply_nav_visibility()
             if self.current_view:
                 self.current_view.grid_remove()
                 self.current_view = None
@@ -452,6 +539,9 @@ class HaroDesktopApp(ctk.CTk):
         self.switch_view(name)
 
     def switch_view(self, name: str):
+        if name == "Administradores" and not getattr(self, "is_superadmin", False):
+            messagebox.showwarning("Acceso restringido", "Solo el superadministrador puede ver esta vista.", parent=self)
+            return
         if not self._view_factories:
             self._register_view_factories()
 
@@ -460,12 +550,14 @@ class HaroDesktopApp(ctk.CTk):
             self._info(f"Vista '{name}' no encontrada")
             return
 
+        self._show_loading(f"Cargando {name}...")
         view = self.views.get(name)
         if view is None:
             try:
                 view = factory()
                 self.views[name] = view
             except Exception as e:
+                self._hide_loading()
                 messagebox.showerror("Vista", f"No fue posible abrir '{name}':\n{e}", parent=self)
                 return
 
@@ -487,6 +579,7 @@ class HaroDesktopApp(ctk.CTk):
             view.grid(row=0, column=0, sticky="nsew")
         view.tkraise()
         self.current_view = view
+        self.after(120, self._hide_loading)
 
     # ----------------------- Acciones genéricas ----------------------- #
     def _on_escape(self, _event=None):
@@ -508,7 +601,8 @@ class HaroDesktopApp(ctk.CTk):
             return
 
         self._info("Sincronizando datos con la base de datos...")
-        resources = ("estudiantes", "profesores", "vehiculos", "clases-practicas", "estados-cuenta")
+        self._show_loading("Sincronizando datos...")
+        resources = ("estudiantes", "administradores", "profesores", "vehiculos", "clases-practicas", "estados-cuenta")
 
         def worker():
             errors = []
@@ -548,6 +642,7 @@ class HaroDesktopApp(ctk.CTk):
                         self._info(f" - ... {len(errors) - 5} error(es) adicional(es).")
                 else:
                     self._info(f"Sincronización completada. Vistas actualizadas: {refreshed}.")
+                self._hide_loading()
 
             self.after(0, refresh_loaded_views)
 

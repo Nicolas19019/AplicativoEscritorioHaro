@@ -6,6 +6,8 @@ import time
 
 from modules.base import BaseModuleFrame
 
+SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
+
 
 def _to_bool(value, default=False):
     if value is None:
@@ -67,6 +69,15 @@ def _extract_sede(data: dict) -> str:
         txt = str(val).strip()
         if txt:
             return txt
+    return ""
+
+
+def _normalize_sede_label(value) -> str:
+    txt = str(value or "").strip().lower()
+    if txt in {"1 de mayo", "1demayo"}:
+        return "1 de Mayo"
+    if txt in {"el eden", "el edén", "eden", "edén"}:
+        return "El Eden"
     return ""
 
 
@@ -156,8 +167,9 @@ class StudentInlineForm(ctk.CTkFrame):
 
         # --------- Fila 5: Sede / Horas ---------
         ctk.CTkLabel(self, text="Sede").grid(row=5, column=0, padx=12, pady=6, sticky="w")
-        self.en_sede = BorderedEntry(self, placeholder_text="Sede principal")
-        self.en_sede.grid(row=5, column=1, padx=12, pady=6, sticky="ew")
+        self.cb_sede = ctk.CTkComboBox(self, values=SEDES_DISPONIBLES, width=180)
+        self.cb_sede.set(SEDES_DISPONIBLES[0])
+        self.cb_sede.grid(row=5, column=1, padx=12, pady=6, sticky="w")
 
         ctk.CTkLabel(self, text="Horas").grid(row=5, column=2, padx=12, pady=6, sticky="w")
         self.en_horas = BorderedEntry(self, placeholder_text="0")
@@ -233,7 +245,7 @@ class StudentInlineForm(ctk.CTkFrame):
     def _fill(self, d):
         for w in (
             self.en_doc, self.en_nombre, self.en_apellido, self.en_tel,
-            self.en_mail, self.en_dir, self.en_sede, self.en_horas
+            self.en_mail, self.en_dir, self.en_horas
         ):
             w.delete(0, "end")
         self.cb_tipo.set(d.get("tipoDocumento", "CC"))
@@ -248,7 +260,7 @@ class StudentInlineForm(ctk.CTkFrame):
         tipo_estudiante = (d.get("tipoEstudiante") or "prospecto").strip().lower()
         self.cb_tipo_estudiante.set(tipo_estudiante or "prospecto")
 
-        self.en_sede.insert(0, _extract_sede(d))
+        self.cb_sede.set(_normalize_sede_label(_extract_sede(d)) or SEDES_DISPONIBLES[0])
 
         horas = d.get("horas", 0)
         self.en_horas.insert(0, "" if horas is None else str(horas))
@@ -311,7 +323,7 @@ class StudentInlineForm(ctk.CTkFrame):
             "telefono": self.en_tel.get().strip(),
             "email": self.en_mail.get().strip(),
             "direccion": self.en_dir.get().strip(),
-            "sede": self.en_sede.get().strip(),
+            "sede": self.cb_sede.get().strip(),
             "horas": horas,
             "tipoPase": ",".join(tipo_pase),
             "aproboExamenTeorico": _to_bool(self.sw_aprobo_teorico.get()),
@@ -418,20 +430,23 @@ class EstudiantesView(BaseModuleFrame):
         action_btn(tb, "↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
             .grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
+        # ===== Resumen =====
+        self._build_summary()
+
         # ===== Form inline =====
         self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
-        self.form.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
+        self.form.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
         self.form.hide()
 
         # ===== Filtros =====
         self.filters = self._make_filters_bar(self)
-        self.filters.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
+        self.filters.grid(row=4, column=0, padx=16, pady=(0, 10), sticky="ew")
         self._refresh_category_options()
 
         # ===== Tabla (Treeview) =====
         self.table = ctk.CTkFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        self.table.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="nsew")
-        self.grid_rowconfigure(4, weight=1)
+        self.table.grid(row=5, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        self.grid_rowconfigure(5, weight=1)
         self.table.grid_rowconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
@@ -449,6 +464,77 @@ class EstudiantesView(BaseModuleFrame):
         self._build_tree()
 
         self.after(150, self._refrescar)
+
+    def _build_summary(self):
+        self.summary = ctk.CTkFrame(
+            self,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=14,
+            border_width=1,
+            border_color=self.app.COLOR_DIVIDER,
+        )
+        self.summary.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
+        for col in range(4):
+            self.summary.grid_columnconfigure(col, weight=1)
+
+        self._summary_cards = {}
+        cards = (
+            ("total", "Total estudiantes"),
+            ("activos", "Activos"),
+            ("pendientes", "Pendientes"),
+            ("teorico", "Teórico aprobado"),
+        )
+        for idx, (key, label) in enumerate(cards):
+            card = ctk.CTkFrame(
+                self.summary,
+                fg_color=self.app.COLOR_INPUT_BG,
+                corner_radius=12,
+                border_width=1,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            card.grid(row=0, column=idx, padx=8, pady=10, sticky="ew")
+            ctk.CTkLabel(
+                card,
+                text=label,
+                text_color=self.app.COLOR_MUTED,
+                font=ctk.CTkFont(size=11),
+            ).pack(anchor="w", padx=12, pady=(10, 2))
+            value = ctk.CTkLabel(
+                card,
+                text="0",
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=22, weight="bold"),
+            )
+            value.pack(anchor="w", padx=12, pady=(0, 10))
+            self._summary_cards[key] = value
+
+    def _refresh_summary(self):
+        rows = list(getattr(self, "_all_data", []) or [])
+        total = len(rows)
+        activos = 0
+        pendientes = 0
+        teorico = 0
+
+        for stu in rows:
+            estado = str(stu.get("estado", "") or "").strip().lower()
+            if estado == "activo":
+                activos += 1
+            if estado == "pendiente":
+                pendientes += 1
+            if _to_bool(stu.get("aproboExamenTeorico"), default=False):
+                teorico += 1
+
+        values = {
+            "total": total,
+            "activos": activos,
+            "pendientes": pendientes,
+            "teorico": teorico,
+        }
+        for key, value in values.items():
+            try:
+                self._summary_cards[key].configure(text=str(value))
+            except Exception:
+                pass
 
     # ---------- Treeview (rápido) ----------
     def _build_tree(self):
@@ -622,6 +708,7 @@ class EstudiantesView(BaseModuleFrame):
     def _apply_filters_now(self):
         src = getattr(self, "_all_data", []) or []
         self._data = self._apply_filters(src, self._collect_filters())
+        self._refresh_summary()
         self._queue_render(self._data)
 
     def _queue_render(self, rows):
@@ -822,6 +909,7 @@ class EstudiantesView(BaseModuleFrame):
                 def apply_data():
                     self._all_data = raw or []
                     self._refresh_category_options()
+                    self._refresh_summary()
                     self._data = self._apply_filters(self._all_data, self._collect_filters())
                     self._queue_render(self._data)
 

@@ -6,6 +6,17 @@ from tkinter import messagebox
 import tkinter as tk
 import datetime as _dt
 
+SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
+
+
+def _normalize_sede_label(value):
+    txt = str(value or "").strip().lower()
+    if txt in {"1 de mayo", "1demayo"}:
+        return "1 de Mayo"
+    if txt in {"el eden", "el edén", "eden", "edén"}:
+        return "El Eden"
+    return ""
+
 
 # ================= INSTRUCTOR FORM =================
 class InstructorInlineForm(ctk.CTkFrame):
@@ -80,8 +91,9 @@ class InstructorInlineForm(ctk.CTkFrame):
         self.cb_visible.set("true")
         self.cb_visible.grid(row=4, column=1, padx=12, pady=6, sticky="w")
         ctk.CTkLabel(self, text="Sede").grid(row=4, column=2, padx=12, pady=6, sticky="w")
-        self.en_sede = BorderedEntry(self, placeholder_text="Sede principal")
-        self.en_sede.grid(row=4, column=3, padx=12, pady=6, sticky="ew")
+        self.cb_sede = ctk.CTkComboBox(self, values=SEDES_DISPONIBLES, width=180)
+        self.cb_sede.set(SEDES_DISPONIBLES[0])
+        self.cb_sede.grid(row=4, column=3, padx=12, pady=6, sticky="w")
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=5, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
         def form_btn(text, cmd, fg, hover, txt="#ffffff"):
@@ -108,12 +120,12 @@ class InstructorInlineForm(ctk.CTkFrame):
                 self.en_tel,
                 self.en_email,
                 self.en_usuario,
-                self.en_sede,
             ):
                 w.delete(0, "end")
             self.cb_esp.set("carro")
             self.cb_categoria.set("carro")
             self.cb_visible.set("true")
+            self.cb_sede.set(SEDES_DISPONIBLES[0])
         except Exception as e:
             print(f"[WARN] Error al reiniciar campos en InstructorInlineForm: {e}")
     def _force_entry_placeholders(self):
@@ -146,7 +158,6 @@ class InstructorInlineForm(ctk.CTkFrame):
             self.en_tel,
             self.en_email,
             self.en_usuario,
-            self.en_sede,
         ):
             w.delete(0, "end")
         self.en_ced.insert(0, d.get("cedula", ""))
@@ -162,7 +173,7 @@ class InstructorInlineForm(ctk.CTkFrame):
         sede_val = d.get("sede", "") or ""
         if isinstance(sede_val, dict):
             sede_val = sede_val.get("nombre") or sede_val.get("name") or sede_val.get("descripcion") or ""
-        self.en_sede.insert(0, str(sede_val).strip())
+        self.cb_sede.set(_normalize_sede_label(sede_val) or SEDES_DISPONIBLES[0])
         categoria_raw = (
             d.get("categoria")
             or d.get("categoriaLicencia")
@@ -190,7 +201,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             "categoria": categoria,
             "telefono": self.en_tel.get().strip(),
             "usuario": self.en_usuario.get().strip(),
-            "sede": (self.en_sede.get() or "").strip(),
+            "sede": (self.cb_sede.get() or "").strip(),
             "visible": visible_raw in {"true", "1", "si", "yes"},
             "contrasena": None,
         }
@@ -283,8 +294,9 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.en_anio.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
 
         ctk.CTkLabel(self, text="Sede").grid(row=2, column=0, padx=12, pady=6, sticky="w")
-        self.en_sede = BorderedEntry(self, placeholder_text="Sede principal")
-        self.en_sede.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+        self.cb_sede = ctk.CTkComboBox(self, values=SEDES_DISPONIBLES, width=180)
+        self.cb_sede.set(SEDES_DISPONIBLES[0])
+        self.cb_sede.grid(row=2, column=1, padx=12, pady=6, sticky="w")
 
         ctk.CTkLabel(self, text="Estado").grid(row=2, column=2, padx=12, pady=6, sticky="w")
         self.cb_estado = ctk.CTkComboBox(self, values=["Activo","Mantenimiento","Baja"], width=180)
@@ -343,13 +355,13 @@ class VehiculoInlineForm(ctk.CTkFrame):
 
     # -------- Internos --------
     def _fill(self, d):
-        for w in (self.en_placa, self.en_marca, self.en_modelo, self.en_anio, self.en_sede):
+        for w in (self.en_placa, self.en_marca, self.en_modelo, self.en_anio):
             w.delete(0, "end")
         self.en_placa.insert(0, d.get("placa", ""))
         self.en_marca.insert(0, d.get("marca", ""))
         self.en_modelo.insert(0, d.get("modelo", ""))
         self.en_anio.insert(0, str(d.get("anio", "") or ""))
-        self.en_sede.insert(0, d.get("sede", "") or "")
+        self.cb_sede.set(_normalize_sede_label(d.get("sede", "")) or SEDES_DISPONIBLES[0])
         self.cb_estado.set(d.get("estado", "Activo") or "Activo")
 
     def _collect(self):
@@ -359,7 +371,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
             "marca": (self.en_marca.get() or "").strip(),
             "modelo": (self.en_modelo.get() or "").strip(),
             "anio": int(anio_raw) if anio_raw.isdigit() else anio_raw,
-            "sede": (self.en_sede.get() or "").strip(),
+            "sede": (self.cb_sede.get() or "").strip(),
             "estado": (self.cb_estado.get() or "").strip(),
         }
 

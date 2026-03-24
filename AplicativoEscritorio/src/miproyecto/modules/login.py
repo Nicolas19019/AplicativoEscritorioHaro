@@ -252,7 +252,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
         # ==== Config / endpoints ====
-        self.ADMIN_OTP_EMAIL = getattr(self.app, "ADMIN_OTP_EMAIL", "nicolasmachado19292@gmail.com")
+        self.ADMIN_OTP_EMAIL = getattr(self.app, "ADMIN_OTP_EMAIL", "haroacademiadecol@gmail.com")
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8082")
         default_base = self._normalize_base_url(default_base)
 
@@ -275,6 +275,8 @@ class LoginDialog(ctk.CTkToplevel):
         # ==== Estado registro/OTP ====
         self._pending_admin_payload = None
         self._otp_dialog_open = False
+        self._otp_target_email = ""
+        self._otp_verified_email = ""
 
         # ==== Iconos ====
         self._ICON_ICO_PATH = ICON_ICO_PATH
@@ -285,14 +287,15 @@ class LoginDialog(ctk.CTkToplevel):
         self._LOGO_GRANDE_PATH = LOGO_GRANDE_PATH
 
         # ==== Ventana ====
-        W, H = 740, 560
+        W, H = 740, 620
         self.geometry(f"{W}x{H}")
 
         # ✅ Centrar cuando ya se dibujó (más confiable)
         self.after(50, lambda: centrar_ventana(self, W, H))
 
         self.resizable(False, False)
-        self.grab_set()
+        self._login_modal_active = False
+        self._enable_login_modal()
         self.focus_set()
         self.protocol("WM_DELETE_WINDOW", self._quit_all)
         self.bind("<Escape>", lambda _e: self._quit_all())
@@ -356,7 +359,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         # ===== Header (título + ayuda) =====
         header = ctk.CTkFrame(right, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
+        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(10, 4))
         header.grid_columnconfigure(0, weight=1)
 
         self.modo = ctk.StringVar(value="LOGIN")
@@ -371,13 +374,16 @@ class LoginDialog(ctk.CTkToplevel):
         self.lbl_help = ctk.CTkLabel(
             header, text="Ingresa con tus credenciales para continuar",
             text_color=fg_muted,
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=12),
+            justify="left",
+            wraplength=360
         )
         self.lbl_help.grid_remove()
+        self.lbl_help.configure(justify="left", wraplength=360)
 
         # ===== Content =====
         content = ctk.CTkFrame(right, fg_color="transparent")
-        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 8))
+        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 4))
         content.grid_columnconfigure(0, weight=1)
 
 
@@ -386,6 +392,7 @@ class LoginDialog(ctk.CTkToplevel):
         v_nombre  = (self.register(lambda P: bool(self._re_nombre_tecla.match(P))), "%P")
         v_cedula  = (self.register(lambda P: bool(self._re_cedula_tecla.match(P))), "%P")
         v_email   = (self.register(self._email_key_validator), "%P")
+        v_otp     = (self.register(lambda P: (P.isdigit() and len(P) <= 6) or P == ""), "%P")
 
         # =================== LOGIN FRAME ===================
         self.frame_login = ctk.CTkFrame(content, fg_color="transparent")
@@ -467,7 +474,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         # ✅ Link "¿ya tienes cuenta" JUSTO ARRIBA del formulario
         reg_link = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
-        reg_link.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 1))
+        reg_link.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 0))
         ctk.CTkLabel(reg_link, text="¿Ya tienes una cuenta", text_color=fg_muted,
                      font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
@@ -481,9 +488,9 @@ class LoginDialog(ctk.CTkToplevel):
         r2 = 1
 
         ctk.CTkLabel(self.frame_reg, text="Nombre", text_color=fg_text)\
-            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="w")
+            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 1), sticky="w")
         ctk.CTkLabel(self.frame_reg, text="Cédula", text_color=fg_text)\
-            .grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="w"); r2 += 1
+            .grid(row=r2, column=1, padx=(10, 0), pady=(0, 1), sticky="w"); r2 += 1
 
         self.ca_nombre = ctk.CTkEntry(
             self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
@@ -499,14 +506,14 @@ class LoginDialog(ctk.CTkToplevel):
             placeholder_text_color="#4F4F4F",
             validate="key", validatecommand=v_cedula
         )
-        self.ca_nombre.grid(row=r2, column=0, padx=(0, 10), pady=(0, 4), sticky="ew")
-        self.ca_cedula.grid(row=r2, column=1, padx=(10, 0), pady=(0, 4), sticky="ew"); r2 += 1
+        self.ca_nombre.grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="ew")
+        self.ca_cedula.grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="ew"); r2 += 1
         self._decorate_entry(self.ca_nombre); self._decorate_entry(self.ca_cedula)
 
         ctk.CTkLabel(self.frame_reg, text="Usuario", text_color=fg_text)\
-            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 4), sticky="w")
+            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="w")
         ctk.CTkLabel(self.frame_reg, text="Correo", text_color=fg_text)\
-            .grid(row=r2, column=1, padx=(10, 0), pady=(0, 4), sticky="w"); r2 += 1
+            .grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="w"); r2 += 1
 
         self.ca_usuario = ctk.CTkEntry(
             self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
@@ -522,12 +529,12 @@ class LoginDialog(ctk.CTkToplevel):
             placeholder_text_color="#4F4F4F",
             validate="key", validatecommand=v_email
         )
-        self.ca_usuario.grid(row=r2, column=0, padx=(0, 10), pady=(0, 4), sticky="ew")
-        self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 4), sticky="ew"); r2 += 1
+        self.ca_usuario.grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="ew")
+        self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="ew"); r2 += 1
         self._decorate_entry(self.ca_usuario); self._decorate_entry(self.ca_email)
 
         ctk.CTkLabel(self.frame_reg, text="Contraseña", text_color=fg_text)\
-            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 1), sticky="w"); r2 += 1
+            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 0), sticky="w"); r2 += 1
 
         # ✅ reglas contraseña (cerca del campo)
         self.lbl_pass_rules = ctk.CTkLabel(
@@ -536,7 +543,12 @@ class LoginDialog(ctk.CTkToplevel):
             text_color=fg_muted,
             font=ctk.CTkFont(size=11)
         )
-        self.lbl_pass_rules.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 1)); r2 += 1
+        self.lbl_pass_rules.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 0)); r2 += 1
+        self.lbl_pass_rules.configure(
+            text="Minimo 8 caracteres con letras y numeros.",
+            justify="left",
+            wraplength=340
+        )
 
         self.ca_pass1 = ctk.CTkEntry(
             self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
@@ -544,47 +556,88 @@ class LoginDialog(ctk.CTkToplevel):
             placeholder_text="Mín. 8 caracteres (letras y números)",
             placeholder_text_color="#4F4F4F"
         )
-        self.ca_pass1.grid(row=r2, column=0, columnspan=2, pady=(0, 6), sticky="ew"); r2 += 1
+        self.ca_pass1.grid(row=r2, column=0, columnspan=2, pady=(0, 3), sticky="ew"); r2 += 1
         self._decorate_entry(self.ca_pass1)
 
         self.pw_bar_reg = ctk.CTkProgressBar(self.frame_reg, height=8)
-        self.pw_bar_reg.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.pw_bar_reg.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         self.pw_bar_reg.set(0.05)
         self.pw_bar_reg.configure(progress_color="#ff4c4c"); r2 += 1
 
         self.pw_lbl_reg = ctk.CTkLabel(self.frame_reg, text="Seguridad: Muy débil",
                                        text_color="#ff4c4c", font=ctk.CTkFont(size=10))
-        self.pw_lbl_reg.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 4)); r2 += 1
+        self.pw_lbl_reg.grid(row=r2, column=0, columnspan=2, sticky="w", pady=(0, 2)); r2 += 1
         self.ca_pass1.bind("<KeyRelease>", lambda _e: self._update_strength_meter(
             self.ca_pass1.get(), self.pw_bar_reg, self.pw_lbl_reg
         ))
 
         # OTP block (oculto) - se muestra después de enviar
         self.otp_block = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
-        self.otp_block.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.otp_block.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         self.otp_block.grid_columnconfigure(0, weight=1)
-        self.otp_block.grid_remove()
 
         ctk.CTkLabel(self.otp_block, text="Código de verificación (OTP)", text_color=fg_text)\
-            .grid(row=0, column=0, columnspan=2, pady=(0, 4), sticky="w")
+            .grid(row=0, column=0, pady=(0, 2), sticky="w")
+
+        self.lbl_otp_help = ctk.CTkLabel(
+            self.otp_block,
+            text="Primero escribe un correo vÃ¡lido. Luego pulsa Solicitar OTP, revisa tu correo e ingresa el cÃ³digo para validar la cuenta antes de crearla.",
+            text_color=fg_muted,
+            justify="left",
+            wraplength=360,
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_otp_help.grid_forget()
+
+        self.otp_help_row = ctk.CTkFrame(self.otp_block, fg_color="transparent")
+        self.otp_help_row.grid(row=1, column=0, sticky="w", pady=(0, 3))
+
+        self.lbl_otp_help = ctk.CTkLabel(
+            self.otp_help_row,
+            text="Solicita tu OTP para crear el administrador",
+            text_color=fg_muted,
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_otp_help.grid(row=0, column=0, sticky="w")
+
+        self.btn_send_otp = ctk.CTkButton(
+            self.otp_help_row,
+            text="solicitalo aqui",
+            fg_color="transparent",
+            hover_color=fg_divider,
+            text_color=self.PLACEHOLDER_YELLOW,
+            font=ctk.CTkFont(size=11, weight="bold", underline=True),
+            width=100,
+            height=24,
+            command=self._request_registration_otp
+        )
+        self.btn_send_otp.grid(row=0, column=1, padx=(6, 0), sticky="w")
 
         self.en_otp = ctk.CTkEntry(
-            self.otp_block, height=40,
+            self.otp_block, height=44,
             fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="Ingresa el código del correo",
             placeholder_text_color="#4F4F4F"
         )
-        self.en_otp.grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        self.en_otp.grid(row=2, column=0, sticky="ew", pady=(0, 4))
         self._decorate_entry(self.en_otp)
-
-        self.btn_verify_otp = ctk.CTkButton(
-            self.otp_block, text="Verificar y crear",
-            height=40, corner_radius=12,
-            fg_color=fg_dark, hover_color="#333c49", text_color="#ffffff",
-            command=self._verify_otp_and_create
+        self.en_otp.configure(
+            placeholder_text="123456",
+            justify="center",
+            validate="key",
+            validatecommand=v_otp
         )
-        self.btn_verify_otp.grid(row=1, column=1, sticky="e")
+
+        self.lbl_otp_status = ctk.CTkLabel(
+            self.otp_block,
+            text="",
+            text_color=fg_muted,
+            justify="left",
+            wraplength=360,
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_otp_status.grid(row=3, column=0, sticky="w", pady=(2, 0))
 
         # ===== Error / info (fila 2) - panel centrado con borde (reserva espacio) =====
         self.err_box = ctk.CTkFrame(
@@ -596,6 +649,7 @@ class LoginDialog(ctk.CTkToplevel):
         )
         self.err_box.grid(row=2, column=0, padx=20, pady=(4, 6), sticky="ew")
         self.err_box.grid_columnconfigure(0, weight=1)
+        self.err_box.grid_remove()
 
         self.err = ctk.CTkLabel(
             self.err_box,
@@ -610,7 +664,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         # ===== Acciones (fila 3) =====
         self.actions_login = ctk.CTkFrame(right, fg_color="transparent")
-        self.actions_login.grid(row=3, column=0, padx=20, pady=(8, 10), sticky="ew")
+        self.actions_login.grid(row=3, column=0, padx=20, pady=(4, 8), sticky="ew")
         self.actions_login.grid_columnconfigure(0, weight=1)
 
         # ✅ Botón Ingresar: borde rojo + texto rojo; hover amarillo (sin borde) + texto negro
@@ -643,7 +697,7 @@ class LoginDialog(ctk.CTkToplevel):
         # ✅ Botón Guardar: mismo estilo que Ingresar
         self.btn_guardar_enviar = ctk.CTkButton(
             self.actions_reg,
-            text="Guardar",
+            text="Crear cuenta",
             height=44,
             corner_radius=12,
             fg_color="white",
@@ -652,7 +706,7 @@ class LoginDialog(ctk.CTkToplevel):
             border_color=fg_red,
             hover=False,
             font=ctk.CTkFont(size=16, weight="bold"),
-            command=self._guardar_y_enviar_otp
+            command=self._create_admin_with_otp
         )
         self.btn_guardar_enviar.grid(row=0, column=0, sticky="ew")
 
@@ -667,7 +721,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.bind("<Return>", lambda _e: self._enter_action())
         # ocultar error al cambiar de vista (reg/login) y al click general
         self.bind_all("<Button-1>", self._hide_error_on_any_click, add="+")
-        self.bind("<Unmap>", lambda _e: self._clear_error_ui())  # minimizar -> limpia
+        self.bind("<Unmap>", lambda _e: self._clear_error_ui(), add="+")  # minimizar -> limpia
 
         # enfoque inicial
         self.en_user.focus_set()
@@ -678,6 +732,7 @@ class LoginDialog(ctk.CTkToplevel):
         # En Windows, <Unmap> se dispara al minimizar
         try:
             if self.state() == "iconic" and self.app.winfo_exists():
+                self._disable_login_modal()
                 self.app.iconify()
         except Exception:
             pass
@@ -688,8 +743,28 @@ class LoginDialog(ctk.CTkToplevel):
             if self.app.winfo_exists() and self.app.state() == "iconic":
                 self.app.deiconify()
                 self.app.lift()
+            if self.state() != "iconic":
+                self._enable_login_modal()
         except Exception:
             pass
+
+    def _enable_login_modal(self):
+        if getattr(self, "_login_modal_active", False):
+            return
+        try:
+            self.grab_set()
+            self._login_modal_active = True
+        except Exception:
+            self._login_modal_active = False
+
+    def _disable_login_modal(self):
+        if not getattr(self, "_login_modal_active", False):
+            return
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        self._login_modal_active = False
 
 
     # ====================== Async helper ======================
@@ -767,14 +842,14 @@ class LoginDialog(ctk.CTkToplevel):
             self._reset_fields(True)
             self._switch_mode("LOGIN")
             try:
-                self.btn_guardar_enviar.configure(state="normal")
+                self._set_registration_buttons_state(True)
             except Exception:
                 pass
 
         def on_err(err):
             self._show_error(technical=str(err))
             try:
-                self.btn_guardar_enviar.configure(state="normal")
+                self._set_registration_buttons_state(True)
             except Exception:
                 pass
 
@@ -801,6 +876,7 @@ class LoginDialog(ctk.CTkToplevel):
         try:
             self.err.configure(text="")
             self.err_box.configure(border_width=0)
+            self.err_box.grid_remove()
         except Exception:
             pass
 
@@ -809,6 +885,7 @@ class LoginDialog(ctk.CTkToplevel):
         title, user_msg, _sev = self._classify_error(tech)
 
         try:
+            self.err_box.grid()
             self.err.configure(text=user_msg)
             self.err_box.configure(border_width=2)
             self._err_lock = True
@@ -840,8 +917,16 @@ class LoginDialog(ctk.CTkToplevel):
         if "send.email" in t:
             return ("Correo", "No fue posible validar el correo para enviar el OTP. Verifica el formato del correo.", "user")
 
-        if "http 401" in t or "unauthorized" in t or "no autorizado" in t:
-            return ("Acceso", "Usuario o contraseña incorrectos.", "user")
+        if (
+            "http 401" in t
+            or "unauthorized" in t
+            or "no autorizado" in t
+            or "credenciales invalidas" in t
+            or "credenciales inválidas" in t
+            or "incorrect password" in t
+            or "bad credentials" in t
+        ):
+            return ("Acceso", "Correo o contraseña inválidos.", "user")
 
         if "código inválido" in t or "codigo invalido" in t or "vencido" in t:
             return ("Verificación", "El código es inválido o ya venció. Solicita uno nuevo e inténtalo otra vez.", "user")
@@ -883,12 +968,14 @@ class LoginDialog(ctk.CTkToplevel):
         if mode == "REG":
             self.modo.set("REG")
             self.lbl_title.configure(text="Registrar administrador")
+            self.lbl_help.configure(text="")
+            self.lbl_help.grid_remove()
 
             self.frame_login.grid_forget()
             self.frame_reg.grid(row=0, column=0, sticky="nsew")
 
             self.actions_login.grid_forget()
-            self.actions_reg.grid(row=3, column=0, padx=20, pady=(4, 6), sticky="ew")
+            self.actions_reg.grid(row=3, column=0, padx=20, pady=(2, 6), sticky="ew")
 
             # reset otp ui
             try:
@@ -897,28 +984,33 @@ class LoginDialog(ctk.CTkToplevel):
             except Exception:
                 pass
             try:
-                self.btn_guardar_enviar.configure(state="normal")
+                self._set_registration_buttons_state(True)
             except Exception:
                 pass
             self._pending_admin_payload = None
+            self._otp_target_email = ""
+            self._otp_verified_email = ""
+            self._set_otp_status("")
 
         else:
             self.modo.set("LOGIN")
             self.lbl_title.configure(text="Bienvenido")
             self.lbl_help.configure(text="")
+            self.lbl_help.grid_remove()
 
             self.frame_reg.grid_forget()
             self.frame_login.grid(row=0, column=0, sticky="nsew")
 
             self.actions_reg.grid_forget()
-            self.actions_login.grid(row=3, column=0, padx=20, pady=(8, 10), sticky="ew")
+            self.actions_login.grid(row=3, column=0, padx=20, pady=(4, 8), sticky="ew")
 
     def _enter_action(self):
         if self.modo.get() == "REG":
-            if self.otp_block.winfo_ismapped():
-                self._verify_otp_and_create()
+            admin_otp_email = (self.ADMIN_OTP_EMAIL or "").strip().lower()
+            if self.en_otp.get().strip() or self._otp_target_email == admin_otp_email:
+                self._create_admin_with_otp()
             else:
-                self._guardar_y_enviar_otp()
+                self._request_registration_otp()
         else:
             self._ok()
 
@@ -1009,13 +1101,68 @@ class LoginDialog(ctk.CTkToplevel):
         dialog.protocol("WM_DELETE_WINDOW", close_dialog)
 
     # ====================== OTP send/verify helpers ======================
+    def _set_otp_status(self, msg="", kind="info"):
+        colors = {
+            "info": "#111111",
+            "success": "#2e7d32",
+            "error": "#B91C1C",
+        }
+        try:
+            self.lbl_otp_status.configure(text=msg, text_color=colors.get(kind, "#111111"))
+        except Exception:
+            pass
+
+    def _set_registration_buttons_state(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        for widget_name in ("btn_guardar_enviar", "btn_send_otp"):
+            try:
+                getattr(self, widget_name).configure(state=state)
+            except Exception:
+                pass
+
+    def _build_pending_admin_payload(self):
+        nombre = self.ca_nombre.get().strip()
+        cedula = self.ca_cedula.get().strip()
+        usuario = self.ca_usuario.get().strip()
+        correo = self.ca_email.get().strip().lower()
+        p1 = self.ca_pass1.get().strip()
+
+        if not (nombre and cedula and usuario and correo and p1):
+            raise ValueError("Completa nombre, cÃ©dula, usuario, correo y contraseÃ±a.")
+        if not self._re_nombre_full.fullmatch(nombre):
+            raise ValueError("Nombre invÃ¡lido.")
+        if not self._re_cedula_full.fullmatch(cedula):
+            raise ValueError("CÃ©dula invÃ¡lida.")
+        if not self._re_usuario_full.fullmatch(usuario):
+            raise ValueError("Usuario invÃ¡lido.")
+        if not self._re_email_full.fullmatch(correo):
+            raise ValueError("Correo invÃ¡lido.")
+        if len(p1) < 8 or not re.search(r"[A-Za-z]", p1) or not re.search(r"[0-9]", p1):
+            raise ValueError("La contraseÃ±a no cumple los requisitos.")
+
+        otp_admin_email = (self.ADMIN_OTP_EMAIL or "").strip().lower()
+        if self._otp_target_email and otp_admin_email and self._otp_target_email != otp_admin_email:
+            self._otp_target_email = ""
+        if self._otp_verified_email and otp_admin_email and self._otp_verified_email != otp_admin_email:
+            self._otp_verified_email = ""
+            self._set_otp_status("El correo cambiÃ³. Debes solicitar y verificar un nuevo OTP.", "info")
+
+        self._pending_admin_payload = {
+            "correo": correo,
+            "cedula": cedula,
+            "usuario": usuario,
+            "contrasenaHash": p1,
+            "nombre": nombre,
+            "activo": True
+        }
+        return self._pending_admin_payload
+
     def _send_otp_to_email(self, correo: str) -> bool:
-        correo = (correo or "").strip()
+        correo = (correo or "").strip().lower()
         if not correo:
             self._show_error("Correo vacío.")
             return False
 
-        # Controller espera JSON string -> json="user@x.com"
         data = self.api.post(self.OTP_SEND_ENDPOINT, json=correo)
         if data is not None:
             return True
@@ -1110,6 +1257,150 @@ class LoginDialog(ctk.CTkToplevel):
             return
         self._verify_otp_and_create_with_code(codigo)
 
+    def _request_registration_otp(self):
+        self._clear_error_ui()
+
+        try:
+            correo = (self.ADMIN_OTP_EMAIL or "").strip().lower()
+            if not correo:
+                raise ValueError("No hay correo configurado para el superadministrador.")
+        except Exception as e:
+            self._show_error(technical=str(e))
+            return
+
+        self._set_registration_buttons_state(False)
+        self._set_otp_status("Enviando OTP al correo indicado...", "info")
+
+        def do_send():
+            data = self.api.post(self.OTP_SEND_ENDPOINT, json=correo)
+            if data is None:
+                raise RuntimeError(self.api.last_error or "No se pudo enviar el OTP.")
+            return correo
+
+        def on_ok(sent_email):
+            self._otp_target_email = sent_email
+            self._otp_verified_email = ""
+            try:
+                self.en_otp.delete(0, "end")
+                self.en_otp.focus_set()
+            except Exception:
+                pass
+            messagebox.showinfo(
+                "OTP enviado",
+                f"OTP enviado al correo del superadministrador:\n{sent_email}",
+                parent=self
+            )
+            self._set_otp_status(
+                f"Se envio un codigo a {sent_email}. Revisalo en ese correo, escribelo en este campo y luego pulsa Crear cuenta.",
+                "success",
+            )
+            self._set_registration_buttons_state(True)
+
+        def on_err(err):
+            self._set_otp_status(self._classify_error(str(err))[1], "error")
+            self._show_error(technical=str(err))
+            self._set_registration_buttons_state(True)
+
+        self._run_async(do_send, on_ok=on_ok, on_err=on_err)
+
+    def _verify_otp_with_code(self, codigo):
+        self._clear_error_ui()
+
+        try:
+            payload = self._build_pending_admin_payload()
+        except Exception as e:
+            self._show_error(technical=str(e))
+            return
+
+        correo = payload["correo"]
+        if not self._otp_target_email or self._otp_target_email != correo:
+            self._set_otp_status("Primero debes solicitar un OTP para este correo.", "error")
+            self._show_error("Primero solicita el OTP del correo que deseas registrar.")
+            return
+
+        self._set_registration_buttons_state(False)
+        self._set_otp_status("Verificando el codigo OTP...", "info")
+
+        def do_verify():
+            data = self.api.post(self.OTP_VERIFY_ENDPOINT, json={"email": correo, "code": str(codigo).strip()})
+            if data is None:
+                raise RuntimeError(self.api.last_error or "Codigo invalido o vencido.")
+            return correo
+
+        def on_ok(verified_email):
+            self._otp_verified_email = verified_email
+            self._set_otp_status(
+                f"Correo verificado correctamente para {verified_email}. Ya puedes pulsar Crear cuenta.",
+                "success",
+            )
+            self._set_registration_buttons_state(True)
+
+        def on_err(err):
+            self._set_otp_status(self._classify_error(str(err))[1], "error")
+            self._show_error(technical=str(err))
+            self._set_registration_buttons_state(True)
+
+        self._run_async(do_verify, on_ok=on_ok, on_err=on_err)
+
+    def _verify_otp(self):
+        codigo = self.en_otp.get().strip()
+        if not codigo:
+            self._show_error("Ingresa el codigo que llego al correo.")
+            self._set_otp_status("Debes escribir el codigo recibido para validar el correo.", "error")
+            return
+        self._verify_otp_with_code(codigo)
+
+    def _create_admin_with_otp(self):
+        self._clear_error_ui()
+
+        try:
+            payload = self._build_pending_admin_payload()
+        except Exception as e:
+            self._show_error(technical=str(e))
+            return
+
+        correo = (self.ADMIN_OTP_EMAIL or "").strip().lower()
+        if self._otp_target_email != correo:
+            self._set_otp_status("Primero solicita el OTP del correo del superadministrador.", "error")
+            self._show_error("Primero solicita el OTP del correo del superadministrador.")
+            return
+
+        codigo = self.en_otp.get().strip()
+        if len(codigo) != 6 or not codigo.isdigit():
+            self._set_otp_status("Escribe el codigo OTP de 6 digitos antes de crear la cuenta.", "error")
+            self._show_error("Ingresa un codigo OTP valido de 6 digitos.")
+            return
+
+        self._set_registration_buttons_state(False)
+
+        def do_verify_and_create():
+            verify = self.api.post(self.OTP_VERIFY_ENDPOINT, json={"email": correo, "code": codigo})
+            if verify is None:
+                raise RuntimeError(self.api.last_error or "Codigo invalido o vencido.")
+
+            self._otp_verified_email = correo
+            created = self.api.post(self.ADMIN_ENDPOINT, json=self._pending_admin_payload)
+            if created is None:
+                raise RuntimeError(self.api.last_error or "No se pudo crear el usuario.")
+            return created
+
+        def on_ok(_):
+            self._set_otp_status("Correo verificado correctamente. La cuenta fue creada.", "success")
+            messagebox.showinfo(
+                "Bienvenido",
+                "Cuenta creada exitosamente.",
+                parent=self
+            )
+            self._reset_fields(True)
+            self._switch_mode("LOGIN")
+
+        def on_err(err):
+            self._set_otp_status(self._classify_error(str(err))[1], "error")
+            self._show_error(technical=str(err))
+            self._set_registration_buttons_state(True)
+
+        self._run_async(do_verify_and_create, on_ok=on_ok, on_err=on_err)
+
     # ====================== Login ======================
     def _credential_for_on_success(self, plain_password: str, hashed_password: str) -> str:
         mode = str(getattr(self.app, "AUTH_MODE", "basic") or "basic").strip().lower()
@@ -1139,18 +1430,31 @@ class LoginDialog(ctk.CTkToplevel):
 
         if callable(self.on_success):
             try:
+                if hasattr(self.app, "_matches_superadmin") and self.app._matches_superadmin(correo, p):
+                    self.on_success(correo, on_success_secret)
+                    if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
+                        self._show_error(technical=str(self.app.api.last_error))
+                        return
+                    self._reset_fields(True)
+                    self.grab_release()
+                    self.destroy()
+                    return
+
                 # Valida credenciales por correo (contrato actual del backend).
                 test = self.api.post(self.LOGIN_ENDPOINT, json={"correo": correo, "contrasena": p})
                 if test is None:
-                    self._show_error(technical=self.api.last_error or "Credenciales inválidas.")
+                    self._show_error(technical=self.api.last_error or "Correo o contraseña inválidos.")
                     return
 
+                try:
+                    self.grab_release()
+                except Exception:
+                    pass
                 self.on_success(correo, on_success_secret)
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
                     self._show_error(technical=str(self.app.api.last_error))
                     return
                 self._reset_fields(True)
-                self.grab_release()
                 self.destroy()
                 return
             except Exception as e:
@@ -1228,17 +1532,19 @@ class LoginDialog(ctk.CTkToplevel):
                 self.pw_lbl_reg.configure(text="Seguridad: Muy débil", text_color="#ff4c4c")
 
             self._pending_admin_payload = None
+            self._otp_target_email = ""
+            self._otp_verified_email = ""
 
             try:
                 self.en_otp.delete(0, "end")
             except Exception:
                 pass
             try:
-                self.otp_block.grid_remove()
+                self._set_otp_status("")
             except Exception:
                 pass
             try:
-                self.btn_guardar_enviar.configure(state="normal")
+                self._set_registration_buttons_state(True)
             except Exception:
                 pass
 

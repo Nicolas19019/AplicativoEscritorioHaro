@@ -237,6 +237,14 @@ class ApiClient:
         self._cache_clear()
         return data
 
+    def patch(self, resource, _id, payload=None, suffix=""):
+        path = f"{resource}/{_id}"
+        if suffix:
+            path = f"{path}/{suffix.lstrip('/')}"
+        data = self._request("PATCH", path, data=payload)
+        self._cache_clear()
+        return data
+
     def delete(self, resource, _id):
         data = self._request("DELETE", f"{resource}/{_id}")
         self._cache_clear()
