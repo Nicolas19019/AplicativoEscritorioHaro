@@ -16,6 +16,10 @@ class AuthError(RuntimeError):
     pass
 
 
+class ConflictError(RuntimeError):
+    pass
+
+
 class ApiClient:
     def __init__(
         self,
@@ -136,6 +140,51 @@ class ApiClient:
     def _cache_clear(self):
         with self._cache_lock:
             self._get_cache.clear()
+
+    @staticmethod
+    def _normalize_conflict_value(value):
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return round(float(value), 6)
+        if isinstance(value, str):
+            return " ".join(value.strip().split()).lower()
+        if isinstance(value, (list, tuple)):
+            return [ApiClient._normalize_conflict_value(v) for v in value]
+        if isinstance(value, dict):
+            return {
+                str(k): ApiClient._normalize_conflict_value(v)
+                for k, v in sorted(value.items(), key=lambda item: str(item[0]))
+            }
+        return str(value).strip().lower()
+
+    def ensure_not_modified(self, resource, _id, original_snapshot, *, compare_fields=None, label="registro"):
+        if not _id or not isinstance(original_snapshot, dict):
+            return
+        current = self.get_by_id(resource, _id)
+        if not isinstance(current, dict):
+            return
+        fields = list(compare_fields or original_snapshot.keys())
+        changed = []
+        for field in fields:
+            old_value = self._normalize_conflict_value(original_snapshot.get(field))
+            current_value = self._normalize_conflict_value(current.get(field))
+            if old_value != current_value:
+                changed.append(field)
+        if changed:
+            changed_text = ", ".join(changed[:4])
+            if len(changed) > 4:
+                changed_text += "..."
+            raise ConflictError(
+                f"No se guardaron los cambios porque este {label} fue actualizado en otra sesión.\n\n"
+                f"Campos detectados con cambios: {changed_text}\n\n"
+                f"Qué hacer:\n"
+                f"1. Pulsa Refrescar.\n"
+                f"2. Abre de nuevo el registro.\n"
+                f"3. Vuelve a aplicar tus cambios."
+            )
 
     def _request(self, method, path, data=None, params=None):
         """Envia una peticion HTTP al backend y levanta excepciones si falla."""

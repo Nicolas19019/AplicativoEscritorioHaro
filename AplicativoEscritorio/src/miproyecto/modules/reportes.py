@@ -14,6 +14,14 @@ from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 
 
+def _solid_color(value, fallback):
+    if isinstance(value, (tuple, list)) and value:
+        return str(value[0] or fallback)
+    if value in (None, ""):
+        return fallback
+    return str(value)
+
+
 class ReportesView(BaseModuleFrame):
     """
     Vista del módulo de Reportes
@@ -49,6 +57,14 @@ class ReportesView(BaseModuleFrame):
         action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER)\
             .grid(row=0, column=2, padx=8)
 
+        self.btn_toggle_table = action_btn(
+            "Mostrar tabla",
+            self._toggle_table_mode,
+            self.app.COLOR_RED,
+            self.app.COLOR_YELLOW,
+        )
+        self.btn_toggle_table.grid(row=0, column=3, padx=8)
+
         # ===== Filtros =====
         self._build_filtros()
 
@@ -59,7 +75,7 @@ class ReportesView(BaseModuleFrame):
 
         # Mantener el resumen en un alto fijo (scroll) para que la tabla siempre quede visible
         # (CTkScrollableFrame no soporta grid_propagate(False), así que usamos un wrapper con alto fijo)
-        self.summary_wrap = ctk.CTkFrame(self.summary, fg_color="transparent", height=190)
+        self.summary_wrap = ctk.CTkFrame(self.summary, fg_color="transparent", height=330)
         self.summary_wrap.grid(row=0, column=0, sticky="ew")
         self.summary_wrap.grid_columnconfigure(0, weight=1)
         self.summary_wrap.grid_rowconfigure(0, weight=1)
@@ -85,6 +101,8 @@ class ReportesView(BaseModuleFrame):
         self._tipo = "Estudiantes"
         self._report_month = datetime.now().month
         self._report_year = datetime.now().year
+        self._table_mode = False
+        self._table_query = ""
 
         # Tree state
         self._COLS = []
@@ -95,6 +113,7 @@ class ReportesView(BaseModuleFrame):
 
         # Render inicial (vacío) + autogenerar
         self._apply_report_state(self._empty_report_state())
+        self._update_view_mode()
         self.after(150, self._generar)
 
     # =====================================================
@@ -270,6 +289,60 @@ class ReportesView(BaseModuleFrame):
     def _empty_report_state(self):
         tipo = getattr(self, "_tipo", "Estudiantes")
         return {"tipo": tipo, "data": [], "analysis": {"kpis": [], "insights": [], "tops": {}}}
+
+    def _toggle_table_mode(self):
+        self._table_mode = not bool(getattr(self, "_table_mode", False))
+        self._update_view_mode()
+
+    def _update_view_mode(self):
+        showing_table = bool(getattr(self, "_table_mode", False))
+        if showing_table:
+            self.summary.grid_remove()
+            self.table.grid()
+            if hasattr(self, "btn_toggle_table"):
+                self.btn_toggle_table.configure(text="Volver al resumen")
+        else:
+            self.table.grid_remove()
+            self.summary.grid()
+            if hasattr(self, "btn_toggle_table"):
+                self.btn_toggle_table.configure(text="Mostrar tabla")
+
+    @staticmethod
+    def _kpi_description(title_text: str, value_text: str) -> str:
+        t = str(title_text or "").strip().lower()
+        value = str(value_text or "").strip()
+
+        if "total estudiantes" in t:
+            return f"{value} registros visibles"
+        if "activos" == t or t.endswith(" activos"):
+            return f"{value} con estado activo"
+        if "inactivos" in t:
+            return f"{value} fuera de actividad"
+        if "nuevos" in t:
+            return f"{value} ingresos del periodo"
+        if "matric" in t and "chatbot" in t:
+            return f"{value} cierres estimados"
+        if "prospect" in t and "chatbot" in t:
+            return f"{value} leads en seguimiento"
+        if "convers" in t and "chatbot" in t:
+            return "Paso de prospecto a matricula"
+        if "cuentas" in t:
+            return f"{value} cuentas registradas"
+        if "monto total" in t:
+            return "Valor acumulado"
+        if "pagado" == t or t.endswith(" pagado"):
+            return "Recaudo confirmado"
+        if "saldo" in t:
+            return "Pendiente por cobrar"
+        if "clases" in t:
+            return f"{value} sesiones encontradas"
+        if "horas" in t:
+            return "Carga horaria del periodo"
+        if "programadas" in t:
+            return "Pendientes de ejecutar"
+        if "canceladas" in t:
+            return "Sesiones anuladas"
+        return ""
 
     def _render_summary(self):
         container = getattr(self, "summary_body", None) or self.summary
@@ -496,6 +569,165 @@ class ReportesView(BaseModuleFrame):
                     ctk.CTkLabel(box, text=str(val), text_color=self.app.COLOR_TEXT, anchor="e")\
                         .grid(row=i, column=1, padx=10, pady=4, sticky="e")
 
+    def _render_summary(self):
+        container = getattr(self, "summary_body", None) or self.summary
+        for w in container.winfo_children():
+            try:
+                w.destroy()
+            except Exception:
+                pass
+
+        kpis = (self._analysis or {}).get("kpis") or []
+        insights = (self._analysis or {}).get("insights") or []
+        tops = (self._analysis or {}).get("tops") or {}
+
+        def C(name, default):
+            return getattr(self.app, name, default)
+
+        red_bg = C("RED_SOFT_BG", ("#FEF2F2", "#2a1515"))
+        red_border = C("RED_SOFT_BORDER", ("#FDE3E3", "#3a1f1f"))
+        red = C("COLOR_RED", ("#E53935", "#ff4c4c"))
+
+        must_bg = C("MUSTARD_SOFT_BG", ("#FFF8E1", "#2a2618"))
+        must_border = C("MUSTARD_SOFT_BORDER", ("#F7EAC1", "#3a3420"))
+        must = C("COLOR_YELLOW", ("#D4A017", "#E0B43F"))
+
+        blue_bg = ("#FFF7E0", "#2B2209")
+        blue_border = ("#F5D98A", "#4A3A12")
+        blue = C("COLOR_YELLOW", ("#D4A017", "#E0B43F"))
+
+        green_bg = ("#FFF1F1", "#2a1515")
+        green_border = ("#F3C0C0", "#442020")
+        green = red
+
+        purple_bg = C("COLOR_PANEL", ("#FFFFFF", "#151515"))
+        purple_border = C("COLOR_DIVIDER", ("#E7E7E7", "#303030"))
+        purple = C("COLOR_TEXT", ("#111111", "#F3F3F3"))
+
+        if not kpis and not insights:
+            ctk.CTkLabel(
+                container,
+                text="Genera un reporte para ver el analisis.",
+                text_color=self.app.COLOR_MUTED,
+                anchor="w",
+            ).grid(row=0, column=0, sticky="w", padx=2, pady=2)
+            return
+
+        cards = ctk.CTkFrame(container, fg_color="transparent")
+        cards.grid(row=0, column=0, sticky="ew")
+        for i in range(4):
+            cards.grid_columnconfigure(i, weight=1, uniform="kpi")
+
+        total_cards = max(len(kpis), 4)
+        rows_needed = (total_cards + 3) // 4
+
+        for i in range(total_cards):
+            title, value = ("-", "-")
+            if i < len(kpis):
+                title, value = kpis[i]
+
+            if i % 2 == 0:
+                bg, border, accent = red_bg, red_border, red
+            else:
+                bg, border, accent = must_bg, must_border, must
+            card = ctk.CTkFrame(
+                cards,
+                fg_color=bg,
+                corner_radius=18,
+                border_width=1,
+                border_color=border,
+            )
+            card.grid(row=i // 4, column=i % 4, padx=6, pady=(0, 8), sticky="ew")
+            card.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                card,
+                text=str(title),
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=14, weight="bold"),
+                anchor="w",
+            ).grid(row=0, column=0, padx=14, pady=(12, 8), sticky="w")
+            ctk.CTkLabel(
+                card,
+                text=str(value),
+                text_color=accent,
+                font=ctk.CTkFont(size=28, weight="bold"),
+                anchor="w",
+            ).grid(row=1, column=0, padx=14, pady=(0, 14), sticky="w")
+
+        ana = ctk.CTkFrame(
+            container,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=18,
+            border_width=1,
+            border_color=purple_border,
+        )
+        ana.grid(row=rows_needed, column=0, sticky="ew", padx=6, pady=(0, 2))
+        ana.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            ana,
+            text="Analisis",
+            text_color=self.app.COLOR_TEXT,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w",
+        ).grid(row=0, column=0, padx=14, pady=(12, 6), sticky="w")
+
+        insights_txt = "\n".join([f"- {s}" for s in insights]) if insights else "-"
+        ctk.CTkLabel(
+            ana,
+            text=insights_txt,
+            text_color=self.app.COLOR_TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=980,
+        ).grid(row=1, column=0, padx=14, pady=(0, 12), sticky="ew")
+
+        if tops:
+            topf = ctk.CTkFrame(
+                container,
+                fg_color=self.app.COLOR_PANEL,
+                corner_radius=18,
+                border_width=1,
+                border_color=must_border,
+            )
+            topf.grid(row=rows_needed + 1, column=0, sticky="ew", padx=6, pady=(6, 0))
+            topf.grid_columnconfigure(0, weight=1)
+            topf.grid_columnconfigure(1, weight=1)
+
+            for col, (title, items) in enumerate(list(tops.items())[:2]):
+                box = ctk.CTkFrame(
+                    topf,
+                    fg_color=self.app.COLOR_INPUT_BG,
+                    corner_radius=14,
+                    border_width=1,
+                    border_color=self.app.COLOR_DIVIDER,
+                )
+                box.grid(row=0, column=col, padx=10, pady=10, sticky="ew")
+                box.grid_columnconfigure(0, weight=1)
+                box.grid_columnconfigure(1, weight=0)
+
+                ctk.CTkLabel(
+                    box,
+                    text=str(title),
+                    text_color=self.app.COLOR_TEXT,
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    anchor="w",
+                ).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w")
+
+                for idx, (name, val) in enumerate((items or [])[:5], start=1):
+                    ctk.CTkLabel(
+                        box,
+                        text=str(name),
+                        text_color=self.app.COLOR_TEXT,
+                        anchor="w",
+                    ).grid(row=idx, column=0, padx=10, pady=4, sticky="w")
+                    ctk.CTkLabel(
+                        box,
+                        text=str(val),
+                        text_color=self.app.COLOR_MUTED,
+                        anchor="e",
+                    ).grid(row=idx, column=1, padx=10, pady=4, sticky="e")
+
     def _apply_report_state(self, state):
         if not isinstance(state, dict):
             state = self._empty_report_state()
@@ -505,6 +737,7 @@ class ReportesView(BaseModuleFrame):
 
         self._render_summary()
         self._render_table()
+        self._update_view_mode()
 
     @staticmethod
     def _tipo_norm(tipo: str) -> str:
@@ -547,6 +780,13 @@ class ReportesView(BaseModuleFrame):
             except Exception:
                 pass
         return None
+
+    def _remaining_days_report(self, rec):
+        start_date = self._parse_date(rec.get("fechaCreacion") or rec.get("fechaIngreso") or rec.get("createdAt"))
+        if not start_date:
+            return "—"
+        elapsed = (date.today() - start_date).days
+        return str(max(0, 85 - max(0, elapsed)))
 
     @staticmethod
     def _extract_sede_value(value) -> str:
@@ -732,6 +972,111 @@ class ReportesView(BaseModuleFrame):
                 ("Nuevos (mes)", str(len(nuevos))),
             ],
             "insights": [
+                f"Sede con más matrículas (mes): {top_sede} ({top_sede_n})" if top_sede_n else "Sin matrículas para este periodo.",
+                f"Categoría más común (mes): {top_cat} ({top_cat_n})" if top_cat_n else "—",
+                f"Activos en el sistema: {activos}/{total}",
+                f"Promedio de horas (mes): {avg_h:.1f}",
+            ],
+            "tops": {
+                "Top sedes": [(k, str(v)) for k, v in sede_counts.most_common(5)],
+                "Top categorías": [(k, str(v)) for k, v in cat_counts.most_common(5)],
+            },
+        }
+
+        return {"tipo": tipo, "data": detalle, "analysis": analysis}
+
+    def _build_estudiantes_report_state(self, tipo: str, month: int, year: int, force_refresh: bool = True):
+        raw = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
+        estudiantes = self._unwrap_list(raw, prefer_keys=("estudiantes",))
+
+        nuevos = self._filter_by_month(estudiantes, month, year, ("fechaCreacion", "fechaIngreso", "createdAt"))
+        conversion_types = {"inscrito", "matriculado", "activo"}
+        raw_estados = self.app.api.get_all("estados-cuenta", force_refresh=False) or []
+        estados_cuenta = self._unwrap_list(raw_estados, prefer_keys=("estados-cuenta", "estadosCuenta", "estados"))
+
+        detalle = []
+        for e in nuevos:
+            sid = e.get("id") or e.get("idEstudiante") or ""
+            nombre = f"{e.get('nombre','')} {e.get('apellido','')}".strip() or str(sid)
+            doc = (
+                e.get("numeroDocumento") or e.get("numDocumento")
+                or e.get("documento") or e.get("documentoEstudiante")
+                or e.get("cc") or e.get("CC") or e.get("cedula") or e.get("dni")
+            )
+            estado = (e.get("estado") or "").strip() or "—"
+            categoria = (
+                e.get("categoria")
+                or e.get("categoriaLicencia")
+                or e.get("licenciaCategoria")
+                or ""
+            )
+            sede = self._record_sede(e) or "—"
+            horas = e.get("horas", "")
+            ingreso_dt = self._parse_date(e.get("fechaCreacion") or e.get("fechaIngreso") or e.get("createdAt"))
+            ingreso_txt = ingreso_dt.strftime("%Y-%m-%d") if ingreso_dt else (str(e.get("fechaCreacion") or "")[:10] or "—")
+
+            detalle.append({
+                "ID": sid,
+                "Nombre": nombre,
+                "Documento": self._normalize_doc(doc),
+                "Estado": estado,
+                "Categoría": str(categoria or "").strip().upper() or "—",
+                "Sede": sede,
+                "Horas": horas if horas not in (None, "") else "—",
+                "Días restantes": self._remaining_days_report(e),
+                "Ingreso": ingreso_txt,
+            })
+
+        total = len(estudiantes)
+        activos = sum(1 for e in estudiantes if str(e.get("estado") or "").strip().lower() == "activo")
+        inactivos = max(0, total - activos)
+
+        sede_counts = Counter([self._record_sede(e) or "Sin sede" for e in nuevos])
+        cat_counts = Counter([str((e or {}).get("categoria") or "").strip().upper() or "—" for e in nuevos])
+
+        prospectos_total = sum(1 for e in estudiantes if str(e.get("tipoEstudiante") or "").strip().lower() == "prospecto")
+        prospectos_mes = sum(1 for e in nuevos if str(e.get("tipoEstudiante") or "").strip().lower() == "prospecto")
+        matriculas_chatbot = sum(1 for e in estudiantes if str(e.get("tipoEstudiante") or "").strip().lower() in conversion_types)
+        matriculas_chatbot_mes = sum(1 for e in nuevos if str(e.get("tipoEstudiante") or "").strip().lower() in conversion_types)
+        estudiantes_en_mora = 0
+        for estado in estados_cuenta:
+            try:
+                monto_total = float(estado.get("montoTotal") or 0)
+                monto_pagado = float(estado.get("montoPagado") or 0)
+                saldo = monto_total - monto_pagado
+                estado_txt = str(estado.get("estado") or "").strip().lower()
+                if saldo > 0 or estado_txt in {"en deuda", "pendiente", "mora"}:
+                    estudiantes_en_mora += 1
+            except Exception:
+                continue
+
+        top_sede, top_sede_n = ("—", 0)
+        if sede_counts:
+            top_sede, top_sede_n = sede_counts.most_common(1)[0]
+
+        top_cat, top_cat_n = ("—", 0)
+        if cat_counts:
+            top_cat, top_cat_n = cat_counts.most_common(1)[0]
+
+        try:
+            horas_vals = [float(e.get("horas") or 0) for e in nuevos]
+            avg_h = (sum(horas_vals) / len(horas_vals)) if horas_vals else 0.0
+        except Exception:
+            avg_h = 0.0
+
+        analysis = {
+            "kpis": [
+                ("Total estudiantes", str(total)),
+                ("Activos", str(activos)),
+                ("Inactivos", str(inactivos)),
+                ("Nuevos (mes)", str(len(nuevos))),
+                ("Matrículas chatbot", str(matriculas_chatbot_mes)),
+                ("Prospectos chatbot", str(prospectos_total)),
+                ("Estudiantes en mora", str(estudiantes_en_mora)),
+                ("Prospectos chatbot (mes)", str(prospectos_mes)),
+            ],
+            "insights": [
+                "Las métricas de chatbot se estiman con tipoEstudiante porque hoy Reportes no consume un endpoint separado del bot.",
                 f"Sede con más matrículas (mes): {top_sede} ({top_sede_n})" if top_sede_n else "Sin matrículas para este periodo.",
                 f"Categoría más común (mes): {top_cat} ({top_cat_n})" if top_cat_n else "—",
                 f"Activos en el sistema: {activos}/{total}",
@@ -1144,6 +1489,477 @@ class ReportesView(BaseModuleFrame):
                     wraplength=wrap,
                 ).grid(row=0, column=i, padx=10, pady=10, sticky="ew")
 
+    def _render_table(self):
+        def C(name, default):
+            return getattr(self.app, name, default)
+
+        red = C("COLOR_RED", ("#E53935", "#ff4c4c"))
+        must = C("COLOR_YELLOW", ("#D4A017", "#E0B43F"))
+        dark = C("COLOR_TEXT", ("#111111", "#F3F3F3"))
+        soft_red = C("RED_SOFT_BG", ("#FEF2F2", "#2a1515"))
+        soft_must = C("MUSTARD_SOFT_BG", ("#FFF8E1", "#2a2618"))
+        neutral_bg = C("COLOR_INPUT_BG", ("#F5F5F5", "#202020"))
+
+        if not hasattr(self, "_table_toolbar") or not self._table_toolbar.winfo_exists():
+            self._table_toolbar = ctk.CTkFrame(
+                self.table,
+                fg_color=self.app.COLOR_PANEL,
+                corner_radius=16,
+                border_width=1,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            self._table_toolbar.pack(fill="x", padx=12, pady=(10, 8))
+            self._table_toolbar.grid_columnconfigure(1, weight=1)
+
+            ctk.CTkLabel(
+                self._table_toolbar,
+                text="Buscar estudiante",
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=12, weight="bold"),
+            ).grid(row=0, column=0, padx=(14, 10), pady=(12, 4), sticky="w")
+
+            self.en_table_search = ctk.CTkEntry(
+                self._table_toolbar,
+                placeholder_text="Escribe nombre, documento, sede o estado",
+                height=42,
+                corner_radius=14,
+                border_width=2,
+                border_color=self.app.COLOR_YELLOW,
+            )
+            self.en_table_search.grid(row=1, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="ew")
+            self.en_table_search.bind("<KeyRelease>", self._on_table_search)
+
+            ctk.CTkButton(
+                self._table_toolbar,
+                text="Limpiar",
+                height=42,
+                width=120,
+                corner_radius=16,
+                fg_color=self.app.COLOR_RED,
+                hover_color=self.app.COLOR_YELLOW,
+                command=self._clear_table_search,
+            ).grid(row=1, column=2, padx=(0, 14), pady=(0, 12), sticky="e")
+
+        if not hasattr(self, "_table_rows_host") or not self._table_rows_host.winfo_exists():
+            self._table_rows_host = ctk.CTkFrame(self.table, fg_color="transparent")
+            self._table_rows_host.pack(fill="both", expand=True, padx=0, pady=0)
+        else:
+            for w in self._table_rows_host.winfo_children():
+                w.destroy()
+
+        def badge_style(text: str):
+            s = str(text or "").strip().lower()
+            if not s or s in {"—", "-"}:
+                return neutral_bg, self.app.COLOR_TEXT
+            if any(k in s for k in ("pagado", "activo", "dictada")):
+                return soft_red, red
+            if any(k in s for k in ("program", "pend")):
+                return soft_must, must
+            if any(k in s for k in ("en deuda", "deuda", "cancel", "inactivo")):
+                return soft_red, red
+            return neutral_bg, self.app.COLOR_MUTED
+
+        def parse_money_str(value):
+            try:
+                s = str(value or "").strip()
+                if not s:
+                    return None
+                sign = -1 if s.startswith("-") else 1
+                s = s.replace("$", "").replace(",", "").replace(" ", "").replace("\u00A0", "")
+                s = s.replace("-", "")
+                return sign * float(s)
+            except Exception:
+                return None
+
+        tipo = getattr(self, "_tipo", "") or ""
+        t = self._tipo_norm(tipo)
+
+        if "estado" in t:
+            colspec = [
+                ("Estudiante", 280, 1, "w"),
+                ("Sede", 160, 0, "w"),
+                ("Monto total", 120, 0, "e"),
+                ("Pagado", 120, 0, "e"),
+                ("Saldo", 120, 0, "e"),
+                ("Estado", 120, 0, "center"),
+            ]
+            accent = red
+        elif "clase" in t:
+            colspec = [
+                ("Fecha", 120, 0, "center"),
+                ("Inicio", 80, 0, "center"),
+                ("Fin", 80, 0, "center"),
+                ("Duración (h)", 110, 0, "center"),
+                ("Estudiante", 260, 1, "w"),
+                ("Instructor", 220, 1, "w"),
+                ("Placa", 90, 0, "center"),
+                ("Sede", 160, 0, "w"),
+                ("Estado", 120, 0, "center"),
+            ]
+            accent = must
+        else:
+            colspec = [
+                ("ID", 70, 0, "center"),
+                ("Nombre", 260, 1, "w"),
+                ("Documento", 150, 0, "w"),
+                ("Estado", 120, 0, "center"),
+                ("Categoría", 110, 0, "center"),
+                ("Sede", 160, 0, "w"),
+                ("Horas", 80, 0, "center"),
+                ("Días restantes", 110, 0, "center"),
+                ("Ingreso", 120, 0, "center"),
+            ]
+            accent = dark
+
+        query = str(getattr(self, "_table_query", "") or "").lower()
+        filtered_data = []
+        for rec in self._data:
+            if not query:
+                filtered_data.append(rec)
+                continue
+            haystack = " ".join(
+                str(v)
+                for k, v in (rec or {}).items()
+                if not str(k).startswith("_") and v not in (None, "")
+            ).lower()
+            if query in haystack:
+                filtered_data.append(rec)
+
+        if not filtered_data:
+            card = ctk.CTkFrame(
+                self._table_rows_host,
+                fg_color=self.app.COLOR_PANEL,
+                corner_radius=14,
+                border_width=2,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            card.pack(fill="x", padx=12, pady=12)
+            ctk.CTkLabel(
+                card,
+                text="Sin resultados",
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(padx=14, pady=(14, 4), anchor="w")
+            ctk.CTkLabel(
+                card,
+                text="Ajusta la búsqueda o genera otro reporte para ver datos.",
+                text_color=self.app.COLOR_MUTED,
+            ).pack(padx=14, pady=(0, 14), anchor="w")
+            return
+
+        strip = ctk.CTkFrame(self._table_rows_host, fg_color=accent, corner_radius=999, height=6)
+        strip.pack(fill="x", padx=12, pady=(2, 6))
+
+        header = ctk.CTkFrame(
+            self._table_rows_host,
+            fg_color=self.app.COLOR_INPUT_BG,
+            corner_radius=12,
+            border_width=1,
+            border_color=self.app.COLOR_DIVIDER,
+        )
+        header.pack(fill="x", padx=12, pady=(0, 6))
+
+        for i, (name, minw, weight, _anchor) in enumerate(colspec):
+            header.grid_columnconfigure(i, minsize=minw, weight=weight)
+            ctk.CTkLabel(
+                header,
+                text=name,
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                anchor="w",
+            ).grid(row=0, column=i, padx=10, pady=12, sticky="ew")
+
+        for idx, rec in enumerate(filtered_data):
+            row_bg = self.app.COLOR_PANEL if idx % 2 == 0 else self.app.COLOR_BG
+            row = ctk.CTkFrame(
+                self._table_rows_host,
+                fg_color=row_bg,
+                corner_radius=12,
+                border_width=1,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            row.pack(fill="x", padx=12, pady=4)
+
+            for i, (name, minw, weight, anchor) in enumerate(colspec):
+                row.grid_columnconfigure(i, minsize=minw, weight=weight)
+                val = rec.get(name, "")
+
+                if name == "Estado":
+                    b_bg, b_txt = badge_style(val)
+                    ctk.CTkLabel(
+                        row,
+                        text=str(val if val is not None else ""),
+                        fg_color=b_bg,
+                        text_color=b_txt,
+                        corner_radius=999,
+                        height=28,
+                        padx=12,
+                    ).grid(row=0, column=i, padx=10, pady=10, sticky="w")
+                    continue
+
+                txt_color = self.app.COLOR_TEXT
+                if "estado" in t and name in {"Pagado"}:
+                    txt_color = red
+                if "estado" in t and name in {"Saldo"}:
+                    saldo_v = parse_money_str(val)
+                    txt_color = red if (saldo_v or 0) > 0 else dark
+                if "clase" in t and name in {"Duración (h)"}:
+                    txt_color = must
+
+                wrap = 0
+                if name in {"Nombre", "Estudiante", "Instructor"}:
+                    wrap = 360
+
+                ctk.CTkLabel(
+                    row,
+                    text=str(val if val is not None else ""),
+                    text_color=txt_color,
+                    anchor=anchor,
+                    justify="left",
+                    wraplength=wrap,
+                ).grid(row=0, column=i, padx=10, pady=10, sticky="ew")
+
+    def _render_table(self):
+        def C(name, default):
+            return getattr(self.app, name, default)
+
+        def solid(value, fallback):
+            if isinstance(value, (tuple, list)) and value:
+                return str(value[0] or fallback)
+            if value in (None, ""):
+                return fallback
+            return str(value)
+
+        red = C("COLOR_RED", ("#E53935", "#ff4c4c"))
+        must = C("COLOR_YELLOW", ("#D4A017", "#E0B43F"))
+        dark = C("COLOR_TEXT", ("#111111", "#F3F3F3"))
+
+        if not hasattr(self, "_table_toolbar") or not self._table_toolbar.winfo_exists():
+            self._table_toolbar = ctk.CTkFrame(
+                self.table,
+                fg_color=self.app.COLOR_PANEL,
+                corner_radius=16,
+                border_width=1,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            self._table_toolbar.pack(fill="x", padx=12, pady=(10, 8))
+            self._table_toolbar.grid_columnconfigure(1, weight=1)
+
+            ctk.CTkLabel(
+                self._table_toolbar,
+                text="Buscar estudiante",
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=12, weight="bold"),
+            ).grid(row=0, column=0, padx=(14, 10), pady=(12, 4), sticky="w")
+
+            self.en_table_search = ctk.CTkEntry(
+                self._table_toolbar,
+                placeholder_text="Escribe nombre, documento, sede o estado",
+                height=42,
+                corner_radius=14,
+                border_width=2,
+                border_color=self.app.COLOR_YELLOW,
+            )
+            self.en_table_search.grid(row=1, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="ew")
+            self.en_table_search.bind("<KeyRelease>", self._on_table_search)
+
+            ctk.CTkButton(
+                self._table_toolbar,
+                text="Limpiar",
+                height=42,
+                width=120,
+                corner_radius=16,
+                fg_color=self.app.COLOR_RED,
+                hover_color=self.app.COLOR_YELLOW,
+                command=self._clear_table_search,
+            ).grid(row=1, column=2, padx=(0, 14), pady=(0, 12), sticky="e")
+
+        if not hasattr(self, "_table_rows_host") or not self._table_rows_host.winfo_exists():
+            self._table_rows_host = ctk.CTkFrame(self.table, fg_color="transparent")
+            self._table_rows_host.pack(fill="both", expand=True, padx=0, pady=0)
+        else:
+            for w in self._table_rows_host.winfo_children():
+                w.destroy()
+
+        tipo = getattr(self, "_tipo", "") or ""
+        t = self._tipo_norm(tipo)
+
+        if "estado" in t:
+            colspec = [
+                ("Estudiante", 320, "w"),
+                ("Sede", 170, "w"),
+                ("Monto total", 130, "e"),
+                ("Pagado", 130, "e"),
+                ("Saldo", 130, "e"),
+                ("Estado", 130, "center"),
+            ]
+            accent = red
+        elif "clase" in t:
+            colspec = [
+                ("Fecha", 120, "center"),
+                ("Inicio", 80, "center"),
+                ("Fin", 80, "center"),
+                ("Duración (h)", 120, "center"),
+                ("Estudiante", 320, "w"),
+                ("Instructor", 260, "w"),
+                ("Placa", 100, "center"),
+                ("Sede", 170, "w"),
+                ("Estado", 130, "center"),
+            ]
+            accent = must
+        else:
+            colspec = [
+                ("ID", 70, "center"),
+                ("Nombre", 420, "w"),
+                ("Documento", 150, "w"),
+                ("Estado", 120, "center"),
+                ("Categoría", 120, "center"),
+                ("Sede", 170, "w"),
+                ("Horas", 90, "center"),
+                ("Días restantes", 120, "center"),
+                ("Ingreso", 120, "center"),
+            ]
+            accent = dark
+
+        query = str(getattr(self, "_table_query", "") or "").lower()
+        filtered_data = []
+        for rec in self._data:
+            if not query:
+                filtered_data.append(rec)
+                continue
+            haystack = " ".join(
+                str(v)
+                for k, v in (rec or {}).items()
+                if not str(k).startswith("_") and v not in (None, "")
+            ).lower()
+            if query in haystack:
+                filtered_data.append(rec)
+
+        if not filtered_data:
+            card = ctk.CTkFrame(
+                self._table_rows_host,
+                fg_color=self.app.COLOR_PANEL,
+                corner_radius=14,
+                border_width=2,
+                border_color=self.app.COLOR_DIVIDER,
+            )
+            card.pack(fill="x", padx=12, pady=12)
+            ctk.CTkLabel(
+                card,
+                text="Sin resultados",
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(padx=14, pady=(14, 4), anchor="w")
+            ctk.CTkLabel(
+                card,
+                text="Ajusta la búsqueda o genera otro reporte para ver datos.",
+                text_color=self.app.COLOR_MUTED,
+            ).pack(padx=14, pady=(0, 14), anchor="w")
+            return
+
+        strip = ctk.CTkFrame(self._table_rows_host, fg_color=accent, corner_radius=999, height=6)
+        strip.pack(fill="x", padx=12, pady=(2, 6))
+
+        tree_wrap = ctk.CTkFrame(
+            self._table_rows_host,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=12,
+            border_width=1,
+            border_color=self.app.COLOR_DIVIDER,
+        )
+        tree_wrap.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        tree_wrap.grid_rowconfigure(0, weight=1)
+        tree_wrap.grid_columnconfigure(0, weight=1)
+
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+        style.configure(
+            "Reportes.Treeview",
+            background=_solid_color(self.app.COLOR_PANEL, "#FFFFFF"),
+            fieldbackground=_solid_color(self.app.COLOR_PANEL, "#FFFFFF"),
+            foreground=_solid_color(self.app.COLOR_TEXT, "#111111"),
+            bordercolor=_solid_color(self.app.COLOR_DIVIDER, "#E5E7EB"),
+            lightcolor=_solid_color(self.app.COLOR_DIVIDER, "#E5E7EB"),
+            darkcolor=_solid_color(self.app.COLOR_DIVIDER, "#E5E7EB"),
+            rowheight=30,
+        )
+        style.map(
+            "Reportes.Treeview",
+            background=[("selected", _solid_color(self.app.MUSTARD_SOFT_BG, "#FFF8E1"))],
+            foreground=[("selected", _solid_color(self.app.COLOR_TEXT, "#111111"))],
+        )
+        style.configure(
+            "Reportes.Treeview.Heading",
+            background=_solid_color(self.app.COLOR_BG, "#F5F7FB"),
+            foreground=_solid_color(self.app.COLOR_TEXT, "#111111"),
+            relief="flat",
+            font=("Segoe UI", 10, "bold"),
+        )
+
+        cols = [name for name, _width, _anchor in colspec]
+        tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", style="Reportes.Treeview")
+        tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+
+        vsb = ttk.Scrollbar(tree_wrap, orient="vertical", command=tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns", padx=(6, 10), pady=10)
+        hsb = ttk.Scrollbar(tree_wrap, orient="horizontal", command=tree.xview)
+        hsb.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        for name, width, anchor in colspec:
+            tree.heading(name, text=name)
+            tree.column(name, width=width, minwidth=max(70, int(width * 0.8)), stretch=False, anchor=anchor)
+
+        tree.tag_configure("even", background=_solid_color(self.app.COLOR_PANEL, "#FFFFFF"), foreground=_solid_color(self.app.COLOR_TEXT, "#111111"))
+        tree.tag_configure("odd", background=_solid_color(self.app.COLOR_BG, "#F8F8F8"), foreground=_solid_color(self.app.COLOR_TEXT, "#111111"))
+
+        for idx, rec in enumerate(filtered_data):
+            values = [str(rec.get(name, "") if rec.get(name, "") is not None else "") for name, _width, _anchor in colspec]
+            tree.insert("", "end", values=values, tags=("even" if idx % 2 == 0 else "odd",))
+
+    def _on_table_search(self, _event=None):
+        if hasattr(self, "en_table_search"):
+            self._table_query = self.en_table_search.get()
+        job = getattr(self, "_table_search_job", None)
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+        self._table_search_job = self.after(120, self._apply_table_search)
+
+    def _apply_table_search(self):
+        self._table_search_job = None
+        self._render_table()
+
+    def _restore_table_search_focus(self, cursor_pos=None):
+        if not hasattr(self, "en_table_search"):
+            return
+        try:
+            self.en_table_search.focus_set()
+            if cursor_pos is None:
+                cursor_pos = len(self.en_table_search.get())
+            self.en_table_search.icursor(cursor_pos)
+        except Exception:
+            pass
+
+    def _clear_table_search(self):
+        job = getattr(self, "_table_search_job", None)
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+            self._table_search_job = None
+        self._table_query = ""
+        if hasattr(self, "en_table_search"):
+            self.en_table_search.delete(0, "end")
+            self.after_idle(self.en_table_search.focus_set)
+        self._render_table()
+
     # =====================================================
     #                     ACCIONES
     # =====================================================
@@ -1262,9 +2078,9 @@ class ReportesView(BaseModuleFrame):
             elems.append(Spacer(1, 12))
 
         # Tabla detalle (compacta para PDF)
-        headers = ["ID", "Nombre", "Documento", "Estado", "Sede", "Ingreso"]
+        headers = ["ID", "Nombre", "Documento", "Estado", "Sede", "Días restantes", "Ingreso"]
         rows = [headers] + [[r.get(h, "") for h in headers] for r in (self._data or [])]
-        elems.append(self._table_pro(rows, col_widths=[1.4*cm, 5.8*cm, 2.6*cm, 2.2*cm, 2.6*cm, 2.4*cm]))
+        elems.append(self._table_pro(rows, col_widths=[1.2*cm, 4.8*cm, 2.4*cm, 2.0*cm, 2.2*cm, 2.2*cm, 2.2*cm]))
 
         header_draw = self._header_canvas()
         doc.build(elems, onFirstPage=header_draw, onLaterPages=header_draw)

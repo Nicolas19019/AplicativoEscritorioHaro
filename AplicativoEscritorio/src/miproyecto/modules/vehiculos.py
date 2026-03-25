@@ -4,6 +4,16 @@ import threading
 import time
 from modules.forms_inlines import VehiculoInlineForm
 from modules.base import BaseModuleFrame
+from modules.treeview_theme import configure_treeview_style
+
+
+def _normalize_sede_label(value) -> str:
+    txt = str(value or "").strip().lower()
+    if txt in {"1 de mayo", "1demayo"}:
+        return "1 de Mayo"
+    if txt in {"el eden", "el edén", "eden", "edén"}:
+        return "El Eden"
+    return str(value or "").strip()
 
 
 class VehiculosView(BaseModuleFrame):
@@ -67,12 +77,12 @@ class VehiculosView(BaseModuleFrame):
         self.table.grid_columnconfigure(0, weight=1)
 
         self._COLS = [
-            ("Placa", 120),
-            ("Marca", 170),
-            ("Modelo", 170),
-            ("Año", 90),
-            ("Sede", 170),
-            ("Estado", 120),
+            ("Placa", 130),
+            ("Marca", 190),
+            ("Modelo", 190),
+            ("Año", 100),
+            ("Sede", 220),
+            ("Estado", 140),
         ]
 
         self._build_tree()
@@ -83,55 +93,7 @@ class VehiculosView(BaseModuleFrame):
     # =====================================================
     def _build_tree(self):
         style = ttk.Style()
-        try:
-            style.theme_use("clam")
-        except Exception:
-            pass
-
-        mode = ctk.get_appearance_mode()
-
-        if mode == "Light":
-            bg = "#ffffff"
-            panel = "#ffffff"
-            text = "#111111"
-            muted = "#444444"
-            divider = "#e5e7eb"
-            sel_bg = "#FFF8E1"
-            even_bg = "#ffffff"
-            odd_bg = "#f8fafc"
-        else:
-            bg = getattr(self.app, "COLOR_BG", "#111111")
-            panel = self.app.COLOR_PANEL
-            text = self.app.COLOR_TEXT
-            muted = self.app.COLOR_MUTED
-            divider = self.app.COLOR_DIVIDER
-            sel_bg = divider
-            even_bg = panel
-            odd_bg = "#222222"
-
-        style.configure(
-            "Haro.Treeview",
-            background=panel,
-            fieldbackground=panel,
-            foreground=text,
-            lightcolor=divider,
-            darkcolor=divider,
-            rowheight=28,
-            bordercolor=divider
-        )
-
-        style.map(
-            "Haro.Treeview",
-            background=[("selected", sel_bg)],
-            foreground=[("selected", text)]
-        )
-
-        style.configure(
-            "Haro.Treeview.Heading",
-            background=bg,
-            foreground=muted,
-            font=("Segoe UI", 10, "bold")
-        )
+        palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
         cols = [c[0] for c in self._COLS]
         self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
@@ -146,10 +108,10 @@ class VehiculosView(BaseModuleFrame):
         for name, width in self._COLS:
             self.tree.heading(name, text=name)
             anchor = "center" if name in {"Año", "Estado"} else "w"
-            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.7)), stretch=True, anchor=anchor)
+            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.8)), stretch=True, anchor=anchor)
 
-        self.tree.tag_configure("even", background=even_bg, foreground=text)
-        self.tree.tag_configure("odd", background=odd_bg, foreground=text)
+        self.tree.tag_configure("even", background=palette["even"], foreground=palette["text"])
+        self.tree.tag_configure("odd", background=palette["odd"], foreground=palette["text"])
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda e: self._editar())
@@ -195,8 +157,8 @@ class VehiculosView(BaseModuleFrame):
         estado_disp = estado.capitalize() if estado else ""
         return (
             str(vh.get("placa", "") or "").strip().upper(),
-            vh.get("marca", "") or "",
-            vh.get("modelo", "") or "",
+            str(vh.get("marca", "") or "").strip().upper(),
+            str(vh.get("modelo", "") or "").strip().upper(),
             vh.get("anio", "") if vh.get("anio", "") is not None else "",
             self._sede_value(vh),
             estado_disp,
@@ -279,8 +241,13 @@ class VehiculosView(BaseModuleFrame):
                         raw = []
 
                 def apply_data():
-                    self._all_data = raw
-                    self._data = raw
+                    allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
+                    if allowed_sede:
+                        raw_filtered = [vh for vh in (raw or []) if _normalize_sede_label(self._sede_value(vh)) == allowed_sede]
+                    else:
+                        raw_filtered = raw or []
+                    self._all_data = raw_filtered
+                    self._data = raw_filtered
                     self._set_data(self._data)
 
                 self.after(0, apply_data)
@@ -292,12 +259,25 @@ class VehiculosView(BaseModuleFrame):
 
     def _submit_inline(self, payload, mode):
         try:
+            payload = dict(payload or {})
+            for key in ("placa", "marca", "modelo"):
+                payload[key] = str(payload.get(key, "") or "").strip().upper()
+            allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
+            if allowed_sede:
+                payload["sede"] = allowed_sede
             if mode == "create":
                 self.app.api.create("vehiculos", payload)
             else:
                 idx = self._selected_idx
                 vh = self._data[idx]
                 placa = vh.get("placa")
+                self.app.api.ensure_not_modified(
+                    "vehiculos",
+                    placa,
+                    vh,
+                    compare_fields=["placa", "marca", "modelo", "anio", "sede", "estado", "visible"],
+                    label="vehículo",
+                )
                 self.app.api.update("vehiculos", placa, payload)
 
             self._last_refresh_ts = 0

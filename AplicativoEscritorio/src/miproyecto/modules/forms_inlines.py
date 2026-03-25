@@ -18,6 +18,10 @@ def _normalize_sede_label(value):
     return ""
 
 
+def _upper_text(value):
+    return str(value or "").strip().upper()
+
+
 # ================= INSTRUCTOR FORM =================
 class InstructorInlineForm(ctk.CTkFrame):
     """
@@ -194,8 +198,8 @@ class InstructorInlineForm(ctk.CTkFrame):
         visible_raw = (self.cb_visible.get() or "true").strip().lower()
         return {
             "cedula": self.en_ced.get().strip(),
-            "nombre": self.en_nom.get().strip(),
-            "apellido": self.en_ape.get().strip(),
+            "nombre": _upper_text(self.en_nom.get()),
+            "apellido": _upper_text(self.en_ape.get()),
             "email": email,
             "especialidad": especialidad,
             "categoria": categoria,
@@ -367,9 +371,9 @@ class VehiculoInlineForm(ctk.CTkFrame):
     def _collect(self):
         anio_raw = (self.en_anio.get() or "").strip()
         return {
-            "placa": (self.en_placa.get() or "").strip(),
-            "marca": (self.en_marca.get() or "").strip(),
-            "modelo": (self.en_modelo.get() or "").strip(),
+            "placa": _upper_text(self.en_placa.get()),
+            "marca": _upper_text(self.en_marca.get()),
+            "modelo": _upper_text(self.en_modelo.get()),
             "anio": int(anio_raw) if anio_raw.isdigit() else anio_raw,
             "sede": (self.cb_sede.get() or "").strip(),
             "estado": (self.cb_estado.get() or "").strip(),

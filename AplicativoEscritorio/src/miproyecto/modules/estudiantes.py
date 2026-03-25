@@ -2,9 +2,11 @@
 from tkinter import messagebox
 from tkinter import ttk
 import threading
+from datetime import datetime, date
 import time
 
 from modules.base import BaseModuleFrame
+from modules.treeview_theme import configure_treeview_style, solid_color
 
 SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
 
@@ -38,6 +40,10 @@ def _normalize_tipo_pase(raw_value):
         if p == "moto" and "moto" not in tokens:
             tokens.append("moto")
     return ",".join(tokens)
+
+
+def _upper_text(value):
+    return str(value or "").strip().upper()
 
 def _extract_sede(data: dict) -> str:
     """
@@ -216,6 +222,18 @@ class StudentInlineForm(ctk.CTkFrame):
         self.mode = "create"
         self.sw_visible.select()
 
+    def _assigned_admin_sede(self) -> str:
+        raw = getattr(self.app, "current_admin_sede", None)
+        return _normalize_sede_label(raw) or str(raw or "").strip()
+
+    def _apply_admin_sede_restriction(self):
+        assigned_sede = self._assigned_admin_sede()
+        if getattr(self.app, "is_superadmin", False) or not assigned_sede:
+            self.cb_sede.configure(values=SEDES_DISPONIBLES, state="normal")
+            return
+        self.cb_sede.configure(values=[assigned_sede], state="disabled")
+        self.cb_sede.set(assigned_sede)
+
     def _force_entry_placeholders(self):
         try:
             for attr in dir(self):
@@ -230,12 +248,14 @@ class StudentInlineForm(ctk.CTkFrame):
     def show_create(self):
         self.mode = "create"
         self._fill({})
+        self._apply_admin_sede_restriction()
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
     def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
+        self._apply_admin_sede_restriction()
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
@@ -317,8 +337,8 @@ class StudentInlineForm(ctk.CTkFrame):
         data = {
             "tipoDocumento": self.cb_tipo.get().strip(),
             "numeroDocumento": self.en_doc.get().strip(),
-            "nombre": self.en_nombre.get().strip(),
-            "apellido": self.en_apellido.get().strip(),
+            "nombre": _upper_text(self.en_nombre.get()),
+            "apellido": _upper_text(self.en_apellido.get()),
             "tipoEstudiante": (self.cb_tipo_estudiante.get() or "prospecto").strip().lower(),
             "telefono": self.en_tel.get().strip(),
             "email": self.en_mail.get().strip(),
@@ -386,8 +406,21 @@ class EstudiantesView(BaseModuleFrame):
     TREE_INSERT_CHUNK = 250      # inserta por trozos para no congelar si escala
     TREE_INSERT_DELAY = 1        # ms
 
+    def _form_scroll_height(self):
+        try:
+            screen_h = int(self.winfo_screenheight() or 900)
+        except Exception:
+            screen_h = 900
+        if screen_h <= 768:
+            return 250
+        if screen_h <= 900:
+            return 300
+        return 360
+
     def __init__(self, master):
         super().__init__(master, "Estudiantes", "Gestione matrículas y datos del alumno")
+        self.grid_rowconfigure(4, weight=0)
+        self.grid_rowconfigure(5, weight=1)
 
         # ---------- Estado ----------
         self._all_data = []
@@ -398,9 +431,12 @@ class EstudiantesView(BaseModuleFrame):
         self._render_seq = 0
         self._loading_overlay = None
         self._last_refresh_ts = 0
+        self._initial_layout_done = False
+        self._initial_data_reflow_done = False
 
         # mapeo Tree IID -> idx actual en self._data
         self._iid_to_index = {}
+        self.bind("<Map>", self._on_first_map, add="+")
 
         # ===== Toolbar =====
         tb = ctk.CTkFrame(self, fg_color="transparent")
@@ -434,9 +470,18 @@ class EstudiantesView(BaseModuleFrame):
         self._build_summary()
 
         # ===== Form inline =====
-        self.form = StudentInlineForm(self, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
-        self.form.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
+        self.form_host = ctk.CTkScrollableFrame(
+            self,
+            fg_color="transparent",
+            corner_radius=12,
+            height=self._form_scroll_height(),
+        )
+        self.form_host.grid_columnconfigure(0, weight=1)
+        self.form = StudentInlineForm(self.form_host, self.app, on_submit=self._submit_inline, on_cancel=self._cancel_inline)
+        self.form.grid(row=0, column=0, sticky="ew")
+        self.form_host.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
         self.form.hide()
+        self.form_host.grid_remove()
 
         # ===== Filtros =====
         self.filters = self._make_filters_bar(self)
@@ -452,11 +497,13 @@ class EstudiantesView(BaseModuleFrame):
 
         self._COLS = [
             ("Documento", 130),
-            ("Nombre completo", 220),
+            ("Nombre completo", 320),
             ("Categoría", 90),
             ("Sede", 140),
             ("Horas", 70),
             ("Tipo pase", 110),
+            ("Días restantes", 120),
+            ("Ingreso", 120),
             ("Teórico", 90),
             ("Estado", 110),
         ]
@@ -464,6 +511,7 @@ class EstudiantesView(BaseModuleFrame):
         self._build_tree()
 
         self.after(150, self._refrescar)
+        self.after(380, self._ensure_table_layout)
 
     def _build_summary(self):
         self.summary = ctk.CTkFrame(
@@ -485,24 +533,33 @@ class EstudiantesView(BaseModuleFrame):
             ("teorico", "Teórico aprobado"),
         )
         for idx, (key, label) in enumerate(cards):
+            if idx % 2 == 0:
+                card_bg = self.app.RED_SOFT_BG
+                card_border = self.app.RED_SOFT_BORDER
+                value_color = self.app.COLOR_RED
+            else:
+                card_bg = self.app.MUSTARD_SOFT_BG
+                card_border = self.app.MUSTARD_SOFT_BORDER
+                value_color = self.app.MUSTARD_MAIN
+
             card = ctk.CTkFrame(
                 self.summary,
-                fg_color=self.app.COLOR_INPUT_BG,
-                corner_radius=12,
+                fg_color=card_bg,
+                corner_radius=18,
                 border_width=1,
-                border_color=self.app.COLOR_DIVIDER,
+                border_color=card_border,
             )
             card.grid(row=0, column=idx, padx=8, pady=10, sticky="ew")
             ctk.CTkLabel(
                 card,
                 text=label,
-                text_color=self.app.COLOR_MUTED,
-                font=ctk.CTkFont(size=11),
+                text_color=self.app.COLOR_TEXT,
+                font=ctk.CTkFont(size=12, weight="bold"),
             ).pack(anchor="w", padx=12, pady=(10, 2))
             value = ctk.CTkLabel(
                 card,
                 text="0",
-                text_color=self.app.COLOR_TEXT,
+                text_color=value_color,
                 font=ctk.CTkFont(size=22, weight="bold"),
             )
             value.pack(anchor="w", padx=12, pady=(0, 10))
@@ -536,54 +593,32 @@ class EstudiantesView(BaseModuleFrame):
             except Exception:
                 pass
 
-    # ---------- Treeview (rápido) ----------
-    def _build_tree(self):
-        # Estilos ttk para que no se vea “feo” dentro del CTkFrame
-        style = ttk.Style()
+    def _on_first_map(self, _event=None):
+        if self._initial_layout_done:
+            return
+        self._initial_layout_done = True
+        self.after(120, self._ensure_table_layout)
+        self.after(420, self._ensure_table_layout)
+
+    def _ensure_table_layout(self):
         try:
-            style.theme_use("clam")
+            self.update_idletasks()
         except Exception:
             pass
+        try:
+            if hasattr(self, "table") and self.table.winfo_exists():
+                self.table.update_idletasks()
+            if hasattr(self, "tree") and self.tree.winfo_exists():
+                self.tree.update_idletasks()
+        except Exception:
+            pass
+        if getattr(self, "_data", None):
+            self._queue_render(self._data)
 
-        mode = ctk.get_appearance_mode()  # "Light" o "Dark"
-
-        if mode == "Light":
-            bg = "#ffffff"
-            panel = "#ffffff"
-            text = "#111111"
-            muted = "#444444"
-            divider = "#e5e7eb"
-            sel_bg = "#FFF8E1"
-        else:
-            bg = getattr(self.app, "COLOR_BG", "#111111")
-            panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")
-            text = getattr(self.app, "COLOR_TEXT", "#ffffff")
-            muted = getattr(self.app, "COLOR_MUTED", "#cfcfcf")
-            divider = getattr(self.app, "COLOR_DIVIDER", "#2a2a2a")
-            sel_bg = divider
-
-        style.configure(
-            "Haro.Treeview",
-            background=panel,
-            fieldbackground=panel,
-            foreground=text,
-            bordercolor=divider,
-            lightcolor=divider,
-            darkcolor=divider,
-            rowheight=28,
-        )
-        style.map(
-            "Haro.Treeview",
-            background=[("selected", sel_bg)],
-            foreground=[("selected", text)],
-        )
-        style.configure(
-            "Haro.Treeview.Heading",
-            background=bg,
-            foreground=muted,
-            relief="flat",
-            font=("Segoe UI", 10, "bold"),
-        )
+    # ---------- Treeview (rápido) ----------
+    def _build_tree(self):
+        style = ttk.Style()
+        palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
         cols = [c[0] for c in self._COLS]
         self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
@@ -599,8 +634,16 @@ class EstudiantesView(BaseModuleFrame):
         # Config columnas
         for name, w in self._COLS:
             self.tree.heading(name, text=name)
-            # stretch=True para que se adapte al ancho; anchor=w para alinear izquierda
-            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.7)), stretch=True, anchor="w")
+            anchor = "w"
+            if name in {"Horas", "Teórico", "Estado", "Días restantes", "Categoría", "Ingreso"}:
+                anchor = "center"
+            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.8)), stretch=False, anchor=anchor)
+
+        self.tree.tag_configure("even", background=palette["even"], foreground=palette["text"])
+        self.tree.tag_configure("odd", background=palette["odd"], foreground=palette["text"])
+        self.tree.tag_configure("days_warn_30", foreground=solid_color(getattr(self.app, "MUSTARD_MAIN", "#D4A017"), "#D4A017"))
+        self.tree.tag_configure("days_warn_14", foreground="#F97316")
+        self.tree.tag_configure("days_warn_7", foreground=solid_color(getattr(self.app, "COLOR_RED", "#E53935"), "#E53935"))
 
         # Eventos
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
@@ -697,6 +740,10 @@ class EstudiantesView(BaseModuleFrame):
         self.f_categoria.set("Todas")
         self._apply_filters_now()
 
+    def _allowed_admin_sede(self) -> str:
+        raw = getattr(self.app, "current_admin_sede", None)
+        return _normalize_sede_label(raw) or str(raw or "").strip()
+
     def _debounced_apply_filters(self):
         if self._debounce_id:
             try:
@@ -727,6 +774,7 @@ class EstudiantesView(BaseModuleFrame):
     def _apply_filters(self, data_list, f):
         if not data_list:
             return []
+        allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
         d_sub = f["doc"].lower()
         n_sub = f["nombre"].lower()
         estado = f["estado"]
@@ -749,10 +797,13 @@ class EstudiantesView(BaseModuleFrame):
                 or ""
             )
             categoria_up = str(categoria).strip().upper()
+            sede_label = _normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)
 
             if d_sub and d_sub not in doc:
                 continue
             if n_sub and n_sub not in full:
+                continue
+            if allowed_sede and sede_label != allowed_sede:
                 continue
             if estado != "Todos" and est != estado:
                 continue
@@ -802,6 +853,11 @@ class EstudiantesView(BaseModuleFrame):
         teorico_ok = _to_bool(stu.get("aproboExamenTeorico"), default=False)
         horas = stu.get("horas")
         horas_disp = "-" if horas is None else str(horas)
+        dias_restantes_txt, _days_color = self._remaining_days_display(stu)
+        ingreso_dt = self._parse_student_date(
+            stu.get("fechaCreacion") or stu.get("fechaIngreso") or stu.get("createdAt")
+        )
+        ingreso_txt = ingreso_dt.strftime("%Y-%m-%d") if ingreso_dt else "—"
 
         return (
             stu.get("numeroDocumento", ""),
@@ -810,9 +866,56 @@ class EstudiantesView(BaseModuleFrame):
             _extract_sede(stu),
             horas_disp,
             tipo_pase_disp or "-",
+            dias_restantes_txt,
+            ingreso_txt,
             "Aprobado" if teorico_ok else "Pendiente",
             stu.get("estado", ""),
         )
+
+    @staticmethod
+    def _parse_student_date(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        s = str(value).strip()
+        if not s:
+            return None
+        if "T" in s:
+            s = s.split("T", 1)[0]
+        if " " in s:
+            s = s.split(" ", 1)[0]
+        s = s[:10]
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except Exception:
+                pass
+        return None
+
+    def _remaining_days_info(self, stu):
+        start_date = self._parse_student_date(
+            stu.get("fechaCreacion") or stu.get("fechaIngreso") or stu.get("createdAt")
+        )
+        if not start_date:
+            return None, None
+        elapsed = (date.today() - start_date).days
+        remaining = max(0, 85 - max(0, elapsed))
+        if remaining <= 7:
+            return remaining, "days_warn_7"
+        if remaining <= 14:
+            return remaining, "days_warn_14"
+        if remaining <= 30:
+            return remaining, "days_warn_30"
+        return remaining, ""
+
+    def _remaining_days_display(self, stu):
+        remaining, tag = self._remaining_days_info(stu)
+        if remaining is None:
+            return "—", ""
+        return str(remaining), tag
 
     def _set_data(self, rows):
         data = list(rows or [])
@@ -841,7 +944,10 @@ class EstudiantesView(BaseModuleFrame):
                 stu = data[idx]
                 iid = f"r{idx}"
                 self._iid_to_index[iid] = idx
-                self.tree.insert("", "end", iid=iid, values=self._student_row_values(stu))
+                _remaining, tag = self._remaining_days_info(stu)
+                stripe = "even" if idx % 2 == 0 else "odd"
+                tags = (stripe, tag) if tag else (stripe,)
+                self.tree.insert("", "end", iid=iid, values=self._student_row_values(stu), tags=tags)
             if end < len(data):
                 self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
@@ -849,12 +955,14 @@ class EstudiantesView(BaseModuleFrame):
 
     # ---------- acciones UI ----------
     def _nuevo(self):
+        self.form_host.grid()
         self.form.show_create()
 
     def _editar(self):
         if self._selected_idx is None:
             self.app._info("Selecciona un estudiante en la tabla primero.")
             return
+        self.form_host.grid()
         self.form.show_edit(self._data[self._selected_idx])
 
     def _eliminar_seleccionado(self):
@@ -865,6 +973,7 @@ class EstudiantesView(BaseModuleFrame):
 
     def _cancel_inline(self):
         self.form.hide()
+        self.form_host.grid_remove()
 
     # ---------- API: listar / crear / actualizar / eliminar ----------
     def _refrescar(self, force_refresh=True):
@@ -907,11 +1016,23 @@ class EstudiantesView(BaseModuleFrame):
                         raw = []
 
                 def apply_data():
-                    self._all_data = raw or []
+                    allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
+                    if allowed_sede:
+                        raw_filtered = [
+                            stu for stu in (raw or [])
+                            if (_normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)) == allowed_sede
+                        ]
+                    else:
+                        raw_filtered = raw or []
+                    self._all_data = raw_filtered
                     self._refresh_category_options()
                     self._refresh_summary()
                     self._data = self._apply_filters(self._all_data, self._collect_filters())
                     self._queue_render(self._data)
+                    if not self._initial_data_reflow_done:
+                        self._initial_data_reflow_done = True
+                        self.after(90, self._ensure_table_layout)
+                        self.after(280, self._ensure_table_layout)
 
                 self.after(0, apply_data)
             except Exception as e:
@@ -944,6 +1065,9 @@ class EstudiantesView(BaseModuleFrame):
                 return
 
             payload = dict(payload)
+            allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
+            if allowed_sede:
+                payload["sede"] = allowed_sede
             payload["tipoPase"] = _normalize_tipo_pase(payload.get("tipoPase"))
             payload["aproboExamenTeorico"] = _to_bool(payload.get("aproboExamenTeorico"), default=False)
             payload["visible"] = _to_bool(payload.get("visible"), default=True)
@@ -991,11 +1115,24 @@ class EstudiantesView(BaseModuleFrame):
                     merged["tipoLicencia"] = cat
 
                 body = {k: v for k, v in merged.items() if k not in ("id", "idEstudiante")}
+                self.app.api.ensure_not_modified(
+                    "estudiantes",
+                    student_id,
+                    self._data[idx],
+                    compare_fields=[
+                        "nombre", "apellido", "tipoEstudiante", "tipoDocumento", "numeroDocumento",
+                        "categoria", "sede", "horas", "tipoPase", "aproboExamenTeorico",
+                        "telefono", "email", "direccion", "estado", "visible", "usuario",
+                    ],
+                    label="estudiante",
+                )
                 self.app.api.update("estudiantes", student_id, body)
                 self.app._info("Estudiante actualizado.")
 
             self._last_refresh_ts = 0
             self._refrescar()
+            self.form.hide()
+            self.form_host.grid_remove()
 
         except Exception as e:
             messagebox.showerror("Estudiantes", f"Operación fallida:\n{e}", parent=self)

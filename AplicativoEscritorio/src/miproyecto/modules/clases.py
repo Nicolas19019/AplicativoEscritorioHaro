@@ -6,6 +6,7 @@ import datetime, calendar, threading, time
 
 from modules.base import BaseModuleFrame
 from modules.forms_inlines import ClaseInlineForm
+from modules.treeview_theme import configure_treeview_style
 
 
 class ClasesView(BaseModuleFrame):
@@ -35,6 +36,7 @@ class ClasesView(BaseModuleFrame):
         self._last_refresh_ts = 0
         self.fecha_filtrada = None
         self._calendar_mode = False
+        self._filter_after_id = None
 
         self._estudiantes, self._profesores, self._vehiculos = [], [], []
         self.estudiantes_id_to_name, self.profesores_id_to_name = {}, {}
@@ -91,6 +93,8 @@ class ClasesView(BaseModuleFrame):
             text_color=self._TEXT, command=self._restablecer_filtros
         ).grid(row=0, column=5, padx=(0, 8))
 
+        self._build_filters_bar(tb)
+
         # ===== Form inline =====
         try:
             self.form = ClaseInlineForm(self, self.app, self._on_submit, self._on_cancel)
@@ -119,6 +123,68 @@ class ClasesView(BaseModuleFrame):
         self._set_table_data([])       # vacío al inicio
         self._show_loading(False)
         self.after(150, lambda: self._cargar_catalogos_y_listar(force_refresh=True))
+
+    def _build_filters_bar(self, parent):
+        filt = ctk.CTkFrame(
+            parent,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=12,
+            border_width=1,
+            border_color=self.app.COLOR_DIVIDER,
+        )
+        filt.grid(row=1, column=0, pady=(10, 0), sticky="ew")
+        filt.grid_columnconfigure(1, weight=1)
+        filt.grid_columnconfigure(3, weight=0)
+
+        ctk.CTkLabel(
+            filt,
+            text="Buscar clase",
+            text_color=self._TEXT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, padx=(14, 10), pady=(12, 4), sticky="w")
+
+        self.f_buscar = ctk.CTkEntry(
+            filt,
+            placeholder_text="Escribe estudiante, instructor, placa o sede",
+            height=42,
+            corner_radius=14,
+            border_width=2,
+            border_color=self.app.COLOR_YELLOW,
+            fg_color=self._INPUT,
+            text_color=self._TEXT,
+        )
+        self.f_buscar.grid(row=1, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="ew")
+
+        ctk.CTkLabel(
+            filt,
+            text="Estado",
+            text_color=self._TEXT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=2, padx=(0, 10), pady=(12, 4), sticky="w")
+
+        self.f_estado = ctk.CTkComboBox(
+            filt,
+            values=["Todos", "Programada", "Pendiente", "Dictada", "Cancelada"],
+            width=160,
+            state="readonly",
+        )
+        self.f_estado.set("Todos")
+        self.f_estado.grid(row=1, column=2, padx=(0, 10), pady=(0, 12), sticky="w")
+
+        ctk.CTkButton(
+            filt,
+            text="Limpiar",
+            height=42,
+            width=120,
+            corner_radius=16,
+            fg_color=self.app.COLOR_RED,
+            hover_color=self.app.COLOR_YELLOW,
+            text_color="#ffffff",
+            command=self._restablecer_filtros,
+        ).grid(row=1, column=3, padx=(0, 14), pady=(0, 12), sticky="e")
+
+        self.f_buscar.bind("<KeyRelease>", lambda _e: self._debounced_apply_filters())
+        self.f_estado.bind("<<ComboboxSelected>>", lambda _e: self._sync_rows_to("right" if self._calendar_mode else "top"))
 
     # ============================
     # VISTA NORMAL: TABLA PRO
@@ -160,51 +226,8 @@ class ClasesView(BaseModuleFrame):
         self._iid_to_key = {}
         self._key_to_iid = {}
 
-        # Estilos ttk (similar a Vehículos/Instructores)
         style = ttk.Style()
-        try:
-            style.theme_use("clam")
-        except Exception:
-            pass
-
-        mode = ctk.get_appearance_mode()
-        if mode == "Light":
-            bg = "#ffffff"
-            panel = "#ffffff"
-            text = "#111111"
-            muted = "#444444"
-            divider = "#e5e7eb"
-            sel_bg = "#FFF8E1"
-        else:
-            bg = "#0f0f10"
-            panel = "#151517"
-            text = "#F5F7FA"
-            muted = "#AAB2C0"
-            divider = "#23262b"
-            sel_bg = divider
-
-        style.configure(
-            "Haro.Treeview",
-            background=panel,
-            fieldbackground=panel,
-            foreground=text,
-            bordercolor=divider,
-            lightcolor=divider,
-            darkcolor=divider,
-            rowheight=28,
-        )
-        style.map(
-            "Haro.Treeview",
-            background=[("selected", sel_bg)],
-            foreground=[("selected", text)],
-        )
-        style.configure(
-            "Haro.Treeview.Heading",
-            background=bg,
-            foreground=muted,
-            relief="flat",
-            font=("Segoe UI", 10, "bold"),
-        )
+        palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
         cols = [c[0] for c in self._COLS]
         self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
@@ -219,7 +242,10 @@ class ClasesView(BaseModuleFrame):
         for name, width in self._COLS:
             self.tree.heading(name, text=name)
             anchor = "center" if name in {"Placa", "Fecha", "Estado"} else "w"
-            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.7)), stretch=True, anchor=anchor)
+            self.tree.column(name, width=width, minwidth=max(70, int(width * 0.8)), stretch=False, anchor=anchor)
+
+        self.tree.tag_configure("even", background=palette["even"], foreground=palette["text"])
+        self.tree.tag_configure("odd", background=palette["odd"], foreground=palette["text"])
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda e: self._editar())
@@ -267,7 +293,13 @@ class ClasesView(BaseModuleFrame):
                 iid = f"r{idx}"
                 self._iid_to_key[iid] = rid
                 self._key_to_iid[rid] = iid
-                self.tree.insert("", "end", iid=iid, values=self._row_values(rec))
+                self.tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=self._row_values(rec),
+                    tags=("even" if idx % 2 == 0 else "odd",),
+                )
             if end < len(data):
                 self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
@@ -548,9 +580,35 @@ class ClasesView(BaseModuleFrame):
 
     def _restablecer_filtros(self):
         self.fecha_filtrada = None
+        if hasattr(self, "f_buscar"):
+            self.f_buscar.delete(0, "end")
+        if hasattr(self, "f_estado"):
+            self.f_estado.set("Todos")
         self._update_calendar_highlights()
         self._sync_rows_to("right" if self._calendar_mode else "top")
         self.app._info("Filtros restablecidos. Mostrando todas las clases.")
+
+    def _debounced_apply_filters(self):
+        if self._filter_after_id:
+            try:
+                self.after_cancel(self._filter_after_id)
+            except Exception:
+                pass
+        self._filter_after_id = self.after(180, lambda: self._sync_rows_to("right" if self._calendar_mode else "top"))
+
+    def _allowed_admin_sede(self) -> str:
+        if getattr(self.app, "is_superadmin", False):
+            return ""
+        return self._normalize_admin_sede(getattr(self.app, "current_admin_sede", None))
+
+    @staticmethod
+    def _normalize_admin_sede(value) -> str:
+        txt = str(value or "").strip().lower()
+        if txt in {"1 de mayo", "1demayo"}:
+            return "1 de Mayo"
+        if txt in {"el eden", "el edén", "eden", "edén"}:
+            return "El Eden"
+        return str(value or "").strip()
 
     # ============================
     # Catálogos y datos
@@ -565,6 +623,12 @@ class ClasesView(BaseModuleFrame):
             self._estudiantes = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
             self._profesores  = self.app.api.get_all("profesores", force_refresh=force_refresh)  or []
             self._vehiculos   = self.app.api.get_all("vehiculos", force_refresh=force_refresh)   or []
+
+            allowed_sede = self._allowed_admin_sede()
+            if allowed_sede:
+                self._estudiantes = [e for e in self._estudiantes if self._normalize_admin_sede(self._extract_sede_value((e or {}).get("sede") or (e or {}).get("sedePrincipal"))) == allowed_sede]
+                self._profesores = [p for p in self._profesores if self._normalize_admin_sede(self._record_sede(p)) == allowed_sede]
+                self._vehiculos = [v for v in self._vehiculos if self._normalize_admin_sede(self._record_sede(v)) == allowed_sede]
 
             self.estudiantes_id_to_name = {}
             self.profesores_id_to_name = {}
@@ -662,6 +726,16 @@ class ClasesView(BaseModuleFrame):
                 else:
                     rec = next((r for r in self._data if self._row_key(r) == self._selected_id), None)
                     if rec and rec.get("id"):
+                        self.app.api.ensure_not_modified(
+                            self.CLASES_RESOURCE,
+                            rec["id"],
+                            rec,
+                            compare_fields=[
+                                "id_estudiante", "id_profesor", "placa_vehiculo", "fecha",
+                                "horaInicio", "horaFin", "estado", "estadoClase",
+                            ],
+                            label="clase",
+                        )
                         self.app.api.update(self.CLASES_RESOURCE, rec["id"], payload)
                         self.app._info("Clase actualizada.")
             else:
@@ -855,6 +929,9 @@ class ClasesView(BaseModuleFrame):
                             break
                     else:
                         raw = []
+                allowed_sede = self._allowed_admin_sede()
+                if allowed_sede:
+                    raw = [rec for rec in (raw or []) if self._normalize_admin_sede(self._class_sede(rec)) == allowed_sede]
                 self._data = raw
                 self.after(0, lambda: self._sync_rows_to("right" if self._calendar_mode else "top"))
             except Exception as e:
@@ -866,10 +943,43 @@ class ClasesView(BaseModuleFrame):
 
     def _apply_current_filters(self, data):
         rows = list(data or [])
-        if not self.fecha_filtrada:
-            return rows
-        target = self._normalize_ymd(self.fecha_filtrada)
-        return [d for d in rows if self._normalize_ymd(d.get("fecha")) == target]
+        query = (self.f_buscar.get() if hasattr(self, "f_buscar") else "" or "").strip().lower()
+        estado = (self.f_estado.get() if hasattr(self, "f_estado") else "Todos" or "Todos").strip().lower()
+
+        filtered = []
+        allowed_sede = self._allowed_admin_sede()
+        for rec in rows:
+            if self.fecha_filtrada:
+                target = self._normalize_ymd(self.fecha_filtrada)
+                if self._normalize_ymd(rec.get("fecha")) != target:
+                    continue
+
+            if estado not in ("", "todos"):
+                rec_estado = str(rec.get("estado") or "").strip().lower()
+                if rec_estado != estado:
+                    continue
+
+            if query:
+                haystack = " ".join(
+                    [
+                        str(rec.get("nombre_estudiante") or self._student_name(self._take_id_est(rec)) or ""),
+                        str(self._get_documento_from(rec) or ""),
+                        str(rec.get("nombre_instructor") or self.profesores_id_to_name.get(rec.get("id_profesor") or rec.get("id_instructor"), "") or ""),
+                        str(rec.get("placa_vehiculo") or ""),
+                        str(self._class_sede(rec) or ""),
+                        str(rec.get("estado") or ""),
+                        str(rec.get("fecha") or ""),
+                    ]
+                ).lower()
+                if query not in haystack:
+                    continue
+
+            if allowed_sede and self._normalize_admin_sede(self._class_sede(rec)) != allowed_sede:
+                continue
+
+            filtered.append(rec)
+
+        return filtered
 
     # ============================
     # Sync rows -> vista actual
@@ -878,12 +988,11 @@ class ClasesView(BaseModuleFrame):
         return rec.get("id") or rec.get("_local_id") or (self._take_id_est(rec), rec.get("fecha"), rec.get("horaInicio"))
 
     def _sync_rows_to(self, where: str):
+        filtered_rows = self._apply_current_filters(self._data)
         if where == "top":
-            # tabla normal: todas las clases
-            self._set_table_data(list(self._data or []))
+            self._set_table_data(filtered_rows)
         else:
-            # calendario: clases del día (si hay fecha_filtrada)
-            clases_dia = self._apply_current_filters(self._data) if self.fecha_filtrada else []
+            clases_dia = filtered_rows if self.fecha_filtrada else []
             if hasattr(self, "cards_container_right") and self.cards_container_right.winfo_exists():
                 self._render_vertical_cards(self.cards_container_right, clases_dia)
             self._update_calendar_highlights()

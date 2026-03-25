@@ -91,14 +91,16 @@ class HaroDesktopApp(ctk.CTk):
         ctk.set_default_color_theme("dark-blue")
 
         self.title(self.APP_TITLE)
-        self.geometry(f"{self.APP_W}x{self.APP_H}")
-        centrar_ventana(self, self.APP_W, self.APP_H)
+        self._window_w, self._window_h = self._compute_window_size()
+        self.logo_display_size = self._compute_logo_size(self._window_h)
+        self.geometry(f"{self._window_w}x{self._window_h}")
+        centrar_ventana(self, self._window_w, self._window_h)
 
         # --- Ícono de la ventana / barra de tareas (cross-platform con fallback) ---
         self.set_window_icon(self)
 
 
-        self.minsize(1060, 640)
+        self.minsize(min(1060, self._window_w), min(640, self._window_h))
         self.configure(fg_color=self.COLOR_BG)
 
         # Estado UI / credenciales
@@ -109,6 +111,9 @@ class HaroDesktopApp(ctk.CTk):
         self.api_pass = None
         self.api: ApiClient | None = None
         self.is_superadmin = False
+        self.current_admin_profile = None
+        self.current_admin_sede = None
+        self.current_admin_id = None
         self.views = {}
         self._view_factories = {}
 
@@ -141,6 +146,27 @@ class HaroDesktopApp(ctk.CTk):
 
     def minimizar(self):
         self.iconify()   # minimiza la ventana
+
+    def _compute_window_size(self):
+        try:
+            self.update_idletasks()
+            screen_w = max(int(self.winfo_screenwidth() or self.APP_W), 900)
+            screen_h = max(int(self.winfo_screenheight() or self.APP_H), 620)
+        except Exception:
+            return self.APP_W, self.APP_H
+
+        usable_w = max(screen_w - 80, 900)
+        usable_h = max(screen_h - 110, 620)
+        width = min(self.APP_W, usable_w)
+        height = min(self.APP_H, usable_h)
+        return width, height
+
+    def _compute_logo_size(self, window_h: int):
+        if window_h <= 640:
+            return (42, 34)
+        if window_h <= 700:
+            return (46, 36)
+        return self.LOGO_SIZE
 
 
     # ----------------------- Helpers de recursos ----------------------- #
@@ -208,7 +234,8 @@ class HaroDesktopApp(ctk.CTk):
                 dx, dy = x-32, y-32
                 if dx*dx + dy*dy <= 30*30:
                     img.putpixel((x, y), (229, 57, 53, 255))
-        self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+        size = getattr(self, "logo_display_size", self.LOGO_SIZE)
+        self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=size)
 
     def _load_fixed_logo(self):
         try:
@@ -222,7 +249,8 @@ class HaroDesktopApp(ctk.CTk):
             side = min(w, h)
             left, top = (w - side) // 2, (h - side) // 2
             img = img.crop((left, top, left + side, top + side))
-            self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=self.LOGO_SIZE)
+            size = getattr(self, "logo_display_size", self.LOGO_SIZE)
+            self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=size)
         except Exception as e:
             print(f"[Logo] Error cargando: {e}")
             self._set_default_logo()
@@ -475,6 +503,7 @@ class HaroDesktopApp(ctk.CTk):
                 token_field=self.JWT_TOKEN_FIELD,
                 request_timeout=self.API_TIMEOUT_SECONDS
             )
+            self.api.get_all("profesores", force_refresh=True)
         except Exception as e:
             self.api = None
             self.api_user = None
@@ -482,6 +511,11 @@ class HaroDesktopApp(ctk.CTk):
             self.is_superadmin = False
             self._show_login_error(f"No fue posible iniciar sesión: {e}")
             return
+
+        try:
+            self._load_current_admin_profile()
+        except Exception as e:
+            self._info(f"No se pudo cargar el perfil administrativo actual: {e}")
 
         self._apply_nav_visibility()
         self.deiconify()
@@ -671,6 +705,32 @@ class HaroDesktopApp(ctk.CTk):
             self.grid_columnconfigure(0, minsize=self.SIDEBAR_W, weight=0)
             self.grid_columnconfigure(1, weight=1)
             self.sidebar_visible = True
+
+    def _load_current_admin_profile(self):
+        self.current_admin_profile = None
+        self.current_admin_sede = None
+        self.current_admin_id = None
+        if not self.api or not self.api_user:
+            return
+        try:
+            raw = self.api.get_all("administradores", force_refresh=True) or []
+            if isinstance(raw, dict):
+                for key in ("content", "items", "administradores", "data", "results"):
+                    if isinstance(raw.get(key), list):
+                        raw = raw[key]
+                        break
+                else:
+                    raw = []
+            login = str(self.api_user or "").strip().lower()
+            for item in raw:
+                correo = str(item.get("correo") or "").strip().lower()
+                if correo == login:
+                    self.current_admin_profile = item
+                    self.current_admin_sede = item.get("sede")
+                    self.current_admin_id = item.get("id")
+                    break
+        except Exception as e:
+            self._info(f"No se pudo cargar el perfil del administrador actual: {e}")
 
     # Util
     def _info(self, msg: str):

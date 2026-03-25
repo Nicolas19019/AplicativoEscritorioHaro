@@ -6,6 +6,16 @@ import time
 
 from modules.base import BaseModuleFrame
 from modules.forms_inlines import InstructorInlineForm
+from modules.treeview_theme import configure_treeview_style
+
+
+def _normalize_sede_label(value) -> str:
+    txt = str(value or "").strip().lower()
+    if txt in {"1 de mayo", "1demayo"}:
+        return "1 de Mayo"
+    if txt in {"el eden", "el edén", "eden", "edén"}:
+        return "El Eden"
+    return str(value or "").strip()
 
 
 class InstructoresView(BaseModuleFrame):
@@ -270,8 +280,8 @@ class InstructoresView(BaseModuleFrame):
         src = dict(payload or {})
 
         cedula = str(src.get("cedula", "") or "").strip()
-        nombre = str(src.get("nombre", "") or "").strip()
-        apellido = str(src.get("apellido", "") or "").strip()
+        nombre = str(src.get("nombre", "") or "").strip().upper()
+        apellido = str(src.get("apellido", "") or "").strip().upper()
         telefono = str(src.get("telefono", "") or "").strip()
         usuario = str(src.get("usuario", "") or "").strip()
 
@@ -321,6 +331,7 @@ class InstructoresView(BaseModuleFrame):
     def _apply_filters(self, data_list, f):
         if not data_list:
             return []
+        allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
 
         ced_sub = f["cedula"].lower()
         nom_sub = f["nombre"].lower()
@@ -337,6 +348,7 @@ class InstructoresView(BaseModuleFrame):
             est = str(prof.get("estado", "") or "").strip()
             especialidad = str(prof.get("especialidad", "") or "").strip().lower()
             categoria = self._categoria_value(prof)
+            sede_label = _normalize_sede_label(self._sede_value(prof))
 
             if ced_sub and ced_sub not in ced:
                 continue
@@ -349,6 +361,8 @@ class InstructoresView(BaseModuleFrame):
             if esp != "todas" and especialidad != esp:
                 continue
             if cat != "TODAS" and categoria != cat:
+                continue
+            if allowed_sede and sede_label != allowed_sede:
                 continue
 
             out.append(prof)
@@ -387,51 +401,7 @@ class InstructoresView(BaseModuleFrame):
     # =====================================================
     def _build_tree(self):
         style = ttk.Style()
-        try:
-            style.theme_use("clam")
-        except Exception:
-            pass
-
-        # Igual que en Estudiantes: adaptar a Light/Dark
-        mode = ctk.get_appearance_mode()  # "Light" o "Dark"
-
-        if mode == "Light":
-            bg = "#ffffff"
-            panel = "#ffffff"
-            text = "#111111"
-            muted = "#444444"
-            divider = "#e5e7eb"
-            sel_bg = "#FFF8E1"
-        else:
-            bg = getattr(self.app, "COLOR_BG", "#111111")
-            panel = getattr(self.app, "COLOR_PANEL", "#1b1b1b")
-            text = getattr(self.app, "COLOR_TEXT", "#ffffff")
-            muted = getattr(self.app, "COLOR_MUTED", "#cfcfcf")
-            divider = getattr(self.app, "COLOR_DIVIDER", "#2a2a2a")
-            sel_bg = divider
-
-        style.configure(
-            "Haro.Treeview",
-            background=panel,
-            fieldbackground=panel,
-            foreground=text,
-            bordercolor=divider,
-            lightcolor=divider,
-            darkcolor=divider,
-            rowheight=28,
-        )
-        style.map(
-            "Haro.Treeview",
-            background=[("selected", sel_bg)],
-            foreground=[("selected", text)],
-        )
-        style.configure(
-            "Haro.Treeview.Heading",
-            background=bg,
-            foreground=muted,
-            relief="flat",
-            font=("Segoe UI", 10, "bold"),
-        )
+        palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
         cols = [c[0] for c in self._COLS]
         self.tree = ttk.Treeview(self.table, columns=cols, show="headings", style="Haro.Treeview")
@@ -445,7 +415,13 @@ class InstructoresView(BaseModuleFrame):
 
         for name, w in self._COLS:
             self.tree.heading(name, text=name)
-            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.7)), stretch=True, anchor="w")
+            anchor = "w"
+            if name in {"Cédula", "Categoría", "Visible"}:
+                anchor = "center"
+            self.tree.column(name, width=w, minwidth=max(60, int(w * 0.8)), stretch=False, anchor=anchor)
+
+        self.tree.tag_configure("even", background=palette["even"], foreground=palette["text"])
+        self.tree.tag_configure("odd", background=palette["odd"], foreground=palette["text"])
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda e: self._editar())
@@ -467,7 +443,7 @@ class InstructoresView(BaseModuleFrame):
         return (
             prof.get("cedula", ""),
             full_name,
-            prof.get("especialidad", ""),
+            str(prof.get("especialidad", "") or "").strip().upper(),
             self._categoria_value(prof),
             self._sede_value(prof),
             prof.get("telefono", ""),
@@ -500,7 +476,13 @@ class InstructoresView(BaseModuleFrame):
             for idx in range(start, end):
                 iid = f"r{idx}"
                 self._iid_to_index[iid] = idx
-                self.tree.insert("", "end", iid=iid, values=self._row_values(data[idx]))
+                self.tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=self._row_values(data[idx]),
+                    tags=("even" if idx % 2 == 0 else "odd",),
+                )
             if end < len(data):
                 self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
 
@@ -554,7 +536,12 @@ class InstructoresView(BaseModuleFrame):
                         raw = []
 
                 def apply_data():
-                    self._all_data = raw or []
+                    allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
+                    if allowed_sede:
+                        filtered_raw = [prof for prof in (raw or []) if _normalize_sede_label(self._sede_value(prof)) == allowed_sede]
+                    else:
+                        filtered_raw = raw or []
+                    self._all_data = filtered_raw
                     self._refresh_especialidad_options()
                     self._refresh_categoria_options()
                     self._data = self._apply_filters(self._all_data, self._collect_filters())
@@ -591,6 +578,9 @@ class InstructoresView(BaseModuleFrame):
                 return
 
             payload = self._normalize_profesor_payload(payload)
+            allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
+            if allowed_sede:
+                payload["sede"] = allowed_sede
 
             if mode == "create":
                 created = self.app.api.create("profesores", payload)
@@ -605,6 +595,16 @@ class InstructoresView(BaseModuleFrame):
                 if not prof_id:
                     self.app._info("No se encontró el ID del profesor.")
                     return
+                self.app.api.ensure_not_modified(
+                    "profesores",
+                    prof_id,
+                    self._data[idx],
+                    compare_fields=[
+                        "cedula", "nombre", "apellido", "correo", "especialidad",
+                        "categoria", "telefono", "email", "usuario", "visible",
+                    ],
+                    label="profesor",
+                )
                 updated = self.app.api.update("profesores", prof_id, payload)
                 self._assert_email_updated(updated, payload.get("email"))
                 self.app._info("Profesor actualizado.")

@@ -253,6 +253,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         # ==== Config / endpoints ====
         self.ADMIN_OTP_EMAIL = getattr(self.app, "ADMIN_OTP_EMAIL", "haroacademiadecol@gmail.com")
+        self.ADMIN_SEDES = ["1 de Mayo", "El Eden"]
         default_base = base_url or getattr(self.app, "API_BASE_URL", "http://localhost:8082")
         default_base = self._normalize_base_url(default_base)
 
@@ -287,7 +288,15 @@ class LoginDialog(ctk.CTkToplevel):
         self._LOGO_GRANDE_PATH = LOGO_GRANDE_PATH
 
         # ==== Ventana ====
-        W, H = 740, 620
+        try:
+            screen_w = max(int(self.winfo_screenwidth() or 740), 560)
+            screen_h = max(int(self.winfo_screenheight() or 620), 520)
+        except Exception:
+            screen_w, screen_h = 740, 620
+
+        W = min(740, max(560, screen_w - 60))
+        H = min(620, max(540, screen_h - 80))
+        self._compact_layout = screen_w < 1180 or screen_h < 760
         self.geometry(f"{W}x{H}")
 
         # ✅ Centrar cuando ya se dibujó (más confiable)
@@ -324,8 +333,10 @@ class LoginDialog(ctk.CTkToplevel):
 
         self.configure(fg_color=fg_bg)
 
-        self.grid_columnconfigure(0, weight=1, minsize=280)
-        self.grid_columnconfigure(1, weight=1, minsize=460)
+        left_min = 0 if self._compact_layout else 280
+        right_min = max(460, W - 80) if self._compact_layout else 460
+        self.grid_columnconfigure(0, weight=0 if self._compact_layout else 1, minsize=left_min)
+        self.grid_columnconfigure(1, weight=1, minsize=right_min)
         self.grid_rowconfigure(0, weight=1)
 
         # ================= Left panel (logo grande centrado) =================
@@ -342,7 +353,9 @@ class LoginDialog(ctk.CTkToplevel):
             p = self._resolve_existing_path(self._LOGO_GRANDE_PATH)
             if p:
                 img = Image.open(p)
-                self._logo_big_ref = ctk.CTkImage(light_image=img, dark_image=img, size=(260, 160))
+                logo_w = 220 if self._compact_layout else 260
+                logo_h = 136 if self._compact_layout else 160
+                self._logo_big_ref = ctk.CTkImage(light_image=img, dark_image=img, size=(logo_w, logo_h))
                 ctk.CTkLabel(left, image=self._logo_big_ref, text="").grid(row=1, column=0)
         except Exception as e:
             print("[UI] No se pudo cargar LogoGrande.png:", e)
@@ -356,6 +369,13 @@ class LoginDialog(ctk.CTkToplevel):
         right.grid_rowconfigure(1, weight=1)  # content
         right.grid_rowconfigure(2, weight=0)  # error box
         right.grid_rowconfigure(3, weight=0)  # actions
+
+        if self._compact_layout:
+            try:
+                left.grid_remove()
+            except Exception:
+                pass
+            right.grid_configure(row=0, column=0, columnspan=2, padx=16, pady=16, sticky="nsew")
 
         # ===== Header (título + ayuda) =====
         header = ctk.CTkFrame(right, fg_color="transparent")
@@ -493,14 +513,14 @@ class LoginDialog(ctk.CTkToplevel):
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 1), sticky="w"); r2 += 1
 
         self.ca_nombre = ctk.CTkEntry(
-            self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+            self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="Ana María Pérez",
             placeholder_text_color="#4F4F4F",
             validate="key", validatecommand=v_nombre
         )
         self.ca_cedula = ctk.CTkEntry(
-            self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+            self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="1032456789",
             placeholder_text_color="#4F4F4F",
@@ -516,14 +536,14 @@ class LoginDialog(ctk.CTkToplevel):
             .grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="w"); r2 += 1
 
         self.ca_usuario = ctk.CTkEntry(
-            self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+            self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="aperez",
             placeholder_text_color="#4F4F4F",
             validate="key", validatecommand=v_usuario
         )
         self.ca_email = ctk.CTkEntry(
-            self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+            self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="ana.perez@cea-haro.com",
             placeholder_text_color="#4F4F4F",
@@ -533,10 +553,29 @@ class LoginDialog(ctk.CTkToplevel):
         self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="ew"); r2 += 1
         self._decorate_entry(self.ca_usuario); self._decorate_entry(self.ca_email)
 
+        ctk.CTkLabel(self.frame_reg, text="Sede", text_color=fg_text)\
+            .grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="w"); r2 += 1
+
+        self.ca_sede = ctk.CTkComboBox(
+            self.frame_reg,
+            values=self.ADMIN_SEDES,
+            height=36,
+            fg_color=fg_input,
+            text_color=fg_text,
+            border_color=fg_divider,
+            button_color=fg_red,
+            button_hover_color=self.PLACEHOLDER_YELLOW,
+            dropdown_fg_color=fg_panel,
+            dropdown_hover_color=fg_divider,
+            dropdown_text_color=fg_text,
+        )
+        self.ca_sede.set(self.ADMIN_SEDES[0])
+        self.ca_sede.grid(row=r2, column=0, columnspan=2, pady=(0, 2), sticky="ew"); r2 += 1
+
         ctk.CTkLabel(self.frame_reg, text="Contraseña", text_color=fg_text)\
             .grid(row=r2, column=0, padx=(0, 10), pady=(0, 0), sticky="w"); r2 += 1
 
-        # ✅ reglas contraseña (cerca del campo)
+
         self.lbl_pass_rules = ctk.CTkLabel(
             self.frame_reg,
             text="La contraseña debe tener mínimo 8 caracteres e incluir letras y números.",
@@ -551,12 +590,12 @@ class LoginDialog(ctk.CTkToplevel):
         )
 
         self.ca_pass1 = ctk.CTkEntry(
-            self.frame_reg, height=40, fg_color=fg_input, text_color=fg_text,
+            self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider, show="*",
             placeholder_text="Mín. 8 caracteres (letras y números)",
             placeholder_text_color="#4F4F4F"
         )
-        self.ca_pass1.grid(row=r2, column=0, columnspan=2, pady=(0, 3), sticky="ew"); r2 += 1
+        self.ca_pass1.grid(row=r2, column=0, columnspan=2, pady=(0, 2), sticky="ew"); r2 += 1
         self._decorate_entry(self.ca_pass1)
 
         self.pw_bar_reg = ctk.CTkProgressBar(self.frame_reg, height=8)
@@ -573,7 +612,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         # OTP block (oculto) - se muestra después de enviar
         self.otp_block = ctk.CTkFrame(self.frame_reg, fg_color="transparent")
-        self.otp_block.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.otp_block.grid(row=r2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         self.otp_block.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(self.otp_block, text="Código de verificación (OTP)", text_color=fg_text)\
@@ -590,7 +629,7 @@ class LoginDialog(ctk.CTkToplevel):
         self.lbl_otp_help.grid_forget()
 
         self.otp_help_row = ctk.CTkFrame(self.otp_block, fg_color="transparent")
-        self.otp_help_row.grid(row=1, column=0, sticky="w", pady=(0, 3))
+        self.otp_help_row.grid(row=1, column=0, sticky="w", pady=(0, 2))
 
         self.lbl_otp_help = ctk.CTkLabel(
             self.otp_help_row,
@@ -614,13 +653,13 @@ class LoginDialog(ctk.CTkToplevel):
         self.btn_send_otp.grid(row=0, column=1, padx=(6, 0), sticky="w")
 
         self.en_otp = ctk.CTkEntry(
-            self.otp_block, height=44,
+            self.otp_block, height=38,
             fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="Ingresa el código del correo",
             placeholder_text_color="#4F4F4F"
         )
-        self.en_otp.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        self.en_otp.grid(row=2, column=0, sticky="ew", pady=(0, 2))
         self._decorate_entry(self.en_otp)
         self.en_otp.configure(
             placeholder_text="123456",
@@ -1125,9 +1164,10 @@ class LoginDialog(ctk.CTkToplevel):
         cedula = self.ca_cedula.get().strip()
         usuario = self.ca_usuario.get().strip()
         correo = self.ca_email.get().strip().lower()
+        sede = (self.ca_sede.get() or "").strip()
         p1 = self.ca_pass1.get().strip()
 
-        if not (nombre and cedula and usuario and correo and p1):
+        if not (nombre and cedula and usuario and correo and sede and p1):
             raise ValueError("Completa nombre, cÃ©dula, usuario, correo y contraseÃ±a.")
         if not self._re_nombre_full.fullmatch(nombre):
             raise ValueError("Nombre invÃ¡lido.")
@@ -1153,6 +1193,7 @@ class LoginDialog(ctk.CTkToplevel):
             "usuario": usuario,
             "contrasenaHash": p1,
             "nombre": nombre,
+            "sede": sede,
             "activo": True
         }
         return self._pending_admin_payload
@@ -1176,9 +1217,10 @@ class LoginDialog(ctk.CTkToplevel):
             cedula  = self.ca_cedula.get().strip()
             usuario = self.ca_usuario.get().strip()
             correo  = self.ca_email.get().strip()
+            sede    = (self.ca_sede.get() or "").strip()
             p1      = self.ca_pass1.get().strip()
 
-            if not (nombre and cedula and usuario and correo and p1):
+            if not (nombre and cedula and usuario and correo and sede and p1):
                 self._show_error("Completa nombre, cédula, usuario, correo y contraseña.")
                 return
             if not self._re_nombre_full.fullmatch(nombre):
@@ -1204,6 +1246,7 @@ class LoginDialog(ctk.CTkToplevel):
                 "usuario": usuario,
                 "contrasenaHash": contrasena_hex,
                 "nombre": nombre,
+                "sede": sede,
                 "activo": True
             }
 
@@ -1430,16 +1473,6 @@ class LoginDialog(ctk.CTkToplevel):
 
         if callable(self.on_success):
             try:
-                if hasattr(self.app, "_matches_superadmin") and self.app._matches_superadmin(correo, p):
-                    self.on_success(correo, on_success_secret)
-                    if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
-                        self._show_error(technical=str(self.app.api.last_error))
-                        return
-                    self._reset_fields(True)
-                    self.grab_release()
-                    self.destroy()
-                    return
-
                 # Valida credenciales por correo (contrato actual del backend).
                 test = self.api.post(self.LOGIN_ENDPOINT, json={"correo": correo, "contrasena": p})
                 if test is None:
@@ -1525,6 +1558,8 @@ class LoginDialog(ctk.CTkToplevel):
             for w in ("ca_nombre", "ca_cedula", "ca_usuario", "ca_email", "ca_pass1"):
                 if hasattr(self, w):
                     getattr(self, w).delete(0, "end")
+            if hasattr(self, "ca_sede") and getattr(self, "ADMIN_SEDES", None):
+                self.ca_sede.set(self.ADMIN_SEDES[0])
 
             if hasattr(self, "pw_bar_reg"):
                 self.pw_bar_reg.set(0.05)
