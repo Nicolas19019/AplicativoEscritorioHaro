@@ -87,6 +87,34 @@ def _normalize_sede_label(value) -> str:
     return ""
 
 
+def _normalize_tipo_estudiante(value) -> str:
+    txt = str(value or "").strip().lower()
+    if not txt:
+        return ""
+    if txt in {"matricula", "matrícula", "matriculado", "matriculada"}:
+        return "matriculado"
+    if txt in {"prospecto", "prospect"}:
+        return "prospecto"
+    if txt in {"inscrito", "inscrita", "inscripcion", "inscripción"}:
+        return "inscrito"
+    if txt in {"activo", "activa"}:
+        return "activo"
+    if txt in {"egresado", "egresada"}:
+        return "egresado"
+    return txt
+
+
+def _extract_consecutivo(data: dict) -> str:
+    if not isinstance(data, dict):
+        return ""
+    val = data.get("consecutivo")
+    if val is None or val == "":
+        val = data.get("consecutivoEstudiante")
+    if val is None:
+        return ""
+    return str(val).strip()
+
+
 # === StudentInlineForm (idéntico al tuyo original) ===
 class StudentInlineForm(ctk.CTkFrame):
     """
@@ -165,7 +193,7 @@ class StudentInlineForm(ctk.CTkFrame):
         ctk.CTkLabel(self, text="Tipo Estudiante").grid(row=4, column=2, padx=12, pady=6, sticky="w")
         self.cb_tipo_estudiante = ctk.CTkComboBox(
             self,
-            values=["prospecto", "inscrito", "activo", "egresado"],
+            values=["prospecto", "matriculado", "inscrito", "activo", "egresado"],
             width=160
         )
         self.cb_tipo_estudiante.set("prospecto")
@@ -277,8 +305,8 @@ class StudentInlineForm(ctk.CTkFrame):
         self.en_dir.insert(0, d.get("direccion", ""))
         self.cb_estado.set(d.get("estado", "Pendiente"))
 
-        tipo_estudiante = (d.get("tipoEstudiante") or "prospecto").strip().lower()
-        self.cb_tipo_estudiante.set(tipo_estudiante or "prospecto")
+        tipo_estudiante = _normalize_tipo_estudiante(d.get("tipoEstudiante") or "prospecto") or "prospecto"
+        self.cb_tipo_estudiante.set(tipo_estudiante)
 
         self.cb_sede.set(_normalize_sede_label(_extract_sede(d)) or SEDES_DISPONIBLES[0])
 
@@ -497,7 +525,9 @@ class EstudiantesView(BaseModuleFrame):
 
         self._COLS = [
             ("Documento", 130),
+            ("Consecutivo", 110),
             ("Nombre completo", 320),
+            ("Tipo estudiante", 130),
             ("Categoría", 90),
             ("Sede", 140),
             ("Horas", 70),
@@ -635,7 +665,7 @@ class EstudiantesView(BaseModuleFrame):
         for name, w in self._COLS:
             self.tree.heading(name, text=name)
             anchor = "w"
-            if name in {"Horas", "Teórico", "Estado", "Días restantes", "Categoría", "Ingreso"}:
+            if name in {"Horas", "Teórico", "Estado", "Días restantes", "Categoría", "Ingreso", "Tipo estudiante", "Consecutivo"}:
                 anchor = "center"
             self.tree.column(name, width=w, minwidth=max(60, int(w * 0.8)), stretch=False, anchor=anchor)
 
@@ -666,47 +696,62 @@ class EstudiantesView(BaseModuleFrame):
     # ---------- UI: Filtros ----------
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
-        bar.grid_columnconfigure(0, weight=1)
-        bar.grid_columnconfigure(1, weight=1)
-        bar.grid_columnconfigure(2, weight=0)
+        bar.grid_columnconfigure(0, weight=0)
+        bar.grid_columnconfigure(1, weight=0)
+        bar.grid_columnconfigure(2, weight=1)
         bar.grid_columnconfigure(3, weight=0)
         bar.grid_columnconfigure(4, weight=0)
+        bar.grid_columnconfigure(5, weight=0)
+        bar.grid_columnconfigure(6, weight=0)
 
-        def entry(ph):
+        def entry(ph, width=None):
             return ctk.CTkEntry(
-                bar, placeholder_text=ph, height=36, corner_radius=10,
+                bar, placeholder_text=ph, height=36, corner_radius=10, width=width,
                 fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
                 border_width=2, border_color=self.app.COLOR_DIVIDER
             )
 
-        ctk.CTkLabel(bar, text="Documento").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
-        self.f_doc = entry("Ej: 1012345678")
-        self.f_doc.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="ew")
+        ctk.CTkLabel(bar, text="Consecutivo").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
+        self.f_consecutivo = entry("Ej: 000123", width=140)
+        self.f_consecutivo.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
+        ctk.CTkLabel(bar, text="Documento").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_doc = entry("Ej: 1012345678", width=160)
+        self.f_doc.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="w")
+
+        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_nombre = entry("Nombre o apellido")
-        self.f_nombre.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="ew")
+        self.f_nombre.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
+        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_estado = ctk.CTkComboBox(
             bar,
             values=["Todos", "Pendiente", "Activo", "Inactivo", "Suspendido"],
             width=160
         )
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_estado.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(bar, text="Categoría").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
+        ctk.CTkLabel(bar, text="Categoría").grid(row=0, column=4, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_categoria = ctk.CTkComboBox(
             bar,
             values=["Todas", "A2", "B1", "C1"],
             width=160
         )
         self.f_categoria.set("Todas")
-        self.f_categoria.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_categoria.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
+
+        ctk.CTkLabel(bar, text="Tipo estudiante").grid(row=0, column=5, padx=(8, 8), pady=(10, 4), sticky="w")
+        self.f_tipo_estudiante = ctk.CTkComboBox(
+            bar,
+            values=["Todos", "Prospecto", "Matriculado", "Inscrito", "Activo", "Egresado"],
+            width=170,
+        )
+        self.f_tipo_estudiante.set("Todos")
+        self.f_tipo_estudiante.grid(row=1, column=5, padx=(8, 8), pady=(0, 10), sticky="w")
 
         btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=1, column=4, padx=(8, 12), pady=(0, 10), sticky="e")
+        btns.grid(row=1, column=6, padx=(8, 12), pady=(0, 10), sticky="e")
 
         def light_btn(text, cmd):
             return ctk.CTkButton(
@@ -718,26 +763,31 @@ class EstudiantesView(BaseModuleFrame):
         light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
         light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
 
-        for w in (self.f_doc, self.f_nombre):
+        for w in (self.f_consecutivo, self.f_doc, self.f_nombre):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())
         self.f_estado.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
         self.f_categoria.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
+        self.f_tipo_estudiante.bind("<<ComboboxSelected>>", lambda e: self._apply_filters_now())
 
         return bar
 
     def _collect_filters(self):
         return {
+            "consecutivo": (self.f_consecutivo.get() or "").strip(),
             "doc": (self.f_doc.get() or "").strip(),
             "nombre": (self.f_nombre.get() or "").strip(),
             "estado": (self.f_estado.get() or "Todos").strip(),
             "categoria": (self.f_categoria.get() or "Todas").strip(),
+            "tipo_estudiante": (self.f_tipo_estudiante.get() or "Todos").strip(),
         }
 
     def _clear_filters(self):
+        self.f_consecutivo.delete(0, "end")
         self.f_doc.delete(0, "end")
         self.f_nombre.delete(0, "end")
         self.f_estado.set("Todos")
         self.f_categoria.set("Todas")
+        self.f_tipo_estudiante.set("Todos")
         self._apply_filters_now()
 
     def _allowed_admin_sede(self) -> str:
@@ -775,13 +825,17 @@ class EstudiantesView(BaseModuleFrame):
         if not data_list:
             return []
         allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
+        c_sub = f["consecutivo"].lower()
         d_sub = f["doc"].lower()
         n_sub = f["nombre"].lower()
         estado = f["estado"]
         cat = f["categoria"].upper()
+        tipo_sel_raw = (f.get("tipo_estudiante") or "Todos").strip().lower()
+        tipo_sel = _normalize_tipo_estudiante(tipo_sel_raw)
 
         out = []
         for stu in data_list:
+            consec = _extract_consecutivo(stu).lower()
             doc = str(stu.get("numeroDocumento", "") or "").lower()
             nombre = (stu.get("nombre", "") or "").strip()
             apellido = (stu.get("apellido", "") or "").strip()
@@ -798,7 +852,10 @@ class EstudiantesView(BaseModuleFrame):
             )
             categoria_up = str(categoria).strip().upper()
             sede_label = _normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)
+            tipo_est = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
 
+            if c_sub and c_sub not in consec:
+                continue
             if d_sub and d_sub not in doc:
                 continue
             if n_sub and n_sub not in full:
@@ -808,6 +865,8 @@ class EstudiantesView(BaseModuleFrame):
             if estado != "Todos" and est != estado:
                 continue
             if cat != "TODAS" and categoria_up != cat:
+                continue
+            if tipo_sel_raw not in ("", "todos") and tipo_est != tipo_sel:
                 continue
             out.append(stu)
         return out
@@ -839,6 +898,10 @@ class EstudiantesView(BaseModuleFrame):
     # ---------- helpers de tabla ----------
     def _student_row_values(self, stu):
         full_name = "{} {}".format(stu.get("nombre", ""), stu.get("apellido", "")).strip()
+        consecutivo = _extract_consecutivo(stu)
+        consecutivo_disp = consecutivo if consecutivo else "—"
+        tipo_estudiante = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
+        tipo_estudiante_disp = tipo_estudiante.capitalize() if tipo_estudiante else "—"
         categoria = (
             stu.get("categoria")
             or stu.get("categoriaLicencia")
@@ -861,7 +924,9 @@ class EstudiantesView(BaseModuleFrame):
 
         return (
             stu.get("numeroDocumento", ""),
+            consecutivo_disp,
             full_name,
+            tipo_estudiante_disp,
             categoria_disp,
             _extract_sede(stu),
             horas_disp,
@@ -992,8 +1057,17 @@ class EstudiantesView(BaseModuleFrame):
                 q = self._collect_filters()
 
                 can_query = hasattr(self.app.api, "get_all") and getattr(self.app.api, "supports_query", False)
-                if can_query and (q["doc"] or q["nombre"] or q["estado"] not in ("", "Todos") or q["categoria"] != "Todas"):
+                if can_query and (
+                    q["consecutivo"]
+                    or q["doc"]
+                    or q["nombre"]
+                    or q["estado"] not in ("", "Todos")
+                    or q["categoria"] != "Todas"
+                    or q.get("tipo_estudiante") not in ("", "Todos")
+                ):
                     params = {}
+                    if q["consecutivo"]:
+                        params["consecutivo"] = q["consecutivo"]
                     if q["doc"]:
                         params["doc"] = q["doc"]
                     if q["nombre"]:
@@ -1002,6 +1076,8 @@ class EstudiantesView(BaseModuleFrame):
                         params["estado"] = q["estado"]
                     if q["categoria"] != "Todas":
                         params["categoria"] = q["categoria"]
+                    if q.get("tipo_estudiante") not in ("", "Todos"):
+                        params["tipoEstudiante"] = _normalize_tipo_estudiante(q.get("tipo_estudiante"))
                     raw = self.app.api.get_all("estudiantes", params=params, force_refresh=force_refresh) or []
                 else:
                     raw = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
@@ -1018,10 +1094,16 @@ class EstudiantesView(BaseModuleFrame):
                 def apply_data():
                     allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
                     if allowed_sede:
-                        raw_filtered = [
-                            stu for stu in (raw or [])
-                            if (_normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)) == allowed_sede
-                        ]
+                        raw_filtered = []
+                        for stu in (raw or []):
+                            sede_label = _normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)
+                            tipo_est = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
+                            if sede_label == allowed_sede:
+                                raw_filtered.append(stu)
+                                continue
+                            # Para que los admin puedan ver prospectos sin sede (así pueden asignarla).
+                            if not sede_label and tipo_est == "prospecto":
+                                raw_filtered.append(stu)
                     else:
                         raw_filtered = raw or []
                     self._all_data = raw_filtered

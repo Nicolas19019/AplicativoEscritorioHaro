@@ -50,20 +50,20 @@ class HaroDesktopApp(ctk.CTk):
     COLOR_YELLOW = MUSTARD_MAIN
 
 
-    APP_TITLE = "CEA HARO — Sistema de Información"
+    APP_TITLE = "HaroGestion — Sistema de Información"
     APP_W, APP_H = 1210, 720
     SIDEBAR_W = 260
     TOPBAR_H  = 64
 
     # Marca y logof
-    BRAND_TEXT = "CEA HARO"
+    BRAND_TEXT = "HaroGestion"
     LOGO_SIZE  = (50, 40)
 
     # Ruta del logo (resuelta desde este archivo)
     _SCRIPT_DIR = Path(__file__).resolve().parent
-    _LOGO_PATH  = _SCRIPT_DIR / "media" / "LogoHARO.png"
-    _ICON_ICO_PATH = _SCRIPT_DIR / "media" / "LogoHARO.ico"
-    _ICON_PNG_PATH = _SCRIPT_DIR / "media" / "LogoHARO.png"
+    _LOGO_PATH  = _SCRIPT_DIR / "media" / "logoHARO.png"
+    _ICON_ICO_PATH = _SCRIPT_DIR / "media" / "LogoExe.ico"
+    _ICON_PNG_PATH = _SCRIPT_DIR / "media" / "LogoExe.png"
 
 
     # API
@@ -175,7 +175,10 @@ class HaroDesktopApp(ctk.CTk):
         p = Path(p)
         base = getattr(sys, "_MEIPASS", None)
         if base:
-            return Path(base) / p.name if p.is_file() else Path(base) / p
+            base = Path(base)
+            if p.is_absolute():
+                return p if p.exists() else base / p.name
+            return base / p
         return p
 
     def _resolve_existing_path(self, p: Path) -> Path:
@@ -471,6 +474,12 @@ class HaroDesktopApp(ctk.CTk):
             self.login_window.en_user.insert(0, self.API_USER_DEFAULT)
         if self.API_PASS_DEFAULT:
             self.login_window.en_pass.insert(0, self.API_PASS_DEFAULT)
+        # Cierra el splash de PyInstaller (si existe) una vez que el login ya está listo.
+        try:
+            import pyi_splash  # type: ignore
+            pyi_splash.close()
+        except Exception:
+            pass
 
     def _matches_superadmin(self, user: str, password: str) -> bool:
         login = str(user or "").strip().lower()
