@@ -327,9 +327,8 @@ class HaroDesktopApp(ctk.CTk):
     def _build_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=self.SIDEBAR_W, fg_color=self.COLOR_PANEL, corner_radius=0)
         self.sidebar.grid(row=1, column=0, sticky="nsew")
-        for r in range(10):
+        for r in range(30):
             self.sidebar.grid_rowconfigure(r, weight=0)
-        self.sidebar.grid_rowconfigure(9, weight=1)
 
         ctk.CTkLabel(
             self.sidebar, text="Módulos", text_color=self.COLOR_MUTED,
@@ -354,6 +353,7 @@ class HaroDesktopApp(ctk.CTk):
 
         specs = [
             ("Estudiantes", "👤"),
+            ("Matrículas", "🧾"),
             ("Administradores", "🛡"),
             ("Instructores", "🧑‍🏫"),
             ("Vehículos", "🚗"),
@@ -365,6 +365,12 @@ class HaroDesktopApp(ctk.CTk):
             add_nav(i, n, ic)
 
         self._apply_nav_visibility()
+
+        # Hacer que el footer se "pegue" abajo sin depender de índices fijos
+        try:
+            self.sidebar.grid_rowconfigure(len(specs) + 2, weight=1)
+        except Exception:
+            pass
 
         ctk.CTkFrame(self.sidebar, height=1, fg_color=self.COLOR_DIVIDER, corner_radius=0) \
             .grid(row=len(specs) + 1, column=0, padx=12, pady=(16, 8), sticky="ew")
@@ -422,6 +428,7 @@ class HaroDesktopApp(ctk.CTk):
     def _register_view_factories(self):
         self._view_factories = {
             "Estudiantes": self._create_estudiantes_view,
+            "Matrículas": self._create_matriculas_view,
             "Administradores": self._create_administradores_view,
             "Instructores": self._create_instructores_view,
             "Vehículos": self._create_vehiculos_view,
@@ -434,6 +441,10 @@ class HaroDesktopApp(ctk.CTk):
     def _create_estudiantes_view(self):
         from modules.estudiantes import EstudiantesView
         return EstudiantesView(self.content)
+
+    def _create_matriculas_view(self):
+        from modules.matriculas import MatriculasView
+        return MatriculasView(self.content)
 
     def _create_administradores_view(self):
         from modules.administradores import AdministradoresView

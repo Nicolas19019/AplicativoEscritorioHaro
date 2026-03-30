@@ -262,6 +262,22 @@ class StudentInlineForm(ctk.CTkFrame):
         self.cb_sede.configure(values=[assigned_sede], state="disabled")
         self.cb_sede.set(assigned_sede)
 
+    def _apply_admin_tipo_estudiante_restriction(self):
+        # La opción "prospecto" solo debe estar visible para el superadministrador.
+        if getattr(self.app, "is_superadmin", False):
+            values = ["prospecto", "matriculado", "inscrito", "activo", "egresado"]
+        else:
+            values = ["matriculado", "inscrito", "activo", "egresado"]
+
+        try:
+            self.cb_tipo_estudiante.configure(values=values)
+        except Exception:
+            return
+
+        current = _normalize_tipo_estudiante(self.cb_tipo_estudiante.get())
+        if current not in values:
+            self.cb_tipo_estudiante.set(values[0])
+
     def _force_entry_placeholders(self):
         try:
             for attr in dir(self):
@@ -277,6 +293,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self.mode = "create"
         self._fill({})
         self._apply_admin_sede_restriction()
+        self._apply_admin_tipo_estudiante_restriction()
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
@@ -284,6 +301,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self.mode = "edit"
         self._fill(data or {})
         self._apply_admin_sede_restriction()
+        self._apply_admin_tipo_estudiante_restriction()
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
@@ -742,11 +760,10 @@ class EstudiantesView(BaseModuleFrame):
         self.f_categoria.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
 
         ctk.CTkLabel(bar, text="Tipo estudiante").grid(row=0, column=5, padx=(8, 8), pady=(10, 4), sticky="w")
-        self.f_tipo_estudiante = ctk.CTkComboBox(
-            bar,
-            values=["Todos", "Prospecto", "Matriculado", "Inscrito", "Activo", "Egresado"],
-            width=170,
-        )
+        tipo_values = ["Todos", "Matriculado", "Inscrito", "Activo", "Egresado"]
+        if getattr(self.app, "is_superadmin", False):
+            tipo_values.insert(1, "Prospecto")
+        self.f_tipo_estudiante = ctk.CTkComboBox(bar, values=tipo_values, width=170)
         self.f_tipo_estudiante.set("Todos")
         self.f_tipo_estudiante.grid(row=1, column=5, padx=(8, 8), pady=(0, 10), sticky="w")
 
@@ -854,6 +871,8 @@ class EstudiantesView(BaseModuleFrame):
             sede_label = _normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)
             tipo_est = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
 
+            if not getattr(self.app, "is_superadmin", False) and tipo_est == "prospecto":
+                continue
             if c_sub and c_sub not in consec:
                 continue
             if d_sub and d_sub not in doc:
@@ -1092,20 +1111,19 @@ class EstudiantesView(BaseModuleFrame):
                         raw = []
 
                 def apply_data():
-                    allowed_sede = "" if getattr(self.app, "is_superadmin", False) else self._allowed_admin_sede()
-                    if allowed_sede:
-                        raw_filtered = []
-                        for stu in (raw or []):
+                    is_superadmin = getattr(self.app, "is_superadmin", False)
+                    allowed_sede = "" if is_superadmin else self._allowed_admin_sede()
+                    raw_filtered = []
+                    for stu in (raw or []):
+                        tipo_est = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
+                        # Prospectos solo visibles para superadministrador
+                        if not is_superadmin and tipo_est == "prospecto":
+                            continue
+                        if allowed_sede:
                             sede_label = _normalize_sede_label(_extract_sede(stu)) or _extract_sede(stu)
-                            tipo_est = _normalize_tipo_estudiante(stu.get("tipoEstudiante"))
-                            if sede_label == allowed_sede:
-                                raw_filtered.append(stu)
+                            if sede_label != allowed_sede:
                                 continue
-                            # Para que los admin puedan ver prospectos sin sede (así pueden asignarla).
-                            if not sede_label and tipo_est == "prospecto":
-                                raw_filtered.append(stu)
-                    else:
-                        raw_filtered = raw or []
+                        raw_filtered.append(stu)
                     self._all_data = raw_filtered
                     self._refresh_category_options()
                     self._refresh_summary()

@@ -1071,9 +1071,15 @@ class ReportesView(BaseModuleFrame):
                 ("Inactivos", str(inactivos)),
                 ("Nuevos (mes)", str(len(nuevos))),
                 ("Matrículas chatbot", str(matriculas_chatbot_mes)),
-                ("Prospectos chatbot", str(prospectos_total)),
                 ("Estudiantes en mora", str(estudiantes_en_mora)),
-                ("Prospectos chatbot (mes)", str(prospectos_mes)),
+                *(
+                    [
+                        ("Prospectos chatbot", str(prospectos_total)),
+                        ("Prospectos chatbot (mes)", str(prospectos_mes)),
+                    ]
+                    if getattr(self.app, "is_superadmin", False)
+                    else []
+                ),
             ],
             "insights": [
                 "Las métricas de chatbot se estiman con tipoEstudiante porque hoy Reportes no consume un endpoint separado del bot.",
