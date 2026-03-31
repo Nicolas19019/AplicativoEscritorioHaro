@@ -6,7 +6,7 @@ import customtkinter as ctk
 from tkinter import messagebox, ttk
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from modules.base import BaseModuleFrame
@@ -58,6 +58,30 @@ def _format_date(value) -> str:
     if " " in s:
         s = s.split(" ", 1)[0]
     return s[:10] if len(s) >= 10 else s
+
+
+def _parse_datetime(value) -> Optional[datetime]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+    s = str(value).strip()
+    if not s:
+        return None
+    s = s.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except Exception:
+                dt = None
+        if dt is None:
+            return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _parse_money(value) -> float:
@@ -416,6 +440,9 @@ class MatriculasView(BaseModuleFrame):
     RENDER_DELAY_MS = 16
     TREE_INSERT_CHUNK = 250
     TREE_INSERT_DELAY = 1
+    PAYMENT_EXPIRY_MINUTES = 90
+    PAYMENT_WARNING_MINUTES = 15
+    AUTO_SWEEP_MS = 60_000
 
     def __init__(self, master):
         super().__init__(master, "Matrículas", "Solicitudes de matrícula y gestión de contratos")
@@ -432,6 +459,9 @@ class MatriculasView(BaseModuleFrame):
         self._render_seq = 0
         self._loading_overlay = None
         self._last_refresh_ts = 0
+        self._auto_sweep_after_id = None
+        self._expiry_delete_inflight = set()
+        self._expiry_alert_text = None
 
         # ===== Toolbar =====
         tb = ctk.CTkFrame(self, fg_color="transparent")
@@ -461,10 +491,24 @@ class MatriculasView(BaseModuleFrame):
         self.filters = self._make_filters_bar(self)
         self.filters.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
 
+        self.expiry_alert = ctk.CTkLabel(
+            self,
+            text="",
+            anchor="w",
+            justify="left",
+            corner_radius=10,
+            fg_color=self.app.COLOR_PANEL,
+            text_color=self.app.COLOR_MUTED,
+            padx=12,
+            pady=8,
+        )
+        self.expiry_alert.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+        self.expiry_alert.grid_remove()
+
         # ===== Tabla =====
         self.table = ctk.CTkFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
-        self.table.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="nsew")
-        self.grid_rowconfigure(3, weight=1)
+        self.table.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        self.grid_rowconfigure(4, weight=1)
         self.table.grid_rowconfigure(0, weight=1)
         self.table.grid_columnconfigure(0, weight=1)
 
@@ -484,6 +528,16 @@ class MatriculasView(BaseModuleFrame):
         self._build_tree()
 
         self.after(150, self._refrescar)
+        self.after(1000, self._schedule_auto_sweep)
+
+    def destroy(self):
+        if self._auto_sweep_after_id:
+            try:
+                self.after_cancel(self._auto_sweep_after_id)
+            except Exception:
+                pass
+            self._auto_sweep_after_id = None
+        return super().destroy()
 
     # =====================================================
     #                    FILTROS
@@ -588,6 +642,7 @@ class MatriculasView(BaseModuleFrame):
 
     def _apply_filters_now(self):
         self._data = self._apply_filters(self._all_data, self._collect_filters())
+        self._refresh_expiry_alert()
         self._queue_render(self._data)
 
     def _allowed_admin_sede(self) -> str:
@@ -671,6 +726,16 @@ class MatriculasView(BaseModuleFrame):
             "pago_rechazado",
             foreground=solid_color(getattr(self.app, "COLOR_RED", "#E53935"), "#E53935"),
         )
+        self.tree.tag_configure(
+            "expira_pronto",
+            background="#FFF3CD",
+            foreground="#7A4E00",
+        )
+        self.tree.tag_configure(
+            "expirada",
+            background="#FDE2E1",
+            foreground="#8B1E1E",
+        )
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda _e: self._ver_detalle())
@@ -721,7 +786,8 @@ class MatriculasView(BaseModuleFrame):
                 iid = f"r{idx}"
                 self._iid_to_index[iid] = idx
                 pago_tag = self._payment_tag(self._take_estado_pago(rec))
-                tags = ("even" if idx % 2 == 0 else "odd", pago_tag)
+                timing_tag = self._timing_tag(rec)
+                tags = ("even" if idx % 2 == 0 else "odd", pago_tag, timing_tag)
                 self.tree.insert("", "end", iid=iid, values=self._row_values(rec), tags=tags)
             if end < len(data):
                 self.after(self.TREE_INSERT_DELAY, lambda: insert_chunk(end))
@@ -736,6 +802,14 @@ class MatriculasView(BaseModuleFrame):
         if ep in {"RECHAZADO", "CANCELADO", "ANULADO"}:
             return "pago_rechazado"
         return "pago_pendiente"
+
+    def _timing_tag(self, rec) -> str:
+        status = self._payment_deadline_status(rec)
+        if status == "expired":
+            return "expirada"
+        if status == "warning":
+            return "expira_pronto"
+        return ""
 
     # =====================================================
     #                     HELPERS
@@ -888,6 +962,132 @@ class MatriculasView(BaseModuleFrame):
                 return _format_date(val)
         return "—"
 
+    def _take_created_at_dt(self, rec) -> Optional[datetime]:
+        if not isinstance(rec, dict):
+            return None
+        for key in ("createdAt", "fechaCreacion", "fecha", "fechaRegistro"):
+            dt = _parse_datetime(rec.get(key))
+            if dt:
+                return dt
+        return None
+
+    def _is_pending_payment(self, rec) -> bool:
+        return self._take_estado_pago(rec) in {"", "PENDIENTE", "PENDING"}
+
+    def _payment_deadline_status(self, rec, now_utc: Optional[datetime] = None) -> str:
+        if not self._is_pending_payment(rec):
+            return ""
+        created_at = self._take_created_at_dt(rec)
+        if not created_at:
+            return ""
+        now_utc = now_utc or datetime.now(timezone.utc)
+        expires_at = created_at + timedelta(minutes=self.PAYMENT_EXPIRY_MINUTES)
+        warning_at = expires_at - timedelta(minutes=self.PAYMENT_WARNING_MINUTES)
+        if now_utc >= expires_at:
+            return "expired"
+        if now_utc >= warning_at:
+            return "warning"
+        return ""
+
+    def _minutes_until_expiry(self, rec, now_utc: Optional[datetime] = None) -> Optional[int]:
+        created_at = self._take_created_at_dt(rec)
+        if not created_at:
+            return None
+        now_utc = now_utc or datetime.now(timezone.utc)
+        expires_at = created_at + timedelta(minutes=self.PAYMENT_EXPIRY_MINUTES)
+        seconds_left = (expires_at - now_utc).total_seconds()
+        return int(seconds_left // 60)
+
+    def _build_expiry_alert_text(self, data_list) -> str:
+        now_utc = datetime.now(timezone.utc)
+        warning_count = 0
+        expired_count = 0
+        nearest_minutes = None
+        for rec in data_list or []:
+            status = self._payment_deadline_status(rec, now_utc=now_utc)
+            if status == "expired":
+                expired_count += 1
+                continue
+            if status == "warning":
+                warning_count += 1
+                minutes_left = self._minutes_until_expiry(rec, now_utc=now_utc)
+                if minutes_left is not None:
+                    nearest_minutes = minutes_left if nearest_minutes is None else min(nearest_minutes, minutes_left)
+
+        parts = []
+        if expired_count:
+            parts.append(f"{expired_count} solicitud(es) vencidas pendientes de eliminar")
+        if warning_count:
+            detail = f"{warning_count} por vencer"
+            if nearest_minutes is not None:
+                detail += f" (la más próxima vence en {max(0, nearest_minutes)} min)"
+            parts.append(detail)
+        return " | ".join(parts)
+
+    def _refresh_expiry_alert(self):
+        text = self._build_expiry_alert_text(self._data)
+        self._expiry_alert_text = text
+        if not text:
+            self.expiry_alert.grid_remove()
+            return
+        is_critical = "vencidas" in text
+        self.expiry_alert.configure(
+            text=f"Alerta de pagos: {text}",
+            fg_color="#FDE2E1" if is_critical else "#FFF3CD",
+            text_color="#8B1E1E" if is_critical else "#7A4E00",
+        )
+        self.expiry_alert.grid()
+
+    def _schedule_auto_sweep(self):
+        if self._auto_sweep_after_id:
+            try:
+                self.after_cancel(self._auto_sweep_after_id)
+            except Exception:
+                pass
+        self._auto_sweep_after_id = self.after(self.AUTO_SWEEP_MS, self._run_auto_sweep)
+
+    def _run_auto_sweep(self):
+        self._auto_sweep_after_id = None
+        self._delete_expired_pending_async()
+        self._refrescar(force_refresh=True)
+        self._schedule_auto_sweep()
+
+    def _delete_expired_pending_async(self):
+        rows = list(self._all_data or [])
+        now_utc = datetime.now(timezone.utc)
+        expired = []
+        for rec in rows:
+            if self._payment_deadline_status(rec, now_utc=now_utc) != "expired":
+                continue
+            proceso_id = self._take_id(rec)
+            if proceso_id is None or proceso_id in self._expiry_delete_inflight:
+                continue
+            expired.append((proceso_id, rec))
+
+        if not expired or not self.app.api or not self._resource:
+            return
+
+        def worker():
+            removed_ids = []
+            for proceso_id, _rec in expired:
+                self._expiry_delete_inflight.add(proceso_id)
+                try:
+                    self.app.api.delete(self._resource, proceso_id)
+                    removed_ids.append(proceso_id)
+                except Exception:
+                    pass
+                finally:
+                    self._expiry_delete_inflight.discard(proceso_id)
+
+            if removed_ids:
+                def apply_local_cleanup():
+                    self._all_data = [r for r in self._all_data if self._take_id(r) not in removed_ids]
+                    self._apply_filters_now()
+
+                self.after(0, apply_local_cleanup)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _row_values(self, rec):
         return (
             self._take_student_name(rec),
@@ -970,6 +1170,7 @@ class MatriculasView(BaseModuleFrame):
 
                 def apply_data():
                     self._all_data = rows
+                    self._delete_expired_pending_async()
                     self._apply_filters_now()
 
                 self.after(0, apply_data)
