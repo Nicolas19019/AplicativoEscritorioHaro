@@ -11,9 +11,24 @@ from modules.treeview_theme import configure_treeview_style
 
 def _normalize_sede_label(value) -> str:
     txt = str(value or "").strip().lower()
-    if txt in {"1 de mayo", "1demayo"}:
+    if not txt:
+        return str(value or "").strip()
+
+    txt = (
+        txt.replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+        .replace("ü", "u")
+        .replace("ñ", "n")
+    )
+    txt = " ".join(txt.split())
+    compact = txt.replace(" ", "")
+
+    if compact in {"1demayo", "1mayo", "1rodemayo", "1erdemayo"} or "mayo" in txt or "kennedy" in txt:
         return "1 de Mayo"
-    if txt in {"el eden", "el edén", "eden", "edén"}:
+    if "eden" in txt:
         return "El Eden"
     return str(value or "").strip()
 
@@ -549,7 +564,8 @@ class InstructoresView(BaseModuleFrame):
 
                 self.after(0, apply_data)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Profesores", f"No fue posible consultar la API:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Profesores", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 

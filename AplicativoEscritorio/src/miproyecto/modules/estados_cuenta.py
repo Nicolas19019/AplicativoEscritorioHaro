@@ -653,7 +653,8 @@ class EstadosCuentaView(BaseModuleFrame):
 
                 self.after(0, apply_data)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Estados de cuenta", f"No fue posible consultar la API:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Estados de cuenta", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 

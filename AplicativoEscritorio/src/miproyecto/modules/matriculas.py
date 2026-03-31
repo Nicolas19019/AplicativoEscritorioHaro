@@ -15,6 +15,25 @@ from modules.treeview_theme import configure_treeview_style, solid_color
 
 def _normalize_sede_label(value) -> str:
     txt = str(value or "").strip().lower()
+    if not txt:
+        return str(value or "").strip()
+
+    txt_fold = (
+        txt.replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+        .replace("ü", "u")
+        .replace("ñ", "n")
+    )
+    txt_fold = " ".join(txt_fold.split())
+    compact = txt_fold.replace(" ", "")
+
+    if compact in {"1demayo", "1mayo", "1rodemayo", "1erdemayo"} or "mayo" in txt_fold or "kennedy" in txt_fold:
+        return "1 de Mayo"
+    if "eden" in txt_fold:
+        return "El Eden"
     if txt in {"1 de mayo", "1demayo"}:
         return "1 de Mayo"
     if txt in {"el eden", "el edén", "eden", "edén"}:
@@ -915,7 +934,7 @@ class MatriculasView(BaseModuleFrame):
         if not self.app.api:
             raise RuntimeError("No hay cliente API activo. Inicia sesión.")
 
-        last_err = None
+        errors = []
         if self._resource:
             raw = self.app.api.get_all(self._resource, force_refresh=force_refresh) or []
             return self._resource, raw
@@ -926,12 +945,15 @@ class MatriculasView(BaseModuleFrame):
                 self._resource = cand
                 return cand, raw
             except Exception as e:
-                last_err = e
+                errors.append(f"{cand}: {e}")
                 continue
+        detail = "\n".join(errors[:6])
+        if len(errors) > 6:
+            detail += f"\n... {len(errors) - 6} más"
         raise RuntimeError(
             "No se encontró un endpoint compatible para solicitudes de matrícula.\n\n"
             f"Probé: {', '.join(self.RESOURCE_CANDIDATES)}\n\n"
-            f"Último error: {last_err}"
+            f"Errores:\n{detail or '—'}"
         )
 
     def _refrescar(self, force_refresh=True):
@@ -952,7 +974,8 @@ class MatriculasView(BaseModuleFrame):
 
                 self.after(0, apply_data)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Matrículas", f"No fue posible consultar la API:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Matrículas", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 
@@ -1104,14 +1127,25 @@ class MatriculasView(BaseModuleFrame):
             return
 
         def do_confirm(valor: float, obs: str):
+            origen = self._take_origen(rec)
+            is_chatbot_origin = (origen == "CHATBOT")
             payload = {
                 "valorPagado": float(valor),
                 "observacionPago": obs,
                 "validadoPorAdminId": getattr(self.app, "current_admin_id", None),
+                # Si la solicitud viene del chatbot (pago en efectivo), al confirmar se debe
+                # notificar por WhatsApp el enlace de contratos al estudiante.
+                "sendEmail": True,
+                "sendChatbot": bool(is_chatbot_origin),
+                # Para solicitudes del chatbot NO exigimos prospecto (el usuario ya está en el flujo).
+                "requireProspect": False if is_chatbot_origin else True,
             }
             try:
                 self._call_action("confirmar_pago", proceso_id, payload)
-                self.app._info("Pago confirmado y contratos habilitados.")
+                if is_chatbot_origin:
+                    self.app._info("Pago confirmado. Enlace de contratos enviado por WhatsApp (y correo).")
+                else:
+                    self.app._info("Pago confirmado y contratos habilitados.")
                 self._refrescar(force_refresh=True)
             except Exception as e:
                 messagebox.showerror("Matrículas", f"No fue posible confirmar el pago:\n{e}", parent=self)

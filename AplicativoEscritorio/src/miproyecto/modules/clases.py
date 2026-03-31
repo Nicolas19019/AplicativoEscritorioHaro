@@ -935,7 +935,8 @@ class ClasesView(BaseModuleFrame):
                 self._data = raw
                 self.after(0, lambda: self._sync_rows_to("right" if self._calendar_mode else "top"))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Clases", f"No fue posible consultar la API:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Clases", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 

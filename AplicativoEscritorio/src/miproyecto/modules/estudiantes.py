@@ -80,9 +80,26 @@ def _extract_sede(data: dict) -> str:
 
 def _normalize_sede_label(value) -> str:
     txt = str(value or "").strip().lower()
-    if txt in {"1 de mayo", "1demayo"}:
+    if not txt:
+        return ""
+
+    # Normaliza acentos y espacios para comparar mejor valores que vienen de distintas fuentes
+    # (p. ej. "CC El Edén", "Centro Comercial El Eden", "Kennedy", etc.).
+    txt = (
+        txt.replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+        .replace("ü", "u")
+        .replace("ñ", "n")
+    )
+    txt = " ".join(txt.split())
+    compact = txt.replace(" ", "")
+
+    if compact in {"1demayo", "1mayo", "1rodemayo", "1erdemayo"} or "mayo" in txt or "kennedy" in txt:
         return "1 de Mayo"
-    if txt in {"el eden", "el edén", "eden", "edén"}:
+    if "eden" in txt:
         return "El Eden"
     return ""
 
@@ -723,10 +740,15 @@ class EstudiantesView(BaseModuleFrame):
         bar.grid_columnconfigure(6, weight=0)
 
         def entry(ph, width=None):
+            # customtkinter no acepta width=None (rompe el escalado interno).
+            kw = {}
+            if width is not None:
+                kw["width"] = width
             return ctk.CTkEntry(
-                bar, placeholder_text=ph, height=36, corner_radius=10, width=width,
+                bar, placeholder_text=ph, height=36, corner_radius=10,
                 fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
-                border_width=2, border_color=self.app.COLOR_DIVIDER
+                border_width=2, border_color=self.app.COLOR_DIVIDER,
+                **kw
             )
 
         ctk.CTkLabel(bar, text="Consecutivo").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
@@ -1136,7 +1158,8 @@ class EstudiantesView(BaseModuleFrame):
 
                 self.after(0, apply_data)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Estudiantes", f"No fue posible consultar la API:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Estudiantes", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 

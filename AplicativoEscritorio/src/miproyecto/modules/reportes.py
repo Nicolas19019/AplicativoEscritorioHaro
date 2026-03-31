@@ -2000,7 +2000,8 @@ class ReportesView(BaseModuleFrame):
                 self.after(0, lambda: self._apply_report_state(state))
                 self.after(0, lambda: self.app._info(f"Reporte de {tipo} generado correctamente."))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Reportes", f"No fue posible generar el reporte:\n{e}", parent=self))
+                err = str(e)
+                self.after(0, lambda err=err: messagebox.showerror("Reportes", f"No fue posible generar el reporte:\n{err}", parent=self))
                 self.after(0, lambda: self._apply_report_state(self._empty_report_state()))
             finally:
                 self.after(0, lambda: self._show_loading(False))

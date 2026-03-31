@@ -11,6 +11,25 @@ SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
 
 def _normalize_sede_label(value):
     txt = str(value or "").strip().lower()
+    if not txt:
+        return ""
+
+    txt_fold = (
+        txt.replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+        .replace("ü", "u")
+        .replace("ñ", "n")
+    )
+    txt_fold = " ".join(txt_fold.split())
+    compact = txt_fold.replace(" ", "")
+
+    if compact in {"1demayo", "1mayo", "1rodemayo", "1erdemayo"} or "mayo" in txt_fold or "kennedy" in txt_fold:
+        return "1 de Mayo"
+    if "eden" in txt_fold:
+        return "El Eden"
     if txt in {"1 de mayo", "1demayo"}:
         return "1 de Mayo"
     if txt in {"el eden", "el edén", "eden", "edén"}:
