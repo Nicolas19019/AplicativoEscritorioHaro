@@ -41,6 +41,23 @@ def _upper_text(value):
     return str(value or "").strip().upper()
 
 
+def _assigned_admin_sede(app) -> str:
+    raw = getattr(app, "current_admin_sede", None)
+    return _normalize_sede_label(raw) or str(raw or "").strip()
+
+
+def _apply_admin_sede_to_combobox(app, combo):
+    assigned_sede = _assigned_admin_sede(app)
+    if getattr(app, "is_superadmin", False) or not assigned_sede:
+        combo.configure(values=SEDES_DISPONIBLES, state="normal")
+        current = (combo.get() or "").strip()
+        if current not in SEDES_DISPONIBLES:
+            combo.set(SEDES_DISPONIBLES[0])
+        return
+    combo.configure(values=[assigned_sede], state="disabled")
+    combo.set(assigned_sede)
+
+
 # ================= INSTRUCTOR FORM =================
 class InstructorInlineForm(ctk.CTkFrame):
     """
@@ -134,6 +151,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             .grid(row=0, column=0, padx=6)
         form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
         self.mode = "create"
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
     def _reset_fields(self):
         try:
             for w in (
@@ -148,7 +166,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             self.cb_esp.set("carro")
             self.cb_categoria.set("carro")
             self.cb_visible.set("true")
-            self.cb_sede.set(SEDES_DISPONIBLES[0])
+            _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         except Exception as e:
             print(f"[WARN] Error al reiniciar campos en InstructorInlineForm: {e}")
     def _force_entry_placeholders(self):
@@ -164,11 +182,13 @@ class InstructorInlineForm(ctk.CTkFrame):
     def show_create(self):
         self.mode = "create"
         self._reset_fields()
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
     def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
     def hide(self):
@@ -197,6 +217,7 @@ class InstructorInlineForm(ctk.CTkFrame):
         if isinstance(sede_val, dict):
             sede_val = sede_val.get("nombre") or sede_val.get("name") or sede_val.get("descripcion") or ""
         self.cb_sede.set(_normalize_sede_label(sede_val) or SEDES_DISPONIBLES[0])
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         categoria_raw = (
             d.get("categoria")
             or d.get("categoriaLicencia")
@@ -347,6 +368,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         form_btn("Guardar", self._save, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=1, padx=6)
 
         self.mode = "create"
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
 
     def _force_entry_placeholders(self):
         """Fuerza a que los placeholders de CTkEntry se muestren correctamente al cargar."""
@@ -364,12 +386,14 @@ class VehiculoInlineForm(ctk.CTkFrame):
     def show_create(self):
         self.mode = "create"
         self._fill({})
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
     def show_edit(self, data):
         self.mode = "edit"
         self._fill(data or {})
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
 
@@ -385,6 +409,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.en_modelo.insert(0, d.get("modelo", ""))
         self.en_anio.insert(0, str(d.get("anio", "") or ""))
         self.cb_sede.set(_normalize_sede_label(d.get("sede", "")) or SEDES_DISPONIBLES[0])
+        _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.cb_estado.set(d.get("estado", "Activo") or "Activo")
 
     def _collect(self):

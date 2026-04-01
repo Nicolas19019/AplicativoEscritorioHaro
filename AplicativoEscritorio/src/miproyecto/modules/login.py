@@ -618,39 +618,21 @@ class LoginDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self.otp_block, text="Código de verificación (OTP)", text_color=fg_text)\
             .grid(row=0, column=0, pady=(0, 2), sticky="w")
 
-        self.lbl_otp_help = ctk.CTkLabel(
-            self.otp_block,
-            text="Primero escribe un correo válido. Luego pulsa Solicitar OTP, revisa tu correo e ingresa el código para validar la cuenta antes de crearla.",
-            text_color=fg_muted,
-            justify="left",
-            wraplength=360,
-            font=ctk.CTkFont(size=11)
-        )
-        self.lbl_otp_help.grid_forget()
-
         self.otp_help_row = ctk.CTkFrame(self.otp_block, fg_color="transparent")
         self.otp_help_row.grid(row=1, column=0, sticky="w", pady=(0, 2))
 
-        self.lbl_otp_help = ctk.CTkLabel(
-            self.otp_help_row,
-            text="Solicita tu OTP para crear el administrador",
-            text_color=fg_muted,
-            font=ctk.CTkFont(size=11)
-        )
-        self.lbl_otp_help.grid(row=0, column=0, sticky="w")
-
         self.btn_send_otp = ctk.CTkButton(
             self.otp_help_row,
-            text="solicitalo aqui",
+            text="Solicitar OTP",
             fg_color="transparent",
             hover_color=fg_divider,
             text_color=self.PLACEHOLDER_YELLOW,
             font=ctk.CTkFont(size=11, weight="bold", underline=True),
-            width=100,
+            width=120,
             height=24,
             command=self._request_registration_otp
         )
-        self.btn_send_otp.grid(row=0, column=1, padx=(6, 0), sticky="w")
+        self.btn_send_otp.grid(row=0, column=0, sticky="w")
 
         self.en_otp = ctk.CTkEntry(
             self.otp_block, height=38,
@@ -677,6 +659,7 @@ class LoginDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=11)
         )
         self.lbl_otp_status.grid(row=3, column=0, sticky="w", pady=(2, 0))
+        self.lbl_otp_status.grid_remove()
 
         # ===== Error / info (fila 2) - panel centrado con borde (reserva espacio) =====
         self.err_box = ctk.CTkFrame(
@@ -1141,13 +1124,9 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== OTP send/verify helpers ======================
     def _set_otp_status(self, msg="", kind="info"):
-        colors = {
-            "info": "#111111",
-            "success": "#2e7d32",
-            "error": "#B91C1C",
-        }
         try:
-            self.lbl_otp_status.configure(text=msg, text_color=colors.get(kind, "#111111"))
+            self.lbl_otp_status.configure(text="")
+            self.lbl_otp_status.grid_remove()
         except Exception:
             pass
 
@@ -1372,9 +1351,10 @@ class LoginDialog(ctk.CTkToplevel):
 
         def on_ok(verified_email):
             self._otp_verified_email = verified_email
-            self._set_otp_status(
-                f"Correo verificado correctamente para {verified_email}. Ya puedes pulsar Crear cuenta.",
-                "success",
+            messagebox.showinfo(
+                "OTP verificado",
+                f"Correo verificado correctamente para:\n{verified_email}\n\nYa puedes pulsar Crear cuenta.",
+                parent=self,
             )
             self._set_registration_buttons_state(True)
 

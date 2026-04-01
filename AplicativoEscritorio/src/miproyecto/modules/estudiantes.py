@@ -173,63 +173,67 @@ class StudentInlineForm(ctk.CTkFrame):
         self.en_doc = BorderedEntry(self, placeholder_text="1012345678")
         self.en_doc.grid(row=0, column=3, padx=12, pady=(12, 6), sticky="ew")
 
-        # --------- Fila 1: Nombre / Apellido ---------
-        ctk.CTkLabel(self, text="Nombre").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        # --------- Fila 1: Consecutivo / Nombre ---------
+        ctk.CTkLabel(self, text="Consecutivo").grid(row=1, column=0, padx=12, pady=6, sticky="w")
+        self.en_consecutivo = BorderedEntry(self, placeholder_text="Ej: 000123")
+        self.en_consecutivo.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+
+        ctk.CTkLabel(self, text="Nombre").grid(row=1, column=2, padx=12, pady=6, sticky="w")
         self.en_nombre = BorderedEntry(self, placeholder_text="Andres")
-        self.en_nombre.grid(row=1, column=1, padx=12, pady=6, sticky="ew")
+        self.en_nombre.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
 
-        ctk.CTkLabel(self, text="Apellido").grid(row=1, column=2, padx=12, pady=6, sticky="w")
+        # --------- Fila 2: Apellido / Contacto ---------
+        ctk.CTkLabel(self, text="Apellido").grid(row=2, column=0, padx=12, pady=6, sticky="w")
         self.en_apellido = BorderedEntry(self, placeholder_text="Agudelo")
-        self.en_apellido.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
+        self.en_apellido.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
 
-        # --------- Fila 2: Contacto ---------
-        ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Teléfono").grid(row=2, column=2, padx=12, pady=6, sticky="w")
         self.en_tel = BorderedEntry(self, placeholder_text="3001234567")
-        self.en_tel.grid(row=2, column=1, padx=12, pady=6, sticky="ew")
+        self.en_tel.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
 
-        ctk.CTkLabel(self, text="Email").grid(row=2, column=2, padx=12, pady=6, sticky="w")
+        # --------- Fila 3: Email / Dirección ---------
+        ctk.CTkLabel(self, text="Email").grid(row=3, column=0, padx=12, pady=6, sticky="w")
         self.en_mail = BorderedEntry(self, placeholder_text="correo@dominio.com")
-        self.en_mail.grid(row=2, column=3, padx=12, pady=6, sticky="ew")
+        self.en_mail.grid(row=3, column=1, padx=12, pady=6, sticky="ew")
 
-        # --------- Fila 3: Dirección / Estado ---------
-        ctk.CTkLabel(self, text="Dirección").grid(row=3, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Dirección").grid(row=3, column=2, padx=12, pady=6, sticky="w")
         self.en_dir = BorderedEntry(self, placeholder_text="Calle 68")
-        self.en_dir.grid(row=3, column=1, padx=12, pady=6, sticky="ew")
+        self.en_dir.grid(row=3, column=3, padx=12, pady=6, sticky="ew")
 
-        ctk.CTkLabel(self, text="Estado").grid(row=3, column=2, padx=12, pady=6, sticky="w")
+        # --------- Fila 4: Estado / Categoría ---------
+        ctk.CTkLabel(self, text="Estado").grid(row=4, column=0, padx=12, pady=6, sticky="w")
         self.cb_estado = ctk.CTkComboBox(self, values=["Pendiente", "Activo", "Inactivo", "Suspendido"], width=140)
         self.cb_estado.set("Pendiente")
-        self.cb_estado.grid(row=3, column=3, padx=12, pady=6, sticky="w")
+        self.cb_estado.grid(row=4, column=1, padx=12, pady=6, sticky="w")
 
-        # --------- Fila 4: Categoría / Tipo Estudiante ---------
-        ctk.CTkLabel(self, text="Categoría").grid(row=4, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Categoría").grid(row=4, column=2, padx=12, pady=6, sticky="w")
         self.cb_categoria = ctk.CTkComboBox(self, values=["A2", "B1", "C1"], width=140)
         self.cb_categoria.set("A2")
-        self.cb_categoria.grid(row=4, column=1, padx=12, pady=6, sticky="w")
+        self.cb_categoria.grid(row=4, column=3, padx=12, pady=6, sticky="w")
 
-        ctk.CTkLabel(self, text="Tipo Estudiante").grid(row=4, column=2, padx=12, pady=6, sticky="w")
+        # --------- Fila 5: Tipo Estudiante / Sede ---------
+        ctk.CTkLabel(self, text="Tipo Estudiante").grid(row=5, column=0, padx=12, pady=6, sticky="w")
         self.cb_tipo_estudiante = ctk.CTkComboBox(
             self,
             values=["prospecto", "matriculado", "inscrito", "activo", "egresado"],
             width=160
         )
         self.cb_tipo_estudiante.set("prospecto")
-        self.cb_tipo_estudiante.grid(row=4, column=3, padx=12, pady=6, sticky="w")
+        self.cb_tipo_estudiante.grid(row=5, column=1, padx=12, pady=6, sticky="w")
 
-        # --------- Fila 5: Sede / Horas ---------
-        ctk.CTkLabel(self, text="Sede").grid(row=5, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Sede").grid(row=5, column=2, padx=12, pady=6, sticky="w")
         self.cb_sede = ctk.CTkComboBox(self, values=SEDES_DISPONIBLES, width=180)
         self.cb_sede.set(SEDES_DISPONIBLES[0])
-        self.cb_sede.grid(row=5, column=1, padx=12, pady=6, sticky="w")
+        self.cb_sede.grid(row=5, column=3, padx=12, pady=6, sticky="w")
 
-        ctk.CTkLabel(self, text="Horas").grid(row=5, column=2, padx=12, pady=6, sticky="w")
+        # --------- Fila 6: Horas / Tipo Pase ---------
+        ctk.CTkLabel(self, text="Horas").grid(row=6, column=0, padx=12, pady=6, sticky="w")
         self.en_horas = BorderedEntry(self, placeholder_text="0")
-        self.en_horas.grid(row=5, column=3, padx=12, pady=6, sticky="ew")
+        self.en_horas.grid(row=6, column=1, padx=12, pady=6, sticky="ew")
 
-        # --------- Fila 6: Tipo Pase / Estados booleanos ---------
-        ctk.CTkLabel(self, text="Tipo Pase").grid(row=6, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkLabel(self, text="Tipo Pase").grid(row=6, column=2, padx=12, pady=6, sticky="w")
         tipo_pase_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        tipo_pase_wrap.grid(row=6, column=1, padx=12, pady=6, sticky="w")
+        tipo_pase_wrap.grid(row=6, column=3, padx=12, pady=6, sticky="w")
 
         self.ck_tipo_pase_carro = ctk.CTkCheckBox(tipo_pase_wrap, text="Carro")
         self.ck_tipo_pase_carro.grid(row=0, column=0, padx=(0, 8), sticky="w")
@@ -237,16 +241,16 @@ class StudentInlineForm(ctk.CTkFrame):
         self.ck_tipo_pase_moto.grid(row=0, column=1, padx=(0, 8), sticky="w")
 
         bool_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        bool_wrap.grid(row=6, column=2, columnspan=2, padx=12, pady=6, sticky="w")
+        bool_wrap.grid(row=7, column=0, columnspan=4, padx=12, pady=6, sticky="w")
 
         self.sw_aprobo_teorico = ctk.CTkSwitch(bool_wrap, text="Aprobó teórico")
         self.sw_aprobo_teorico.grid(row=0, column=0, padx=(0, 16), sticky="w")
         self.sw_visible = ctk.CTkSwitch(bool_wrap, text="Visible")
         self.sw_visible.grid(row=0, column=1, padx=(0, 16), sticky="w")
 
-        # --------- Fila 7: Botones ---------
+        # --------- Fila 8: Botones ---------
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=7, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
+        btns.grid(row=8, column=0, columnspan=4, padx=12, pady=(8, 12), sticky="e")
 
         def form_btn(text, cmd, fg, hover, txt="#ffffff"):
             return ctk.CTkButton(
@@ -327,12 +331,13 @@ class StudentInlineForm(ctk.CTkFrame):
 
     def _fill(self, d):
         for w in (
-            self.en_doc, self.en_nombre, self.en_apellido, self.en_tel,
+            self.en_doc, self.en_consecutivo, self.en_nombre, self.en_apellido, self.en_tel,
             self.en_mail, self.en_dir, self.en_horas
         ):
             w.delete(0, "end")
         self.cb_tipo.set(d.get("tipoDocumento", "CC"))
         self.en_doc.insert(0, d.get("numeroDocumento", ""))
+        self.en_consecutivo.insert(0, _extract_consecutivo(d))
         self.en_nombre.insert(0, d.get("nombre", ""))
         self.en_apellido.insert(0, d.get("apellido", ""))
         self.en_tel.insert(0, d.get("telefono", ""))
@@ -400,6 +405,7 @@ class StudentInlineForm(ctk.CTkFrame):
         data = {
             "tipoDocumento": self.cb_tipo.get().strip(),
             "numeroDocumento": self.en_doc.get().strip(),
+            "consecutivo": (self.en_consecutivo.get() or "").strip() or None,
             "nombre": _upper_text(self.en_nombre.get()),
             "apellido": _upper_text(self.en_apellido.get()),
             "tipoEstudiante": (self.cb_tipo_estudiante.get() or "prospecto").strip().lower(),
@@ -1244,7 +1250,7 @@ class EstudiantesView(BaseModuleFrame):
                     self._data[idx],
                     compare_fields=[
                         "nombre", "apellido", "tipoEstudiante", "tipoDocumento", "numeroDocumento",
-                        "categoria", "sede", "horas", "tipoPase", "aproboExamenTeorico",
+                        "consecutivo", "categoria", "sede", "horas", "tipoPase", "aproboExamenTeorico",
                         "telefono", "email", "direccion", "estado", "visible", "usuario",
                     ],
                     label="estudiante",
