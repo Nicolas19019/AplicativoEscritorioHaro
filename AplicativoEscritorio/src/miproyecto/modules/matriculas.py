@@ -1,4 +1,4 @@
-"""
+﻿"""
 Módulo de Matrículas / Solicitudes.
 """
 
@@ -19,13 +19,13 @@ def _normalize_sede_label(value) -> str:
         return str(value or "").strip()
 
     txt_fold = (
-        txt.replace("á", "a")
-        .replace("é", "e")
-        .replace("í", "i")
-        .replace("ó", "o")
-        .replace("ú", "u")
-        .replace("ü", "u")
-        .replace("ñ", "n")
+        txt.replace("á", "a").replace("Ã¡", "a")
+        .replace("é", "e").replace("Ã©", "e")
+        .replace("í", "i").replace("Ã­", "i")
+        .replace("ó", "o").replace("Ã³", "o")
+        .replace("ú", "u").replace("Ãº", "u")
+        .replace("ü", "u").replace("Ã¼", "u")
+        .replace("ñ", "n").replace("Ã±", "n")
     )
     txt_fold = " ".join(txt_fold.split())
     compact = txt_fold.replace(" ", "")
@@ -36,7 +36,7 @@ def _normalize_sede_label(value) -> str:
         return "El Eden"
     if txt in {"1 de mayo", "1demayo"}:
         return "1 de Mayo"
-    if txt in {"el eden", "el edén", "eden", "edén"}:
+    if txt in {"el eden", "el edén", "el edÃ©n", "eden", "edén", "edÃ©n"}:
         return "El Eden"
     return str(value or "").strip()
 
@@ -154,11 +154,11 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
         )
         self.en_valor.grid(row=1, column=1, padx=14, pady=(6, 4), sticky="ew")
 
-        ctk.CTkLabel(wrap, text="Observación (opcional)", text_color=self.app.COLOR_MUTED, anchor="w") \
+        ctk.CTkLabel(wrap, text="ObservaciÃ³n (opcional)", text_color=self.app.COLOR_MUTED, anchor="w") \
             .grid(row=2, column=0, padx=14, pady=(10, 4), sticky="w")
         self.en_obs = ctk.CTkEntry(
             wrap,
-            placeholder_text="Ej: pagó en caja / recibo #123",
+            placeholder_text="Ej: pagÃ³ en caja / recibo #123",
             height=36,
             corner_radius=10,
             fg_color=self.app.COLOR_INPUT_BG,
@@ -170,7 +170,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
 
         note = (
             "Escribe el valor sin letras.\n"
-            "Al confirmar, se habilitará el proceso de contratos (según backend)."
+            "Al confirmar, se habilitarÃ¡ el proceso de contratos (segÃºn backend)."
         )
         ctk.CTkLabel(wrap, text=note, text_color=self.app.COLOR_MUTED, justify="left", anchor="w") \
             .grid(row=3, column=0, columnspan=2, padx=14, pady=(10, 0), sticky="w")
@@ -206,7 +206,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
         if valor <= 0:
             messagebox.showwarning(
                 "Confirmar pago",
-                "Ingresa un valor pagado válido (> 0).",
+                "Ingresa un valor pagado vÃ¡lido (> 0).",
                 parent=self,
             )
             return
@@ -255,7 +255,7 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             wrap,
-            text="Registrar solicitud de matrícula",
+            text="Registrar solicitud de matrÃ­cula",
             text_color=self.app.COLOR_TEXT,
             font=ctk.CTkFont(size=16, weight="bold"),
             anchor="w",
@@ -284,24 +284,28 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
         label("Nombre", 1, 1)
         self.en_nombre = entry("Ej: Laura", 2, 1)
         label("Apellido", 1, 2)
-        self.en_apellido = entry("Ej: Gómez", 2, 2)
-        label("Teléfono", 1, 3)
+        self.en_apellido = entry("Ej: GÃ³mez", 2, 2)
+        label("TelÃ©fono", 1, 3)
         self.en_tel = entry("Ej: 3001234567", 2, 3)
 
         label("Correo", 3, 0)
         self.en_correo = entry("correo@dominio.com", 4, 0, span=2)
-        label("Categoría", 3, 2)
+        label("CategorÃ­a", 3, 2)
         self.cb_cat = ctk.CTkComboBox(wrap, values=["A2", "B1", "C1"], width=120)
         self.cb_cat.set("A2")
         self.cb_cat.grid(row=4, column=2, padx=14, pady=(0, 6), sticky="ew")
         label("Sede", 3, 3)
-        self.cb_sede = ctk.CTkComboBox(wrap, values=self.sedes or ["—"], width=160)
-        self.cb_sede.set((self.sedes or ["—"])[0])
+        self.cb_sede = ctk.CTkComboBox(wrap, values=self.sedes or ["â€”"], width=160)
+        self.cb_sede.set((self.sedes or ["â€”"])[0])
         self.cb_sede.grid(row=4, column=3, padx=14, pady=(0, 6), sticky="ew")
 
-        label("Método de pago", 5, 0)
-        self.cb_metodo = ctk.CTkComboBox(wrap, values=["EPAYCO", "EFECTIVO"], width=160)
+        label("MÃ©todo de pago", 5, 0)
+        self.cb_metodo = ctk.CTkComboBox(wrap, values=["EFECTIVO"], width=160)
         self.cb_metodo.set("EFECTIVO")
+        try:
+            self.cb_metodo.configure(state="disabled")
+        except Exception:
+            pass
         self.cb_metodo.grid(row=6, column=0, padx=14, pady=(0, 6), sticky="ew")
 
         label("Estado pago", 5, 1)
@@ -311,7 +315,7 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
 
         label("Valor pagado", 5, 2)
         self.en_valor = entry("0", 6, 2)
-        label("Observación", 5, 3)
+        label("ObservaciÃ³n", 5, 3)
         self.en_obs = entry("", 6, 3)
 
         ctk.CTkLabel(
@@ -390,21 +394,27 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
 
 class MatriculasView(BaseModuleFrame):
     """
-    Solicitudes / prematrículas:
+    Solicitudes / prematrÃ­culas:
       - Confirmar pago manual (efectivo) + habilitar contratos
       - Enviar / reenviar link de contratos por correo
       - Enviar link de contratos por chatbot (solo si prospecto activo)
     """
 
+    # Intenta con y sin prefijo "api/" (dependiendo de cÃ³mo se haya configurado base_url).
     RESOURCE_CANDIDATES = (
         "procesos-matricula",
         "solicitudes-matricula",
         "prematriculas",
         "pre-matriculas",
         "matriculas",
+        "api/procesos-matricula",
+        "api/solicitudes-matricula",
+        "api/prematriculas",
+        "api/pre-matriculas",
+        "api/matriculas",
     )
 
-    # Sufijos que intentará (PATCH o POST) para cada acción
+    # Sufijos que intentarÃ¡ (PATCH o POST) para cada acciÃ³n
     ACTIONS = {
         "confirmar_pago": (
             "confirmar-pago-manual-y-contratos",
@@ -440,12 +450,13 @@ class MatriculasView(BaseModuleFrame):
     RENDER_DELAY_MS = 16
     TREE_INSERT_CHUNK = 250
     TREE_INSERT_DELAY = 1
-    PAYMENT_EXPIRY_MINUTES = 90
+    # Back-end: solicitudes de EFECTIVO vencen en ~1 hora. AquÃ­ solo mostramos alerta (no borramos desde el desktop).
+    PAYMENT_EXPIRY_MINUTES = 60
     PAYMENT_WARNING_MINUTES = 15
     AUTO_SWEEP_MS = 60_000
 
     def __init__(self, master):
-        super().__init__(master, "Matrículas", "Solicitudes de matrícula y gestión de contratos")
+        super().__init__(master, "MatrÃ­culas", "Solicitudes de matrÃ­cula y gestiÃ³n de contratos")
 
         self._resource = None
 
@@ -480,12 +491,12 @@ class MatriculasView(BaseModuleFrame):
                 command=cmd,
             )
 
-        action_btn("＋ Nueva", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=0, padx=6)
-        action_btn("✔ Confirmar pago", self._confirmar_pago, self.app.MUSTARD_MAIN, self.app.MUSTARD_HOVER, txt="#111111")\
+        action_btn("ï¼‹ Nueva", self._nuevo, self.app.COLOR_GREEN, self.app.GREEN_HOVER).grid(row=0, column=0, padx=6)
+        action_btn("âœ” Confirmar pago", self._confirmar_pago, self.app.MUSTARD_MAIN, self.app.MUSTARD_HOVER, txt="#111111")\
             .grid(row=0, column=1, padx=6)
-        action_btn("✉ Enviar correo", self._enviar_correo, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=2, padx=6)
-        action_btn("💬 Enviar chatbot", self._enviar_chatbot, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=6)
-        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=4, padx=6)
+        action_btn("âœ‰ Enviar correo", self._enviar_correo, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=2, padx=6)
+        action_btn("ðŸ’¬ Enviar chatbot", self._enviar_chatbot, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=6)
+        action_btn("â†» Refrescar", self._refrescar, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=4, padx=6)
 
         # ===== Filtros =====
         self.filters = self._make_filters_bar(self)
@@ -516,14 +527,14 @@ class MatriculasView(BaseModuleFrame):
             ("Estudiante", 240),
             ("Documento", 130),
             ("Correo", 210),
-            ("Teléfono", 130),
-            ("Categoría", 90),
+            ("TelÃ©fono", 130),
+            ("CategorÃ­a", 90),
             ("Sede", 140),
             ("Origen", 120),
-            ("Método pago", 120),
+            ("MÃ©todo pago", 120),
             ("Estado pago", 120),
             ("Contrato", 140),
-            ("Creación", 120),
+            ("CreaciÃ³n", 120),
         ]
         self._build_tree()
 
@@ -545,7 +556,7 @@ class MatriculasView(BaseModuleFrame):
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         bar.grid_columnconfigure(0, weight=1)
-        for c in range(1, 6):
+        for c in range(1, 7):
             bar.grid_columnconfigure(c, weight=0)
 
         def entry(ph):
@@ -560,14 +571,16 @@ class MatriculasView(BaseModuleFrame):
                 border_color=self.app.COLOR_DIVIDER,
             )
 
-        self.f_buscar = entry("Nombre, documento, correo o teléfono")
+        self.f_buscar = entry("Nombre, documento, correo o telÃ©fono")
         self.f_buscar.grid(row=0, column=0, padx=(12, 8), pady=10, sticky="ew")
 
         self.f_origen = ctk.CTkComboBox(bar, values=["Todos", "CHATBOT", "HAROGESTION"], width=140)
         self.f_origen.set("Todos")
         self.f_origen.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        self.f_metodo = ctk.CTkComboBox(bar, values=["Todos", "EPAYCO", "EFECTIVO"], width=140)
+        # Filtro mejorado: el backend ahora maneja EFECTIVO y tambiÃ©n pagos en estado PENDIENTE.
+        # Permitimos filtrar por mÃ©todo si el admin necesita ver solo EFECTIVO o solo EPAYCO.
+        self.f_metodo = ctk.CTkComboBox(bar, values=["Todos", "EFECTIVO", "EPAYCO"], width=140)
         self.f_metodo.set("Todos")
         self.f_metodo.grid(row=0, column=2, padx=8, pady=10, sticky="w")
 
@@ -583,8 +596,23 @@ class MatriculasView(BaseModuleFrame):
         self.f_contrato.set("Todos")
         self.f_contrato.grid(row=0, column=4, padx=8, pady=10, sticky="w")
 
+        # Por defecto esta vista muestra solo "Caja": EFECTIVO + pagos PENDIENTE (por si el webhook falla).
+        self.ck_solo_caja = ctk.CTkCheckBox(
+            bar,
+            text="Solo caja",
+            text_color=self.app.COLOR_TEXT,
+            fg_color=getattr(self.app, "MUSTARD_MAIN", "#D4A017"),
+            border_color=self.app.COLOR_DIVIDER,
+            hover_color=self.app.COLOR_DIVIDER,
+        )
+        try:
+            self.ck_solo_caja.select()
+        except Exception:
+            pass
+        self.ck_solo_caja.grid(row=0, column=5, padx=8, pady=10, sticky="w")
+
         btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=0, column=5, padx=(8, 12), pady=10, sticky="e")
+        btns.grid(row=0, column=6, padx=(8, 12), pady=10, sticky="e")
 
         ctk.CTkButton(
             btns,
@@ -613,6 +641,7 @@ class MatriculasView(BaseModuleFrame):
         self.f_metodo.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters_now())
         self.f_pago.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters_now())
         self.f_contrato.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters_now())
+        self.ck_solo_caja.configure(command=self._apply_filters_now)
         return bar
 
     def _collect_filters(self):
@@ -622,6 +651,7 @@ class MatriculasView(BaseModuleFrame):
             "metodo": _norm_enum(self.f_metodo.get()),
             "pago": _norm_enum(self.f_pago.get()),
             "contrato": _norm_enum(self.f_contrato.get()),
+            "solo_caja": bool(getattr(self, "ck_solo_caja", None) and self.ck_solo_caja.get()),
         }
 
     def _clear_filters(self):
@@ -630,6 +660,10 @@ class MatriculasView(BaseModuleFrame):
         self.f_metodo.set("Todos")
         self.f_pago.set("Todos")
         self.f_contrato.set("Todos")
+        try:
+            self.ck_solo_caja.select()
+        except Exception:
+            pass
         self._apply_filters_now()
 
     def _debounced_apply_filters(self):
@@ -656,6 +690,7 @@ class MatriculasView(BaseModuleFrame):
         metodo = f.get("metodo") or ""
         pago = f.get("pago") or ""
         contrato = f.get("contrato") or ""
+        solo_caja = bool(f.get("solo_caja"))
         allowed_sede = self._allowed_admin_sede()
 
         out = []
@@ -663,6 +698,13 @@ class MatriculasView(BaseModuleFrame):
             sede = _normalize_sede_label(self._take_sede(rec))
             if allowed_sede and sede != allowed_sede:
                 continue
+
+            # "Solo caja" = EFECTIVO + pagos en estado PENDIENTE (cualquier medio).
+            if solo_caja:
+                mp = self._take_metodo_pago(rec)
+                ep = self._take_estado_pago(rec)
+                if mp != "EFECTIVO" and ep != "PENDIENTE":
+                    continue
 
             if origen not in ("", "TODOS") and self._take_origen(rec) != origen:
                 continue
@@ -708,7 +750,7 @@ class MatriculasView(BaseModuleFrame):
         for name, w in self._COLS:
             self.tree.heading(name, text=name)
             anchor = "w"
-            if name in {"Categoría", "Origen", "Método pago", "Estado pago", "Contrato", "Creación"}:
+            if name in {"CategorÃ­a", "Origen", "MÃ©todo pago", "Estado pago", "Contrato", "CreaciÃ³n"}:
                 anchor = "center"
             self.tree.column(name, width=w, minwidth=max(70, int(w * 0.8)), stretch=False, anchor=anchor)
 
@@ -840,7 +882,7 @@ class MatriculasView(BaseModuleFrame):
 
     def _take_student_name(self, rec) -> str:
         if not isinstance(rec, dict):
-            return "—"
+            return "â€”"
         for key in ("nombreEstudiante", "estudianteNombre", "nombre_estudiante"):
             val = rec.get(key)
             if val:
@@ -849,7 +891,7 @@ class MatriculasView(BaseModuleFrame):
         nombre = str(stu.get("nombre") or "").strip()
         apellido = str(stu.get("apellido") or "").strip()
         full = f"{nombre} {apellido}".strip()
-        return full or "—"
+        return full or "â€”"
 
     def _take_doc(self, rec) -> str:
         if not isinstance(rec, dict):
@@ -889,7 +931,7 @@ class MatriculasView(BaseModuleFrame):
 
     def _take_categoria(self, rec) -> str:
         if not isinstance(rec, dict):
-            return "—"
+            return "â€”"
         for key in ("categoria", "categoriaLicencia", "licenciaCategoria"):
             val = rec.get(key)
             if val:
@@ -899,11 +941,11 @@ class MatriculasView(BaseModuleFrame):
             val = stu.get(key)
             if val:
                 return str(val).strip().upper()
-        return "—"
+        return "â€”"
 
     def _take_sede(self, rec) -> str:
         if not isinstance(rec, dict):
-            return "—"
+            return "â€”"
         for key in ("sede", "sedeNombre", "nombreSede", "campus"):
             val = rec.get(key)
             if val:
@@ -915,7 +957,7 @@ class MatriculasView(BaseModuleFrame):
                 v2 = val.get(k2)
                 if v2:
                     return str(v2).strip()
-        return str(val).strip() if val else "—"
+        return str(val).strip() if val else "â€”"
 
     def _take_origen(self, rec) -> str:
         if not isinstance(rec, dict):
@@ -932,17 +974,46 @@ class MatriculasView(BaseModuleFrame):
         for key in ("metodoPago", "metodo_pago", "medioPago", "medio_pago"):
             val = rec.get(key)
             if val:
-                return _norm_enum(val)
+                return self._map_metodo_pago(val)
         return ""
+
+    def _map_metodo_pago(self, raw) -> str:
+        v = _norm_enum(raw)
+        if not v:
+            return ""
+        # Normaliza valores antiguos o alternos.
+        if v in {"CASH"}:
+            return "EFECTIVO"
+        compact = v.replace("-", "").replace("_", "").replace(" ", "")
+        if "EPAYCO" in compact:
+            return "EPAYCO"
+        if "EFECTIVO" in compact:
+            return "EFECTIVO"
+        return v
 
     def _take_estado_pago(self, rec) -> str:
         if not isinstance(rec, dict):
-            return ""
+            return "PENDIENTE"
         for key in ("estadoPago", "estado_pago", "pagoEstado", "paymentStatus"):
             val = rec.get(key)
-            if val:
-                return _norm_enum(val)
-        return ""
+            if val is not None and str(val).strip() != "":
+                return self._map_estado_pago(val)
+        return "PENDIENTE"
+
+    def _map_estado_pago(self, raw) -> str:
+        v = _norm_enum(raw)
+        if not v:
+            return "PENDIENTE"
+        # Mapea estados internos (APPROVED, PENDING, etc.) a los estados UI.
+        if v in {"APPROVED", "PAID", "CONFIRMED", "OK", "APROBADO", "CONFIRMADO"}:
+            return "CONFIRMADO"
+        if v in {"PENDING", "PENDIENTE"}:
+            return "PENDIENTE"
+        if v in {"REJECTED", "RECHAZADO"}:
+            return "RECHAZADO"
+        if v in {"CANCELLED", "CANCELADO"}:
+            return "CANCELADO"
+        return v
 
     def _take_estado_contrato(self, rec) -> str:
         if not isinstance(rec, dict):
@@ -955,12 +1026,12 @@ class MatriculasView(BaseModuleFrame):
 
     def _take_fecha_creacion(self, rec) -> str:
         if not isinstance(rec, dict):
-            return "—"
+            return "â€”"
         for key in ("fechaCreacion", "createdAt", "fecha", "fechaRegistro"):
             val = rec.get(key)
             if val:
                 return _format_date(val)
-        return "—"
+        return "â€”"
 
     def _take_created_at_dt(self, rec) -> Optional[datetime]:
         if not isinstance(rec, dict):
@@ -972,10 +1043,13 @@ class MatriculasView(BaseModuleFrame):
         return None
 
     def _is_pending_payment(self, rec) -> bool:
-        return self._take_estado_pago(rec) in {"", "PENDIENTE", "PENDING"}
+        return self._take_estado_pago(rec) == "PENDIENTE"
 
     def _payment_deadline_status(self, rec, now_utc: Optional[datetime] = None) -> str:
         if not self._is_pending_payment(rec):
+            return ""
+        # La expiraciÃ³n automÃ¡tica aplica principalmente para solicitudes en EFECTIVO.
+        if self._take_metodo_pago(rec) != "EFECTIVO":
             return ""
         created_at = self._take_created_at_dt(rec)
         if not created_at:
@@ -1016,11 +1090,11 @@ class MatriculasView(BaseModuleFrame):
 
         parts = []
         if expired_count:
-            parts.append(f"{expired_count} solicitud(es) vencidas pendientes de eliminar")
+            parts.append(f"{expired_count} solicitud(es) vencidas (se eliminarán automáticamente)")
         if warning_count:
             detail = f"{warning_count} por vencer"
             if nearest_minutes is not None:
-                detail += f" (la más próxima vence en {max(0, nearest_minutes)} min)"
+                detail += f" (la mÃ¡s prÃ³xima vence en {max(0, nearest_minutes)} min)"
             parts.append(detail)
         return " | ".join(parts)
 
@@ -1048,7 +1122,6 @@ class MatriculasView(BaseModuleFrame):
 
     def _run_auto_sweep(self):
         self._auto_sweep_after_id = None
-        self._delete_expired_pending_async()
         self._refrescar(force_refresh=True)
         self._schedule_auto_sweep()
 
@@ -1091,15 +1164,15 @@ class MatriculasView(BaseModuleFrame):
     def _row_values(self, rec):
         return (
             self._take_student_name(rec),
-            self._take_doc(rec) or "—",
-            self._take_email(rec) or "—",
-            self._take_phone(rec) or "—",
+            self._take_doc(rec) or "â€”",
+            self._take_email(rec) or "â€”",
+            self._take_phone(rec) or "â€”",
             self._take_categoria(rec),
             _normalize_sede_label(self._take_sede(rec)) or self._take_sede(rec),
-            self._take_origen(rec) or "—",
-            self._take_metodo_pago(rec) or "—",
-            self._take_estado_pago(rec) or "—",
-            self._take_estado_contrato(rec) or "—",
+            self._take_origen(rec) or "â€”",
+            self._take_metodo_pago(rec) or "â€”",
+            self._take_estado_pago(rec) or "â€”",
+            self._take_estado_contrato(rec) or "â€”",
             self._take_fecha_creacion(rec),
         )
 
@@ -1132,7 +1205,7 @@ class MatriculasView(BaseModuleFrame):
 
     def _fetch_resource_and_data(self, force_refresh: bool):
         if not self.app.api:
-            raise RuntimeError("No hay cliente API activo. Inicia sesión.")
+            raise RuntimeError("No hay cliente API activo. Inicia sesiÃ³n.")
 
         errors = []
         if self._resource:
@@ -1149,11 +1222,11 @@ class MatriculasView(BaseModuleFrame):
                 continue
         detail = "\n".join(errors[:6])
         if len(errors) > 6:
-            detail += f"\n... {len(errors) - 6} más"
+            detail += f"\n... {len(errors) - 6} mÃ¡s"
         raise RuntimeError(
-            "No se encontró un endpoint compatible para solicitudes de matrícula.\n\n"
-            f"Probé: {', '.join(self.RESOURCE_CANDIDATES)}\n\n"
-            f"Errores:\n{detail or '—'}"
+            "No se encontrÃ³ un endpoint compatible para solicitudes de matrÃ­cula.\n\n"
+            f"ProbÃ©: {', '.join(self.RESOURCE_CANDIDATES)}\n\n"
+            f"Errores:\n{detail or 'â€”'}"
         )
 
     def _refrescar(self, force_refresh=True):
@@ -1170,13 +1243,12 @@ class MatriculasView(BaseModuleFrame):
 
                 def apply_data():
                     self._all_data = rows
-                    self._delete_expired_pending_async()
                     self._apply_filters_now()
 
                 self.after(0, apply_data)
             except Exception as e:
                 err = str(e)
-                self.after(0, lambda err=err: messagebox.showerror("Matrículas", f"No fue posible consultar la API:\n{err}", parent=self))
+                self.after(0, lambda err=err: messagebox.showerror("MatrÃ­culas", f"No fue posible consultar la API:\n{err}", parent=self))
             finally:
                 self.after(0, lambda: self._show_loading(False))
 
@@ -1184,20 +1256,37 @@ class MatriculasView(BaseModuleFrame):
 
     def _call_action(self, action: str, proceso_id, payload: Optional[Dict[str, Any]] = None):
         suffixes = self.ACTIONS.get(action) or ()
+        if not suffixes:
+            raise RuntimeError("AcciÃ³n no soportada por la API.")
+
+        # Robustez: el listado puede venir de un endpoint y las acciones existir en otro.
+        resources = []
+        if self._resource:
+            resources.append(self._resource)
+        for cand in self.RESOURCE_CANDIDATES:
+            if cand not in resources:
+                resources.append(cand)
+
         last_err = None
-        for suf in suffixes:
-            # PATCH
-            try:
-                return self.app.api.patch(self._resource, proceso_id, payload=payload, suffix=suf)
-            except Exception as e:
-                last_err = e
-            # POST (fallback)
-            try:
-                path = f"{self._resource}/{proceso_id}/{suf}"
-                return self.app.api.create(path, payload or {})
-            except Exception as e:
-                last_err = e
-        raise RuntimeError(last_err or "Acción no soportada por la API.")
+        for res in resources:
+            for suf in suffixes:
+                # PATCH
+                try:
+                    out = self.app.api.patch(res, proceso_id, payload=payload, suffix=suf)
+                    self._resource = res
+                    return out
+                except Exception as e:
+                    last_err = e
+                # POST (fallback)
+                try:
+                    path = f"{res}/{proceso_id}/{suf}"
+                    out = self.app.api.create(path, payload or {})
+                    self._resource = res
+                    return out
+                except Exception as e:
+                    last_err = e
+
+        raise RuntimeError(last_err or "AcciÃ³n no soportada por la API.")
 
     # =====================================================
     #                     ACCIONES
@@ -1216,7 +1305,7 @@ class MatriculasView(BaseModuleFrame):
                 self.app._info("Solicitud creada.")
                 self._refrescar(force_refresh=True)
             except Exception as e:
-                messagebox.showerror("Matrículas", f"No fue posible crear la solicitud:\n{e}", parent=self)
+                messagebox.showerror("MatrÃ­culas", f"No fue posible crear la solicitud:\n{e}", parent=self)
 
         _NuevaSolicitudDialog(self, self.app, sedes=sedes, on_create=do_create)
 
@@ -1263,7 +1352,7 @@ class MatriculasView(BaseModuleFrame):
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
 
-        meta = f"Doc: {self._take_doc(rec) or '—'} | Sede: {self._take_sede(rec) or '—'} | Origen: {self._take_origen(rec) or '—'}"
+        meta = f"Doc: {self._take_doc(rec) or 'â€”'} | Sede: {self._take_sede(rec) or 'â€”'} | Origen: {self._take_origen(rec) or 'â€”'}"
         ctk.CTkLabel(head, text=meta, text_color=self.app.COLOR_MUTED, anchor="w") \
             .grid(row=1, column=0, pady=(2, 0), sticky="w")
 
@@ -1275,17 +1364,17 @@ class MatriculasView(BaseModuleFrame):
         def field(r, label, value):
             ctk.CTkLabel(inner, text=label, text_color=self.app.COLOR_MUTED, anchor="w") \
                 .grid(row=r, column=0, padx=(10, 8), pady=6, sticky="w")
-            ctk.CTkLabel(inner, text=str(value or "—"), text_color=self.app.COLOR_TEXT, anchor="w", wraplength=460) \
+            ctk.CTkLabel(inner, text=str(value or "â€”"), text_color=self.app.COLOR_TEXT, anchor="w", wraplength=460) \
                 .grid(row=r, column=1, padx=(0, 10), pady=6, sticky="ew")
 
         field(0, "ID", pid)
-        field(1, "Correo", self._take_email(rec) or "—")
-        field(2, "Teléfono", self._take_phone(rec) or "—")
-        field(3, "Categoría", self._take_categoria(rec))
-        field(4, "Método pago", self._take_metodo_pago(rec) or "—")
-        field(5, "Estado pago", self._take_estado_pago(rec) or "—")
-        field(6, "Estado contrato", self._take_estado_contrato(rec) or "—")
-        field(7, "Creación", self._take_fecha_creacion(rec))
+        field(1, "Correo", self._take_email(rec) or "â€”")
+        field(2, "TelÃ©fono", self._take_phone(rec) or "â€”")
+        field(3, "CategorÃ­a", self._take_categoria(rec))
+        field(4, "MÃ©todo pago", self._take_metodo_pago(rec) or "â€”")
+        field(5, "Estado pago", self._take_estado_pago(rec) or "â€”")
+        field(6, "Estado contrato", self._take_estado_contrato(rec) or "â€”")
+        field(7, "CreaciÃ³n", self._take_fecha_creacion(rec))
 
         btns = ctk.CTkFrame(wrap, fg_color="transparent")
         btns.pack(fill="x", padx=14, pady=(0, 14))
@@ -1309,17 +1398,17 @@ class MatriculasView(BaseModuleFrame):
             try:
                 self._fetch_resource_and_data(force_refresh=False)
             except Exception as e:
-                messagebox.showerror("Matrículas", str(e), parent=self)
+                messagebox.showerror("MatrÃ­culas", str(e), parent=self)
                 return
 
         proceso_id = self._take_id(rec)
         if proceso_id in (None, ""):
-            messagebox.showwarning("Matrículas", "La solicitud seleccionada no tiene ID.", parent=self)
+            messagebox.showwarning("MatrÃ­culas", "La solicitud seleccionada no tiene ID.", parent=self)
             return
 
         metodo = self._take_metodo_pago(rec)
         if metodo and metodo != "EFECTIVO":
-            messagebox.showwarning("Validación", "Esta acción es solo para pagos en EFECTIVO.", parent=self)
+            messagebox.showwarning("ValidaciÃ³n", "Esta acciÃ³n es solo para pagos en EFECTIVO.", parent=self)
             return
 
         estado_pago = self._take_estado_pago(rec)
@@ -1338,18 +1427,19 @@ class MatriculasView(BaseModuleFrame):
                 # notificar por WhatsApp el enlace de contratos al estudiante.
                 "sendEmail": True,
                 "sendChatbot": bool(is_chatbot_origin),
-                # Para solicitudes del chatbot NO exigimos prospecto (el usuario ya está en el flujo).
+                # Para solicitudes del chatbot NO exigimos prospecto (el usuario ya estÃ¡ en el flujo).
                 "requireProspect": False if is_chatbot_origin else True,
             }
             try:
-                self._call_action("confirmar_pago", proceso_id, payload)
-                if is_chatbot_origin:
-                    self.app._info("Pago confirmado. Enlace de contratos enviado por WhatsApp (y correo).")
+                out = self._call_action("confirmar_pago", proceso_id, payload)
+                msg = out.get("message") if isinstance(out, dict) else ""
+                if msg:
+                    self.app._info(msg)
                 else:
                     self.app._info("Pago confirmado y contratos habilitados.")
                 self._refrescar(force_refresh=True)
             except Exception as e:
-                messagebox.showerror("Matrículas", f"No fue posible confirmar el pago:\n{e}", parent=self)
+                messagebox.showerror("MatrÃ­culas", f"No fue posible confirmar el pago:\n{e}", parent=self)
 
         _ConfirmarPagoDialog(self, self.app, on_confirm=do_confirm)
 
@@ -1362,37 +1452,38 @@ class MatriculasView(BaseModuleFrame):
             try:
                 self._fetch_resource_and_data(force_refresh=False)
             except Exception as e:
-                messagebox.showerror("Matrículas", str(e), parent=self)
+                messagebox.showerror("MatrÃ­culas", str(e), parent=self)
                 return
 
         proceso_id = self._take_id(rec)
         if proceso_id in (None, ""):
-            messagebox.showwarning("Matrículas", "La solicitud seleccionada no tiene ID.", parent=self)
+            messagebox.showwarning("MatrÃ­culas", "La solicitud seleccionada no tiene ID.", parent=self)
             return
 
         estado_pago = self._take_estado_pago(rec)
         if estado_pago not in {"CONFIRMADO", "PAGADO", "OK"}:
             messagebox.showwarning(
-                "Validación",
-                "No se puede enviar el enlace de contratos si el pago no está confirmado.",
+                "ValidaciÃ³n",
+                "No se puede enviar el enlace de contratos si el pago no estÃ¡ confirmado.",
                 parent=self,
             )
             return
 
         try:
-            self._call_action("enviar_correo", proceso_id, payload=None)
-            self.app._info("Enlace de contratos enviado por correo.")
+            out = self._call_action("enviar_correo", proceso_id, payload=None)
+            msg = out.get("message") if isinstance(out, dict) else ""
+            self.app._info(msg or "Enlace de contratos enviado por correo.")
             self._refrescar(force_refresh=True)
         except Exception as e:
-            messagebox.showerror("Matrículas", f"No fue posible enviar el correo:\n{e}", parent=self)
+            messagebox.showerror("MatrÃ­culas", f"No fue posible enviar el correo:\n{e}", parent=self)
 
     def _is_prospecto_activo(self, rec) -> bool:
-        # 1) Si el backend ya lo trae calculado, úsalo.
+        # 1) Si el backend ya lo trae calculado, Ãºsalo.
         if isinstance(rec, dict):
             val = rec.get("prospectoChatbotActivo")
             if isinstance(val, bool):
                 return val
-            if val is not None and str(val).strip().lower() in {"1", "true", "si", "sí", "yes"}:
+            if val is not None and str(val).strip().lower() in {"1", "true", "si", "sÃ­", "yes"}:
                 return True
 
         # 2) Endpoint dedicado (si existe)
@@ -1448,19 +1539,19 @@ class MatriculasView(BaseModuleFrame):
             try:
                 self._fetch_resource_and_data(force_refresh=False)
             except Exception as e:
-                messagebox.showerror("Matrículas", str(e), parent=self)
+                messagebox.showerror("MatrÃ­culas", str(e), parent=self)
                 return
 
         proceso_id = self._take_id(rec)
         if proceso_id in (None, ""):
-            messagebox.showwarning("Matrículas", "La solicitud seleccionada no tiene ID.", parent=self)
+            messagebox.showwarning("MatrÃ­culas", "La solicitud seleccionada no tiene ID.", parent=self)
             return
 
         origen = self._take_origen(rec)
         if origen and origen != "HAROGESTION":
             messagebox.showwarning(
-                "Validación",
-                "El envío por chatbot desde HaroGestion solo aplica a solicitudes creadas desde HAROGESTION.",
+                "ValidaciÃ³n",
+                "El envÃ­o por chatbot desde HaroGestion solo aplica a solicitudes creadas desde HAROGESTION.",
                 parent=self,
             )
             return
@@ -1468,8 +1559,8 @@ class MatriculasView(BaseModuleFrame):
         estado_pago = self._take_estado_pago(rec)
         if estado_pago not in {"CONFIRMADO", "PAGADO", "OK"}:
             messagebox.showwarning(
-                "Validación",
-                "No se puede enviar el enlace por chatbot si el pago no está confirmado.",
+                "ValidaciÃ³n",
+                "No se puede enviar el enlace por chatbot si el pago no estÃ¡ confirmado.",
                 parent=self,
             )
             return
@@ -1478,14 +1569,15 @@ class MatriculasView(BaseModuleFrame):
             messagebox.showwarning(
                 "Prospecto no activo",
                 "No es posible enviar el enlace de contratos por chatbot porque el estudiante no se encuentra en prospectos activos. "
-                "Indíquele al estudiante que escriba primero al chatbot para habilitar este canal de envío.",
+                "IndÃ­quele al estudiante que escriba primero al chatbot para habilitar este canal de envÃ­o.",
                 parent=self,
             )
             return
 
         try:
-            self._call_action("enviar_chatbot", proceso_id, payload=None)
-            self.app._info("Enlace de contratos enviado por chatbot.")
+            out = self._call_action("enviar_chatbot", proceso_id, payload=None)
+            msg = out.get("message") if isinstance(out, dict) else ""
+            self.app._info(msg or "Enlace de contratos enviado por chatbot.")
             self._refrescar(force_refresh=True)
         except Exception as e:
-            messagebox.showerror("Matrículas", f"No fue posible enviar por chatbot:\n{e}", parent=self)
+            messagebox.showerror("MatrÃ­culas", f"No fue posible enviar por chatbot:\n{e}", parent=self)

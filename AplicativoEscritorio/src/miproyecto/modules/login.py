@@ -620,7 +620,7 @@ class LoginDialog(ctk.CTkToplevel):
 
         self.lbl_otp_help = ctk.CTkLabel(
             self.otp_block,
-            text="Primero escribe un correo vÃ¡lido. Luego pulsa Solicitar OTP, revisa tu correo e ingresa el cÃ³digo para validar la cuenta antes de crearla.",
+            text="Primero escribe un correo válido. Luego pulsa Solicitar OTP, revisa tu correo e ingresa el código para validar la cuenta antes de crearla.",
             text_color=fg_muted,
             justify="left",
             wraplength=360,
@@ -1168,24 +1168,24 @@ class LoginDialog(ctk.CTkToplevel):
         p1 = self.ca_pass1.get().strip()
 
         if not (nombre and cedula and usuario and correo and sede and p1):
-            raise ValueError("Completa nombre, cÃ©dula, usuario, correo y contraseÃ±a.")
+            raise ValueError("Completa nombre, cédula, usuario, correo y contraseña.")
         if not self._re_nombre_full.fullmatch(nombre):
-            raise ValueError("Nombre invÃ¡lido.")
+            raise ValueError("Nombre inválido.")
         if not self._re_cedula_full.fullmatch(cedula):
-            raise ValueError("CÃ©dula invÃ¡lida.")
+            raise ValueError("Cédula inválida.")
         if not self._re_usuario_full.fullmatch(usuario):
-            raise ValueError("Usuario invÃ¡lido.")
+            raise ValueError("Usuario inválido.")
         if not self._re_email_full.fullmatch(correo):
-            raise ValueError("Correo invÃ¡lido.")
+            raise ValueError("Correo inválido.")
         if len(p1) < 8 or not re.search(r"[A-Za-z]", p1) or not re.search(r"[0-9]", p1):
-            raise ValueError("La contraseÃ±a no cumple los requisitos.")
+            raise ValueError("La contraseña no cumple los requisitos.")
 
         otp_admin_email = (self.ADMIN_OTP_EMAIL or "").strip().lower()
         if self._otp_target_email and otp_admin_email and self._otp_target_email != otp_admin_email:
             self._otp_target_email = ""
         if self._otp_verified_email and otp_admin_email and self._otp_verified_email != otp_admin_email:
             self._otp_verified_email = ""
-            self._set_otp_status("El correo cambiÃ³. Debes solicitar y verificar un nuevo OTP.", "info")
+            self._set_otp_status("El correo cambió. Debes solicitar y verificar un nuevo OTP.", "info")
 
         self._pending_admin_payload = {
             "correo": correo,
