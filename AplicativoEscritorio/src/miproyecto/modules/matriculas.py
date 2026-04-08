@@ -1,4 +1,4 @@
-﻿"""
+"""
 Módulo de Matrículas / Solicitudes.
 """
 
@@ -8,6 +8,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 from modules.base import BaseModuleFrame
 from modules.treeview_theme import configure_treeview_style, solid_color
@@ -170,7 +171,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
 
         note = (
             "Escribe el valor sin letras.\n"
-            "Al confirmar, se habilitará el proceso de contratos (segÃºn backend)."
+            "Al confirmar, se habilitará el proceso de contratos (según backend)."
         )
         ctk.CTkLabel(wrap, text=note, text_color=self.app.COLOR_MUTED, justify="left", anchor="w") \
             .grid(row=3, column=0, columnspan=2, padx=14, pady=(10, 0), sticky="w")
@@ -284,14 +285,14 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
         label("Nombre", 1, 1)
         self.en_nombre = entry("Ej: Laura", 2, 1)
         label("Apellido", 1, 2)
-        self.en_apellido = entry("Ej: GÃ³mez", 2, 2)
+        self.en_apellido = entry("Ej: Gómez", 2, 2)
         label("Teléfono", 1, 3)
         self.en_tel = entry("Ej: 3001234567", 2, 3)
 
         label("Correo", 3, 0)
         self.en_correo = entry("correo@dominio.com", 4, 0, span=2)
         label("Categoría", 3, 2)
-        self.cb_cat = ctk.CTkComboBox(wrap, values=["A2", "B1", "C1"], width=120)
+        self.cb_cat = ctk.CTkComboBox(wrap, values=["A2", "B1", "C1", "A2 y B1", "A2 - C1"], width=120)
         self.cb_cat.set("A2")
         self.cb_cat.grid(row=4, column=2, padx=14, pady=(0, 6), sticky="ew")
         label("Sede", 3, 3)
@@ -398,6 +399,7 @@ class MatriculasView(BaseModuleFrame):
       - Confirmar pago manual (efectivo) + habilitar contratos
       - Enviar / reenviar link de contratos por correo
       - Enviar link de contratos por chatbot (solo si prospecto activo)
+      - Generar link de contratos (copiar al portapapeles)
     """
 
     # Intenta con y sin prefijo "api/" (dependiendo de cómo se haya configurado base_url).
@@ -414,7 +416,7 @@ class MatriculasView(BaseModuleFrame):
         "api/matriculas",
     )
 
-    # Sufijos que intentarÃ¡ (PATCH o POST) para cada acciÃ³n
+    # Sufijos que intentará (PATCH o POST) para cada acción
     ACTIONS = {
         "confirmar_pago": (
             "confirmar-pago-manual-y-contratos",
@@ -450,13 +452,13 @@ class MatriculasView(BaseModuleFrame):
     RENDER_DELAY_MS = 16
     TREE_INSERT_CHUNK = 250
     TREE_INSERT_DELAY = 1
-    # Back-end: solicitudes de EFECTIVO vencen en ~1 hora. AquÃ­ solo mostramos alerta (no borramos desde el desktop).
+    # Back-end: solicitudes de EFECTIVO vencen en ~1 hora. Aquí solo mostramos alerta (no borramos desde el desktop).
     PAYMENT_EXPIRY_MINUTES = 60
     PAYMENT_WARNING_MINUTES = 15
     AUTO_SWEEP_MS = 60_000
 
     def __init__(self, master):
-        super().__init__(master, "matrículas", "Solicitudes de matrícula y gestiÃ³n de contratos")
+        super().__init__(master, "matrículas", "Solicitudes de matrícula y gestión de contratos")
 
         self._resource = None
 
@@ -496,7 +498,8 @@ class MatriculasView(BaseModuleFrame):
             .grid(row=0, column=1, padx=6)
         action_btn("✉ Enviar correo", self._enviar_correo, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=2, padx=6)
         action_btn("💬 Enviar chatbot", self._enviar_chatbot, self.app.COLOR_PURPLE, self.app.PURPLE_HOVER).grid(row=0, column=3, padx=6)
-        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=4, padx=6)
+        action_btn("🔗 Generar link", self._generar_link_contratos, self.app.COLOR_BLUE, self.app.BLUE_HOVER).grid(row=0, column=4, padx=6)
+        action_btn("↻ Refrescar", self._refrescar, self.app.COLOR_RED, self.app.RED_HOVER).grid(row=0, column=5, padx=6)
 
         # ===== Filtros =====
         self.filters = self._make_filters_bar(self)
@@ -578,7 +581,7 @@ class MatriculasView(BaseModuleFrame):
         self.f_origen.set("Todos")
         self.f_origen.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        # Filtro mejorado: el backend ahora maneja EFECTIVO y tambiÃ©n pagos en estado PENDIENTE.
+        # Filtro mejorado: el backend ahora maneja EFECTIVO y también pagos en estado PENDIENTE.
         # Permitimos filtrar por Método si el admin necesita ver solo EFECTIVO o solo EPAYCO.
         self.f_metodo = ctk.CTkComboBox(bar, values=["Todos", "EFECTIVO", "EPAYCO"], width=140)
         self.f_metodo.set("Todos")
@@ -1048,7 +1051,7 @@ class MatriculasView(BaseModuleFrame):
     def _payment_deadline_status(self, rec, now_utc: Optional[datetime] = None) -> str:
         if not self._is_pending_payment(rec):
             return ""
-        # La expiraciÃ³n automÃ¡tica aplica principalmente para solicitudes en EFECTIVO.
+        # La expiración automática aplica principalmente para solicitudes en EFECTIVO.
         if self._take_metodo_pago(rec) != "EFECTIVO":
             return ""
         created_at = self._take_created_at_dt(rec)
@@ -1205,7 +1208,7 @@ class MatriculasView(BaseModuleFrame):
 
     def _fetch_resource_and_data(self, force_refresh: bool):
         if not self.app.api:
-            raise RuntimeError("No hay cliente API activo. Inicia sesiÃ³n.")
+            raise RuntimeError("No hay cliente API activo. Inicia sesión.")
 
         errors = []
         if self._resource:
@@ -1224,8 +1227,8 @@ class MatriculasView(BaseModuleFrame):
         if len(errors) > 6:
             detail += f"\n... {len(errors) - 6} más"
         raise RuntimeError(
-            "No se encontrÃ³ un endpoint compatible para solicitudes de matrícula.\n\n"
-            f"ProbÃ©: {', '.join(self.RESOURCE_CANDIDATES)}\n\n"
+            "No se encontró un endpoint compatible para solicitudes de matrícula.\n\n"
+            f"Probé: {', '.join(self.RESOURCE_CANDIDATES)}\n\n"
             f"Errores:\n{detail or '—'}"
         )
 
@@ -1257,7 +1260,7 @@ class MatriculasView(BaseModuleFrame):
     def _call_action(self, action: str, proceso_id, payload: Optional[Dict[str, Any]] = None):
         suffixes = self.ACTIONS.get(action) or ()
         if not suffixes:
-            raise RuntimeError("AcciÃ³n no soportada por la API.")
+            raise RuntimeError("Acción no soportada por la API.")
 
         # Robustez: el listado puede venir de un endpoint y las acciones existir en otro.
         resources = []
@@ -1286,7 +1289,7 @@ class MatriculasView(BaseModuleFrame):
                 except Exception as e:
                     last_err = e
 
-        raise RuntimeError(last_err or "AcciÃ³n no soportada por la API.")
+        raise RuntimeError(last_err or "Acción no soportada por la API.")
 
     # =====================================================
     #                     ACCIONES
@@ -1408,7 +1411,7 @@ class MatriculasView(BaseModuleFrame):
 
         metodo = self._take_metodo_pago(rec)
         if metodo and metodo != "EFECTIVO":
-            messagebox.showwarning("ValidaciÃ³n", "Esta acciÃ³n es solo para pagos en EFECTIVO.", parent=self)
+            messagebox.showwarning("Validación", "Esta acción es solo para pagos en EFECTIVO.", parent=self)
             return
 
         estado_pago = self._take_estado_pago(rec)
@@ -1427,7 +1430,7 @@ class MatriculasView(BaseModuleFrame):
                 # notificar por WhatsApp el enlace de contratos al estudiante.
                 "sendEmail": True,
                 "sendChatbot": bool(is_chatbot_origin),
-                # Para solicitudes del chatbot NO exigimos prospecto (el usuario ya estÃ¡ en el flujo).
+                # Para solicitudes del chatbot NO exigimos prospecto (el usuario ya está en el flujo).
                 "requireProspect": False if is_chatbot_origin else True,
             }
             try:
@@ -1463,8 +1466,8 @@ class MatriculasView(BaseModuleFrame):
         estado_pago = self._take_estado_pago(rec)
         if estado_pago not in {"CONFIRMADO", "PAGADO", "OK"}:
             messagebox.showwarning(
-                "ValidaciÃ³n",
-                "No se puede enviar el enlace de contratos si el pago no estÃ¡ confirmado.",
+                "Validación",
+                "No se puede enviar el enlace de contratos si el pago no está confirmado.",
                 parent=self,
             )
             return
@@ -1477,13 +1480,118 @@ class MatriculasView(BaseModuleFrame):
         except Exception as e:
             messagebox.showerror("matrículas", f"No fue posible enviar el correo:\n{e}", parent=self)
 
+    def _backend_root_url(self) -> str:
+        api = getattr(self.app, "api", None)
+        base = str(getattr(api, "base_url", "") or "").strip().rstrip("/")
+        if not base:
+            return ""
+        if base.lower().endswith("/api"):
+            base = base[:-4]
+        return base.rstrip("/")
+
+    def _append_query_params(self, url: str, params: Dict[str, str]) -> str:
+        parsed = urlparse(url or "")
+        current = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        for k, v in (params or {}).items():
+            if v is None:
+                continue
+            s = str(v).strip()
+            if not s:
+                continue
+            current[str(k)] = s
+        query = urlencode(current, doseq=True)
+        return urlunparse(parsed._replace(query=query))
+
+    def _resolve_contract_ui_url(self, verification_url: str, api_root: str) -> str:
+        raw = str(verification_url or "").strip()
+        if raw:
+            try:
+                u = urlparse(raw)
+                if u.scheme and u.netloc:
+                    return f"{u.scheme}://{u.netloc}/Contratos/contrato.html"
+            except Exception:
+                pass
+        root = str(api_root or "").strip().rstrip("/")
+        return f"{root}/Contratos/contrato.html" if root else ""
+
+    def _generar_link_contratos(self):
+        rec = self._selected_record()
+        if not rec:
+            self.app._info("Selecciona una solicitud primero.")
+            return
+
+        estado_pago = self._take_estado_pago(rec)
+        if estado_pago not in {"CONFIRMADO", "PAGADO", "OK"}:
+            messagebox.showwarning(
+                "Validación",
+                "No se puede generar el enlace de contratos si el pago no está confirmado.",
+                parent=self,
+            )
+            return
+
+        email = (self._take_email(rec) or "").strip()
+        if not email:
+            messagebox.showwarning("Validación", "La solicitud no tiene correo registrado.", parent=self)
+            return
+
+        if not messagebox.askyesno(
+            "Generar enlace",
+            "Esto generará un nuevo enlace de contratos y el anterior dejará de funcionar.\n\n¿Deseas continuar?",
+            parent=self,
+        ):
+            return
+
+        try:
+            api_root = self._backend_root_url()
+            payload = {"email": email, "baseUrl": api_root}
+
+            out = None
+            last_err = None
+            for endpoint in ("verification/contract/link", "api/verification/contract/link"):
+                try:
+                    out = self.app.api.create(endpoint, payload)
+                    break
+                except Exception as e:
+                    last_err = e
+                    continue
+
+            if not isinstance(out, dict):
+                raise RuntimeError(last_err or "No fue posible generar el enlace de contratos.")
+
+            email_out = (out.get("email") or email).strip()
+            code = str(out.get("code") or "").strip()
+            verification_url = str(out.get("url") or "").strip()
+            if not code:
+                raise RuntimeError("La API no devolvió el código del enlace de contratos.")
+
+            ui_url = self._resolve_contract_ui_url(verification_url, api_root)
+            if not ui_url:
+                raise RuntimeError("No pude construir la URL del formulario de contratos.")
+
+            params = {"email": email_out, "code": code}
+            if api_root:
+                params["apiBase"] = api_root
+            link = self._append_query_params(ui_url, params)
+
+            try:
+                root = self.winfo_toplevel()
+                root.clipboard_clear()
+                root.clipboard_append(link)
+                root.update()
+            except Exception:
+                pass
+
+            self.app._info("Enlace de contratos copiado al portapapeles:\n\n" + link)
+        except Exception as e:
+            messagebox.showerror("matrículas", f"No fue posible generar el enlace:\n{e}", parent=self)
+
     def _is_prospecto_activo(self, rec) -> bool:
-        # 1) Si el backend ya lo trae calculado, Ãºsalo.
+        # 1) Si el backend ya lo trae calculado, úsalo.
         if isinstance(rec, dict):
             val = rec.get("prospectoChatbotActivo")
             if isinstance(val, bool):
                 return val
-            if val is not None and str(val).strip().lower() in {"1", "true", "si", "sÃ­", "yes"}:
+            if val is not None and str(val).strip().lower() in {"1", "true", "si", "sí", "yes"}:
                 return True
 
         # 2) Endpoint dedicado (si existe)
@@ -1550,7 +1658,7 @@ class MatriculasView(BaseModuleFrame):
         origen = self._take_origen(rec)
         if origen and origen != "HAROGESTION":
             messagebox.showwarning(
-                "ValidaciÃ³n",
+                "Validación",
                 "El envío por chatbot desde HaroGestion solo aplica a solicitudes creadas desde HAROGESTION.",
                 parent=self,
             )
@@ -1559,8 +1667,8 @@ class MatriculasView(BaseModuleFrame):
         estado_pago = self._take_estado_pago(rec)
         if estado_pago not in {"CONFIRMADO", "PAGADO", "OK"}:
             messagebox.showwarning(
-                "ValidaciÃ³n",
-                "No se puede enviar el enlace por chatbot si el pago no estÃ¡ confirmado.",
+                "Validación",
+                "No se puede enviar el enlace por chatbot si el pago no está confirmado.",
                 parent=self,
             )
             return
@@ -1569,7 +1677,7 @@ class MatriculasView(BaseModuleFrame):
             messagebox.showwarning(
                 "Prospecto no activo",
                 "No es posible enviar el enlace de contratos por chatbot porque el estudiante no se encuentra en prospectos activos. "
-                "IndÃ­quele al estudiante que escriba primero al chatbot para habilitar este canal de envío.",
+                "Indíquele al estudiante que escriba primero al chatbot para habilitar este canal de envío.",
                 parent=self,
             )
             return
@@ -1581,3 +1689,4 @@ class MatriculasView(BaseModuleFrame):
             self._refrescar(force_refresh=True)
         except Exception as e:
             messagebox.showerror("matrículas", f"No fue posible enviar por chatbot:\n{e}", parent=self)
+

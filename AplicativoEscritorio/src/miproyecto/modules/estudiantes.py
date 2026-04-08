@@ -1,4 +1,4 @@
-﻿import customtkinter as ctk
+import customtkinter as ctk
 from tkinter import messagebox
 from tkinter import ttk
 import threading
@@ -207,7 +207,7 @@ class StudentInlineForm(ctk.CTkFrame):
         self.cb_estado.grid(row=4, column=1, padx=12, pady=6, sticky="w")
 
         ctk.CTkLabel(self, text="Categoría").grid(row=4, column=2, padx=12, pady=6, sticky="w")
-        self.cb_categoria = ctk.CTkComboBox(self, values=["A2", "B1", "C1"], width=140)
+        self.cb_categoria = ctk.CTkComboBox(self, values=["A2", "B1", "C1", "A2 y B1", "A2 - C1"], width=140)
         self.cb_categoria.set("A2")
         self.cb_categoria.grid(row=4, column=3, padx=12, pady=6, sticky="w")
 
@@ -438,8 +438,9 @@ class StudentInlineForm(ctk.CTkFrame):
             return False, "El Teléfono debe ser numérico."
         if "@" not in d["email"] or "." not in d["email"].split("@")[-1]:
             return False, "Email no válido."
-        if d["categoria"].upper() not in {"A2", "B1", "C1"}:
-            return False, "La categoría debe ser A2, B1 o C1."
+        allowed = {"A2", "B1", "C1", "A2 Y B1", "A2 - C1"}
+        if d["categoria"].strip().upper() not in allowed:
+            return False, "La categoría debe ser A2, B1, C1, A2 y B1 o A2 - C1."
         if d.get("tipoPase") not in {"carro", "moto", "carro,moto"}:
             return False, "Tipo Pase debe ser carro, moto o ambos."
         horas = d.get("horas")

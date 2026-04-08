@@ -1,4 +1,4 @@
-﻿# modules/estados_cuenta.py
+# modules/estados_cuenta.py
 from typing import Tuple, Dict, Any, Optional
 import customtkinter as ctk
 from tkinter import messagebox, ttk

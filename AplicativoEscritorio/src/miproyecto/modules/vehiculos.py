@@ -1,4 +1,4 @@
-﻿import customtkinter as ctk
+import customtkinter as ctk
 from tkinter import messagebox, ttk
 import threading
 import time
