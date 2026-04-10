@@ -352,13 +352,31 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
         ).grid(row=0, column=1, padx=6)
 
     def _create(self):
-        doc = (self.en_doc.get() or "").strip()
-        if not doc:
-            messagebox.showwarning("Nueva solicitud", "El documento es obligatorio.", parent=self)
+        doc_raw = (self.en_doc.get() or "").strip()
+        doc = "".join(ch for ch in doc_raw if ch.isdigit())
+        if not doc or len(doc) < 5:
+            messagebox.showwarning("Nueva solicitud", "El documento es obligatorio y debe tener m?nimo 5 d?gitos.", parent=self)
             return
         nombre = (self.en_nombre.get() or "").strip()
         apellido = (self.en_apellido.get() or "").strip()
-        tel = (self.en_tel.get() or "").strip()
+        if any(ch.isdigit() for ch in nombre):
+            messagebox.showwarning("Nueva solicitud", "El nombre no debe contener n?meros.", parent=self)
+            return
+        if any(ch.isdigit() for ch in apellido):
+            messagebox.showwarning("Nueva solicitud", "El apellido no debe contener n?meros.", parent=self)
+            return
+        tel_raw = (self.en_tel.get() or "").strip()
+        tel = "".join(ch for ch in tel_raw if ch.isdigit())
+        if tel.startswith("00"):
+            tel = tel[2:]
+        if tel.startswith("57") and len(tel) > 10:
+            tel = tel[-10:]
+        if not tel:
+            messagebox.showwarning("Nueva solicitud", "El tel?fono es obligatorio.", parent=self)
+            return
+        if len(tel) != 10:
+            messagebox.showwarning("Nueva solicitud", "El tel?fono debe tener 10 d?gitos (sin +57).", parent=self)
+            return
         correo = (self.en_correo.get() or "").strip()
         categoria = (self.cb_cat.get() or "").strip()
         sede = (self.cb_sede.get() or "").strip()
