@@ -133,15 +133,7 @@ class ClasesView(BaseModuleFrame):
             border_color=self.app.COLOR_DIVIDER,
         )
         filt.grid(row=1, column=0, pady=(10, 0), sticky="ew")
-        filt.grid_columnconfigure(1, weight=1)
-        filt.grid_columnconfigure(3, weight=0)
-
-        ctk.CTkLabel(
-            filt,
-            text="Buscar clase",
-            text_color=self._TEXT,
-            font=ctk.CTkFont(size=12, weight="bold"),
-        ).grid(row=0, column=0, padx=(14, 10), pady=(12, 4), sticky="w")
+        filt.grid_columnconfigure(0, weight=1)
 
         self.f_buscar = ctk.CTkEntry(
             filt,
@@ -153,26 +145,25 @@ class ClasesView(BaseModuleFrame):
             fg_color=self._INPUT,
             text_color=self._TEXT,
         )
-        self.f_buscar.grid(row=1, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="ew")
+        self.f_buscar.grid(row=0, column=0, padx=(14, 10), pady=12, sticky="ew")
 
-        ctk.CTkLabel(
-            filt,
-            text="Estado",
-            text_color=self._TEXT,
-            font=ctk.CTkFont(size=12, weight="bold"),
-        ).grid(row=0, column=2, padx=(0, 10), pady=(12, 4), sticky="w")
+        actions = ctk.CTkFrame(filt, fg_color="transparent")
+        actions.grid(row=0, column=1, padx=(0, 14), pady=12, sticky="e")
+
+        advanced = ctk.CTkFrame(filt, fg_color="transparent")
+        advanced.grid(row=1, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="ew")
 
         self.f_estado = ctk.CTkComboBox(
-            filt,
+            advanced,
             values=["Todos", "Programada", "Pendiente", "Dictada", "Cancelada"],
             width=160,
             state="readonly",
         )
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=2, padx=(0, 10), pady=(0, 12), sticky="w")
+        self.f_estado.grid(row=0, column=0, padx=(0, 0), pady=(0, 0), sticky="w")
 
         ctk.CTkButton(
-            filt,
+            actions,
             text="Limpiar",
             height=42,
             width=120,
@@ -181,7 +172,44 @@ class ClasesView(BaseModuleFrame):
             hover_color=self.app.COLOR_YELLOW,
             text_color="#ffffff",
             command=self._restablecer_filtros,
-        ).grid(row=1, column=3, padx=(0, 14), pady=(0, 12), sticky="e")
+        ).grid(row=0, column=0, padx=(0, 6))
+
+        ctk.CTkButton(
+            actions,
+            text="Buscar",
+            height=42,
+            width=120,
+            corner_radius=16,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self._TEXT,
+            command=lambda: self._sync_rows_to("right" if self._calendar_mode else "top"),
+        ).grid(row=0, column=1, padx=6)
+
+        self._advanced_filters_visible = False
+        toggle_btn = ctk.CTkButton(
+            actions,
+            text="Filtros v",
+            width=108,
+            height=42,
+            corner_radius=16,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self._TEXT,
+        )
+        toggle_btn.grid(row=0, column=2, padx=(6, 0))
+
+        def toggle_advanced():
+            self._advanced_filters_visible = not self._advanced_filters_visible
+            if self._advanced_filters_visible:
+                advanced.grid()
+                toggle_btn.configure(text="Filtros ^")
+            else:
+                advanced.grid_remove()
+                toggle_btn.configure(text="Filtros v")
+
+        toggle_btn.configure(command=toggle_advanced)
+        advanced.grid_remove()
 
         self.f_buscar.bind("<KeyRelease>", lambda _e: self._debounced_apply_filters())
         self.f_estado.bind("<<ComboboxSelected>>", lambda _e: self._sync_rows_to("right" if self._calendar_mode else "top"))

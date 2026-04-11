@@ -122,11 +122,7 @@ class InstructoresView(BaseModuleFrame):
     # =====================================================
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
-        # Fila 1: cedula/nombre/apellido (responsivos)
-        # Fila 2: estado/especialidad/categoria + botones
         bar.grid_columnconfigure(0, weight=1)
-        bar.grid_columnconfigure(1, weight=1)
-        bar.grid_columnconfigure(2, weight=1)
 
         def entry(ph):
             return ctk.CTkEntry(
@@ -135,53 +131,78 @@ class InstructoresView(BaseModuleFrame):
                 border_width=2, border_color=self.app.COLOR_DIVIDER
             )
 
-        ctk.CTkLabel(bar, text="Cédula").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
-        self.f_cedula = entry("Ej: 1012345678")
-        self.f_cedula.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="ew")
-
-        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_nombre = entry("Nombre")
-        self.f_nombre.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="ew")
+        self.f_nombre.grid(row=0, column=0, padx=(12, 8), pady=12, sticky="ew")
 
-        ctk.CTkLabel(bar, text="Apellido").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
-        self.f_apellido = entry("Apellido")
-        self.f_apellido.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
+        actions = ctk.CTkFrame(bar, fg_color="transparent")
+        actions.grid(row=0, column=1, padx=(0, 12), pady=12, sticky="e")
 
-        row2 = ctk.CTkFrame(bar, fg_color="transparent")
-        row2.grid(row=2, column=0, columnspan=3, padx=(12, 12), pady=(0, 10), sticky="ew")
-        row2.grid_columnconfigure(0, weight=0)
-        row2.grid_columnconfigure(1, weight=0)
-        row2.grid_columnconfigure(2, weight=0)
-        row2.grid_columnconfigure(3, weight=1)  # separador flexible
-        row2.grid_columnconfigure(4, weight=0)
+        advanced = ctk.CTkFrame(bar, fg_color="transparent")
+        advanced.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="ew")
+        advanced.grid_columnconfigure(0, weight=1)
+        advanced.grid_columnconfigure(1, weight=1)
+        advanced.grid_columnconfigure(2, weight=1)
 
-        ctk.CTkLabel(row2, text="Estado").grid(row=0, column=0, padx=(0, 8), pady=(0, 4), sticky="w")
-        self.f_estado = ctk.CTkComboBox(row2, values=["Todos", "Activo", "Inactivo", "Suspendido"], width=150)
+        self.f_cedula = ctk.CTkEntry(
+            advanced, placeholder_text="Ej: 1012345678", height=36, corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+            border_width=2, border_color=self.app.COLOR_DIVIDER
+        )
+        self.f_cedula.grid(row=0, column=0, padx=(0, 8), pady=(0, 8), sticky="ew")
+
+        self.f_apellido = ctk.CTkEntry(
+            advanced, placeholder_text="Apellido", height=36, corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
+            border_width=2, border_color=self.app.COLOR_DIVIDER
+        )
+        self.f_apellido.grid(row=0, column=1, padx=8, pady=(0, 8), sticky="ew")
+
+        self.f_estado = ctk.CTkComboBox(advanced, values=["Todos", "Activo", "Inactivo", "Suspendido"], width=150)
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="w")
+        self.f_estado.grid(row=0, column=2, padx=(8, 0), pady=(0, 8), sticky="ew")
 
-        ctk.CTkLabel(row2, text="Especialidad").grid(row=0, column=1, padx=(8, 8), pady=(0, 4), sticky="w")
-        self.f_especialidad = ctk.CTkComboBox(row2, values=["Todas"], width=170)
+        self.f_especialidad = ctk.CTkComboBox(advanced, values=["Todas"], width=170)
         self.f_especialidad.set("Todas")
-        self.f_especialidad.grid(row=1, column=1, padx=(8, 8), pady=(0, 0), sticky="w")
+        self.f_especialidad.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        ctk.CTkLabel(row2, text="Categoría").grid(row=0, column=2, padx=(8, 8), pady=(0, 4), sticky="w")
-        self.f_categoria = ctk.CTkComboBox(row2, values=["Todas"], width=130)
+        self.f_categoria = ctk.CTkComboBox(advanced, values=["Todas"], width=130)
         self.f_categoria.set("Todas")
-        self.f_categoria.grid(row=1, column=2, padx=(8, 8), pady=(0, 0), sticky="w")
-
-        btns = ctk.CTkFrame(row2, fg_color="transparent")
-        btns.grid(row=1, column=4, padx=(12, 0), pady=(0, 0), sticky="e")
+        self.f_categoria.grid(row=1, column=1, padx=8, pady=(0, 0), sticky="ew")
 
         def light_btn(text, cmd):
             return ctk.CTkButton(
-                btns, text=text, height=36, corner_radius=10,
+                actions, text=text, height=36, corner_radius=10,
                 fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
                 text_color=self.app.COLOR_TEXT, command=cmd
             )
 
-        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=(0, 8))
-        light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=(8, 0))
+        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=(0, 6))
+        light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
+
+        self._advanced_filters_visible = False
+        toggle_btn = ctk.CTkButton(
+            actions,
+            text="Filtros v",
+            width=96,
+            height=36,
+            corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+        )
+        toggle_btn.grid(row=0, column=2, padx=(6, 0))
+
+        def toggle_advanced():
+            self._advanced_filters_visible = not self._advanced_filters_visible
+            if self._advanced_filters_visible:
+                advanced.grid()
+                toggle_btn.configure(text="Filtros ^")
+            else:
+                advanced.grid_remove()
+                toggle_btn.configure(text="Filtros v")
+
+        toggle_btn.configure(command=toggle_advanced)
+        advanced.grid_remove()
 
         for w in (self.f_cedula, self.f_nombre, self.f_apellido):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())

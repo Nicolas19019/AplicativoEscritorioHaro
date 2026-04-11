@@ -738,76 +738,93 @@ class EstudiantesView(BaseModuleFrame):
     # ---------- UI: Filtros ----------
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
-        bar.grid_columnconfigure(0, weight=0)
-        bar.grid_columnconfigure(1, weight=0)
-        bar.grid_columnconfigure(2, weight=1)
-        bar.grid_columnconfigure(3, weight=0)
-        bar.grid_columnconfigure(4, weight=0)
-        bar.grid_columnconfigure(5, weight=0)
-        bar.grid_columnconfigure(6, weight=0)
+        bar.grid_columnconfigure(0, weight=1)
 
-        def entry(ph, width=None):
-            # customtkinter no acepta width=None (rompe el escalado interno).
+        def entry(ph, width=None, master=None):
             kw = {}
             if width is not None:
                 kw["width"] = width
             return ctk.CTkEntry(
-                bar, placeholder_text=ph, height=36, corner_radius=10,
+                master or bar, placeholder_text=ph, height=36, corner_radius=10,
                 fg_color=self.app.COLOR_INPUT_BG, text_color=self.app.COLOR_TEXT,
                 border_width=2, border_color=self.app.COLOR_DIVIDER,
                 **kw
             )
 
-        ctk.CTkLabel(bar, text="Consecutivo").grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
-        self.f_consecutivo = entry("Ej: 000123", width=140)
-        self.f_consecutivo.grid(row=1, column=0, padx=(12, 8), pady=(0, 10), sticky="w")
-
-        ctk.CTkLabel(bar, text="Documento").grid(row=0, column=1, padx=(8, 8), pady=(10, 4), sticky="w")
-        self.f_doc = entry("Ej: 1012345678", width=160)
-        self.f_doc.grid(row=1, column=1, padx=(8, 8), pady=(0, 10), sticky="w")
-
-        ctk.CTkLabel(bar, text="Nombre").grid(row=0, column=2, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_nombre = entry("Nombre o apellido")
-        self.f_nombre.grid(row=1, column=2, padx=(8, 8), pady=(0, 10), sticky="ew")
+        self.f_nombre.grid(row=0, column=0, padx=(12, 8), pady=12, sticky="ew")
 
-        ctk.CTkLabel(bar, text="Estado").grid(row=0, column=3, padx=(8, 8), pady=(10, 4), sticky="w")
+        actions = ctk.CTkFrame(bar, fg_color="transparent")
+        actions.grid(row=0, column=1, padx=(0, 12), pady=12, sticky="e")
+
+        advanced = ctk.CTkFrame(bar, fg_color="transparent")
+        advanced.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="ew")
+        for c in range(5):
+            advanced.grid_columnconfigure(c, weight=1 if c < 3 else 0)
+
+        self.f_consecutivo = entry("Ej: 000123", width=140, master=advanced)
+        self.f_consecutivo.grid(row=0, column=0, padx=(0, 8), pady=(0, 8), sticky="ew")
+
+        self.f_doc = entry("Ej: 1012345678", width=160, master=advanced)
+        self.f_doc.grid(row=0, column=1, padx=8, pady=(0, 8), sticky="ew")
+
         self.f_estado = ctk.CTkComboBox(
-            bar,
+            advanced,
             values=["Todos", "Pendiente", "Activo", "Inactivo", "Suspendido"],
             width=160
         )
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=3, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_estado.grid(row=0, column=2, padx=(8, 0), pady=(0, 8), sticky="ew")
 
-        ctk.CTkLabel(bar, text="Categoría").grid(row=0, column=4, padx=(8, 8), pady=(10, 4), sticky="w")
         self.f_categoria = ctk.CTkComboBox(
-            bar,
+            advanced,
             values=["Todas", "A2", "B1", "C1"],
             width=160
         )
         self.f_categoria.set("Todas")
-        self.f_categoria.grid(row=1, column=4, padx=(8, 8), pady=(0, 10), sticky="w")
+        self.f_categoria.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        ctk.CTkLabel(bar, text="Tipo estudiante").grid(row=0, column=5, padx=(8, 8), pady=(10, 4), sticky="w")
         tipo_values = ["Todos", "Matriculado", "Inscrito", "Activo", "Egresado"]
         if getattr(self.app, "is_superadmin", False):
             tipo_values.insert(1, "Prospecto")
-        self.f_tipo_estudiante = ctk.CTkComboBox(bar, values=tipo_values, width=170)
+        self.f_tipo_estudiante = ctk.CTkComboBox(advanced, values=tipo_values, width=170)
         self.f_tipo_estudiante.set("Todos")
-        self.f_tipo_estudiante.grid(row=1, column=5, padx=(8, 8), pady=(0, 10), sticky="w")
-
-        btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=1, column=6, padx=(8, 12), pady=(0, 10), sticky="e")
+        self.f_tipo_estudiante.grid(row=1, column=1, padx=8, pady=(0, 0), sticky="ew")
 
         def light_btn(text, cmd):
             return ctk.CTkButton(
-                btns, text=text, height=36, corner_radius=10,
+                actions, text=text, height=36, corner_radius=10,
                 fg_color=self.app.COLOR_INPUT_BG, hover_color=self.app.COLOR_DIVIDER,
                 text_color=self.app.COLOR_TEXT, command=cmd
             )
 
-        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=6)
+        light_btn("Limpiar", self._clear_filters).grid(row=0, column=0, padx=(0, 6))
         light_btn("Buscar", self._apply_filters_now).grid(row=0, column=1, padx=6)
+
+        self._advanced_filters_visible = False
+        toggle_btn = ctk.CTkButton(
+            actions,
+            text="Filtros v",
+            width=96,
+            height=36,
+            corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+        )
+        toggle_btn.grid(row=0, column=2, padx=(6, 0))
+
+        def toggle_advanced():
+            self._advanced_filters_visible = not self._advanced_filters_visible
+            if self._advanced_filters_visible:
+                advanced.grid()
+                toggle_btn.configure(text="Filtros ^")
+            else:
+                advanced.grid_remove()
+                toggle_btn.configure(text="Filtros v")
+
+        toggle_btn.configure(command=toggle_advanced)
+        advanced.grid_remove()
 
         for w in (self.f_consecutivo, self.f_doc, self.f_nombre):
             w.bind("<KeyRelease>", lambda e: self._debounced_apply_filters())

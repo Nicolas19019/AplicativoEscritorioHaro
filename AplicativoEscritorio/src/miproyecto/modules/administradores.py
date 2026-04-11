@@ -298,21 +298,26 @@ class AdministradoresView(BaseModuleFrame):
             border_width=2,
             border_color=self.app.COLOR_DIVIDER,
         )
-        self.f_buscar.grid(row=1, column=0, padx=(12, 8), pady=(0, 12), sticky="ew")
-        ctk.CTkLabel(bar, text="Buscar", text_color=self.app.COLOR_TEXT).grid(row=0, column=0, padx=(12, 8), pady=(10, 4), sticky="w")
+        self.f_buscar.grid(row=0, column=0, padx=(12, 8), pady=12, sticky="ew")
 
-        self.f_estado = ctk.CTkComboBox(bar, values=["Todos", "Activo", "Inactivo"], width=150)
+        actions = ctk.CTkFrame(bar, fg_color="transparent")
+        actions.grid(row=0, column=3, padx=(0, 12), pady=12, sticky="e")
+
+        advanced = ctk.CTkFrame(bar, fg_color="transparent")
+        advanced.grid(row=1, column=0, columnspan=4, padx=12, pady=(0, 12), sticky="ew")
+        advanced.grid_columnconfigure(0, weight=1)
+        advanced.grid_columnconfigure(1, weight=1)
+
+        self.f_estado = ctk.CTkComboBox(advanced, values=["Todos", "Activo", "Inactivo"], width=150)
         self.f_estado.set("Todos")
-        self.f_estado.grid(row=1, column=1, padx=8, pady=(0, 12), sticky="w")
-        ctk.CTkLabel(bar, text="Estado", text_color=self.app.COLOR_TEXT).grid(row=0, column=1, padx=8, pady=(10, 4), sticky="w")
+        self.f_estado.grid(row=0, column=0, padx=(0, 8), pady=(0, 0), sticky="ew")
 
-        self.f_sede = ctk.CTkComboBox(bar, values=["Todas"] + SEDES_ADMIN, width=160)
+        self.f_sede = ctk.CTkComboBox(advanced, values=["Todas"] + SEDES_ADMIN, width=160)
         self.f_sede.set("Todas")
-        self.f_sede.grid(row=1, column=2, padx=8, pady=(0, 12), sticky="w")
-        ctk.CTkLabel(bar, text="Sede", text_color=self.app.COLOR_TEXT).grid(row=0, column=2, padx=8, pady=(10, 4), sticky="w")
+        self.f_sede.grid(row=0, column=1, padx=(8, 0), pady=(0, 0), sticky="ew")
 
         ctk.CTkButton(
-            bar,
+            actions,
             text="Limpiar",
             height=36,
             corner_radius=10,
@@ -320,7 +325,43 @@ class AdministradoresView(BaseModuleFrame):
             hover_color=self.app.COLOR_DIVIDER,
             text_color=self.app.COLOR_TEXT,
             command=self._clear_filters,
-        ).grid(row=1, column=3, padx=(8, 12), pady=(0, 12), sticky="e")
+        ).grid(row=0, column=0, padx=(0, 6))
+
+        ctk.CTkButton(
+            actions,
+            text="Buscar",
+            height=36,
+            corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+            command=self._apply_filters,
+        ).grid(row=0, column=1, padx=6)
+
+        self._advanced_filters_visible = False
+        toggle_btn = ctk.CTkButton(
+            actions,
+            text="Filtros v",
+            width=96,
+            height=36,
+            corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+        )
+        toggle_btn.grid(row=0, column=2, padx=(6, 0))
+
+        def toggle_advanced():
+            self._advanced_filters_visible = not self._advanced_filters_visible
+            if self._advanced_filters_visible:
+                advanced.grid()
+                toggle_btn.configure(text="Filtros ^")
+            else:
+                advanced.grid_remove()
+                toggle_btn.configure(text="Filtros v")
+
+        toggle_btn.configure(command=toggle_advanced)
+        advanced.grid_remove()
 
         self.f_buscar.bind("<KeyRelease>", lambda _e: self._apply_filters())
         self.f_estado.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters())

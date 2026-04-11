@@ -570,7 +570,7 @@ class HaroDesktopApp(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _logout(self):
-        if messagebox.askyesno("Sesión", "¿Está seguro que desea salir"):
+        if messagebox.askyesno("Sesión", "¿Está seguro de que desea salir?"):
             self.api = None
             self.api_user = None
             self.api_pass = None
@@ -637,7 +637,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Acciones genéricas ----------------------- #
     def _on_escape(self, _event=None):
-        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación"):
+        if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación?"):
             self.destroy()
 
     def _focus_search(self, _event=None):
@@ -707,7 +707,7 @@ class HaroDesktopApp(ctk.CTk):
         ctk.set_appearance_mode("light" if current == "Dark" else "dark")
 
     def _confirm_delete(self, what="registro"):
-        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}"):
+        if messagebox.askyesno("Confirmar", f"¿Eliminar {what}?"):
             self._info(f"{what.capitalize()} eliminado.")
         else:
             self._info("Operación cancelada.")

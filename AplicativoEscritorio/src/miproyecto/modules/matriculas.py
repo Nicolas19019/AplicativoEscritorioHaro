@@ -188,7 +188,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
             hover_color=self.app.COLOR_DIVIDER,
             text_color=self.app.COLOR_TEXT,
             command=self.destroy,
-        ).grid(row=0, column=0, padx=6)
+        ).grid(row=0, column=0, padx=(0, 6))
 
         ctk.CTkButton(
             btns,
@@ -200,6 +200,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
             text_color="#ffffff",
             command=self._confirm,
         ).grid(row=0, column=1, padx=6)
+
 
     def _confirm(self):
         valor = _parse_money(self.en_valor.get())
@@ -577,8 +578,6 @@ class MatriculasView(BaseModuleFrame):
     def _make_filters_bar(self, parent):
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         bar.grid_columnconfigure(0, weight=1)
-        for c in range(1, 7):
-            bar.grid_columnconfigure(c, weight=0)
 
         def entry(ph):
             return ctk.CTkEntry(
@@ -593,33 +592,41 @@ class MatriculasView(BaseModuleFrame):
             )
 
         self.f_buscar = entry("Nombre, documento, correo o Teléfono")
-        self.f_buscar.grid(row=0, column=0, padx=(12, 8), pady=10, sticky="ew")
+        self.f_buscar.grid(row=0, column=0, padx=(12, 8), pady=12, sticky="ew")
 
-        self.f_origen = ctk.CTkComboBox(bar, values=["Todos", "CHATBOT", "HAROGESTION"], width=140)
+        actions = ctk.CTkFrame(bar, fg_color="transparent")
+        actions.grid(row=0, column=1, padx=(0, 12), pady=12, sticky="e")
+
+        advanced = ctk.CTkFrame(bar, fg_color="transparent")
+        advanced.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="ew")
+        for c in range(4):
+            advanced.grid_columnconfigure(c, weight=1)
+
+        self.f_origen = ctk.CTkComboBox(advanced, values=["Todos", "CHATBOT", "HAROGESTION"], width=140)
         self.f_origen.set("Todos")
-        self.f_origen.grid(row=0, column=1, padx=8, pady=10, sticky="w")
+        self.f_origen.grid(row=0, column=0, padx=(0, 8), pady=(0, 8), sticky="ew")
 
         # Filtro mejorado: el backend ahora maneja EFECTIVO y también pagos en estado PENDIENTE.
         # Permitimos filtrar por Método si el admin necesita ver solo EFECTIVO o solo EPAYCO.
-        self.f_metodo = ctk.CTkComboBox(bar, values=["Todos", "EFECTIVO", "EPAYCO"], width=140)
+        self.f_metodo = ctk.CTkComboBox(advanced, values=["Todos", "EFECTIVO", "EPAYCO"], width=140)
         self.f_metodo.set("Todos")
-        self.f_metodo.grid(row=0, column=2, padx=8, pady=10, sticky="w")
+        self.f_metodo.grid(row=0, column=1, padx=8, pady=(0, 8), sticky="ew")
 
-        self.f_pago = ctk.CTkComboBox(bar, values=["Todos", "PENDIENTE", "CONFIRMADO", "RECHAZADO"], width=140)
+        self.f_pago = ctk.CTkComboBox(advanced, values=["Todos", "PENDIENTE", "CONFIRMADO", "RECHAZADO"], width=140)
         self.f_pago.set("Todos")
-        self.f_pago.grid(row=0, column=3, padx=8, pady=10, sticky="w")
+        self.f_pago.grid(row=0, column=2, padx=8, pady=(0, 8), sticky="ew")
 
         self.f_contrato = ctk.CTkComboBox(
-            bar,
+            advanced,
             values=["Todos", "NO_HABILITADO", "PENDIENTE_FIRMA", "FIRMADO"],
             width=160,
         )
         self.f_contrato.set("Todos")
-        self.f_contrato.grid(row=0, column=4, padx=8, pady=10, sticky="w")
+        self.f_contrato.grid(row=0, column=3, padx=(8, 0), pady=(0, 8), sticky="ew")
 
         # Por defecto esta vista muestra solo "Caja": EFECTIVO + pagos PENDIENTE (por si el webhook falla).
         self.ck_solo_caja = ctk.CTkCheckBox(
-            bar,
+            advanced,
             text="Solo caja",
             text_color=self.app.COLOR_TEXT,
             fg_color=getattr(self.app, "MUSTARD_MAIN", "#D4A017"),
@@ -630,13 +637,10 @@ class MatriculasView(BaseModuleFrame):
             self.ck_solo_caja.select()
         except Exception:
             pass
-        self.ck_solo_caja.grid(row=0, column=5, padx=8, pady=10, sticky="w")
-
-        btns = ctk.CTkFrame(bar, fg_color="transparent")
-        btns.grid(row=0, column=6, padx=(8, 12), pady=10, sticky="e")
+        self.ck_solo_caja.grid(row=1, column=0, padx=(0, 8), pady=(0, 0), sticky="w")
 
         ctk.CTkButton(
-            btns,
+            actions,
             text="Limpiar",
             height=36,
             corner_radius=10,
@@ -644,10 +648,10 @@ class MatriculasView(BaseModuleFrame):
             hover_color=self.app.COLOR_DIVIDER,
             text_color=self.app.COLOR_TEXT,
             command=self._clear_filters,
-        ).grid(row=0, column=0, padx=6)
+        ).grid(row=0, column=0, padx=(0, 6))
 
         ctk.CTkButton(
-            btns,
+            actions,
             text="Buscar",
             height=36,
             corner_radius=10,
@@ -656,6 +660,31 @@ class MatriculasView(BaseModuleFrame):
             text_color="#111111",
             command=self._apply_filters_now,
         ).grid(row=0, column=1, padx=6)
+
+        self._advanced_filters_visible = False
+        toggle_btn = ctk.CTkButton(
+            actions,
+            text="Filtros v",
+            width=96,
+            height=36,
+            corner_radius=10,
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+        )
+        toggle_btn.grid(row=0, column=2, padx=(6, 0))
+
+        def toggle_advanced():
+            self._advanced_filters_visible = not self._advanced_filters_visible
+            if self._advanced_filters_visible:
+                advanced.grid()
+                toggle_btn.configure(text="Filtros ^")
+            else:
+                advanced.grid_remove()
+                toggle_btn.configure(text="Filtros v")
+
+        toggle_btn.configure(command=toggle_advanced)
+        advanced.grid_remove()
 
         self.f_buscar.bind("<KeyRelease>", lambda _e: self._debounced_apply_filters())
         self.f_origen.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters_now())
@@ -716,6 +745,8 @@ class MatriculasView(BaseModuleFrame):
 
         out = []
         for rec in (data_list or []):
+            if self._is_finalized_process(rec):
+                continue
             sede = _normalize_sede_label(self._take_sede(rec))
             if allowed_sede and sede != allowed_sede:
                 continue
@@ -1044,6 +1075,20 @@ class MatriculasView(BaseModuleFrame):
             if val:
                 return _norm_enum(val)
         return ""
+
+    def _take_flow_status(self, rec) -> str:
+        if not isinstance(rec, dict):
+            return ""
+        for key in ("flowStatus", "flow_status", "estadoFlujo", "estado_flujo"):
+            val = rec.get(key)
+            if val:
+                return _norm_enum(val)
+        return ""
+
+    def _is_finalized_process(self, rec) -> bool:
+        contrato = self._take_estado_contrato(rec)
+        flujo = self._take_flow_status(rec)
+        return contrato == "SIGNED" or flujo == "STUDENT_CREATED"
 
     def _take_fecha_creacion(self, rec) -> str:
         if not isinstance(rec, dict):
@@ -1674,7 +1719,7 @@ class MatriculasView(BaseModuleFrame):
             return
 
         origen = self._take_origen(rec)
-        if origen and origen != "HAROGESTION":
+        if origen and origen not in {"CHATBOT", "HAROGESTION"}:
             messagebox.showwarning(
                 "Validación",
                 "El envío por chatbot desde HaroGestion solo aplica a solicitudes creadas desde HAROGESTION.",
@@ -1691,7 +1736,7 @@ class MatriculasView(BaseModuleFrame):
             )
             return
 
-        if not self._is_prospecto_activo(rec):
+        if origen != "CHATBOT" and not self._is_prospecto_activo(rec):
             messagebox.showwarning(
                 "Prospecto no activo",
                 "No es posible enviar el enlace de contratos por chatbot porque el estudiante no se encuentra en prospectos activos. "

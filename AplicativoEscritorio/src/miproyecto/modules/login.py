@@ -6,9 +6,11 @@ from pathlib import Path
 import sys
 import os
 import re
+import json
 import hashlib
 import traceback
 import threading
+import time
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -18,6 +20,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ICON_ICO_PATH = SCRIPT_DIR.parent / "media" / "logoHARO.ico"     # respeta el nombre real
 ICON_PNG_PATH = SCRIPT_DIR.parent / "media" / "logoHARO.png"     # fallback icono ventana
 LOGO_GRANDE_PATH = SCRIPT_DIR.parent / "media" / "LogoGrande.png"
+REMEMBER_LOGIN_PATH = Path.home() / ".harogestion_login.json"
+REMEMBER_LOGIN_TTL_SECONDS = 5 * 60 * 60
 
 # HTTP (opcional, con fallback si no está instalado)
 try:
@@ -270,6 +274,9 @@ class LoginDialog(ctk.CTkToplevel):
         self.ADMIN_ENDPOINT = getattr(self.app, "ADMIN_ENDPOINT", "/api/administradores")
         self.OTP_SEND_ENDPOINT = getattr(self.app, "OTP_SEND_ENDPOINT", "/api/verification/email/send")
         self.OTP_VERIFY_ENDPOINT = getattr(self.app, "OTP_VERIFY_ENDPOINT", "/api/verification/email/verify")
+        self.FORGOT_PASSWORD_ENDPOINT = getattr(self.app, "FORGOT_PASSWORD_ENDPOINT", "/api/auth/forgot-password")
+        self.FORGOT_PASSWORD_VERIFY_ENDPOINT = getattr(self.app, "FORGOT_PASSWORD_VERIFY_ENDPOINT", "/api/auth/forgot-password/verify")
+        self.RESET_PASSWORD_ENDPOINT = getattr(self.app, "RESET_PASSWORD_ENDPOINT", "/api/auth/reset-password")
 
         self.on_success = on_success
 
@@ -428,8 +435,7 @@ class LoginDialog(ctk.CTkToplevel):
             fg_color=fg_input, text_color=fg_text,
             border_width=2, border_color=fg_divider,
             placeholder_text="correo@dominio.com",
-            placeholder_text_color="#4F4F4F",
-            validate="key", validatecommand=v_email
+            placeholder_text_color="#4F4F4F"
         )
         self.en_user.grid(row=rr, column=0, pady=(0, 8), sticky="ew"); rr += 1
         self._decorate_entry(self.en_user)
@@ -475,16 +481,17 @@ class LoginDialog(ctk.CTkToplevel):
         self.cb_remember = ctk.CTkCheckBox(
             self.frame_login, text="Recordar usuario",
             text_color=fg_text,
-            fg_color=fg_input, border_color=fg_divider, hover_color=fg_divider
+            fg_color=fg_input, border_color=fg_divider, hover_color=fg_divider,
+            command=lambda: (None if self.cb_remember.get() else self._clear_remembered_login())
         )
         self.cb_remember.grid(row=rr+2, column=0, pady=(0, 6), sticky="w")
 
         ctk.CTkButton(
-            self.frame_login, text="¿Olvidaste tu contraseña",
+            self.frame_login, text="¿Olvidaste tu contraseña?",
             height=30, corner_radius=8,
             fg_color="transparent", hover_color=fg_divider,
             text_color=fg_muted,
-            command=lambda: messagebox.showinfo("Ayuda", "Contacta al administrador del sistema.")
+            command=self._open_forgot_password_dialog
         ).grid(row=rr+2, column=0, pady=(0, 4), sticky="e")
 
         # =================== REG FRAME ===================
@@ -546,8 +553,7 @@ class LoginDialog(ctk.CTkToplevel):
             self.frame_reg, height=36, fg_color=fg_input, text_color=fg_text,
             border_color=fg_divider,
             placeholder_text="ana.perez@cea-haro.com",
-            placeholder_text_color="#4F4F4F",
-            validate="key", validatecommand=v_email
+            placeholder_text_color="#4F4F4F"
         )
         self.ca_usuario.grid(row=r2, column=0, padx=(0, 10), pady=(0, 2), sticky="ew")
         self.ca_email.grid(row=r2, column=1, padx=(10, 0), pady=(0, 2), sticky="ew"); r2 += 1
@@ -748,6 +754,7 @@ class LoginDialog(ctk.CTkToplevel):
         # enfoque inicial
         self.en_user.focus_set()
         self._switch_mode("LOGIN")
+        self._load_remembered_login()
 
 
     def _on_login_unmap(self, event=None):
@@ -885,8 +892,42 @@ class LoginDialog(ctk.CTkToplevel):
             entry.configure(border_width=2, **normal)
             entry.bind("<FocusIn>",  lambda _e: entry.configure(**focus))
             entry.bind("<FocusOut>", lambda _e: entry.configure(**normal))
+            entry.bind("<Control-a>", lambda _e, w=entry: self._select_all_entry(w), add="+")
+            entry.bind("<Control-A>", lambda _e, w=entry: self._select_all_entry(w), add="+")
+            entry.bind("<Control-v>", lambda _e, w=entry: self._paste_entry(w), add="+")
+            entry.bind("<Control-V>", lambda _e, w=entry: self._paste_entry(w), add="+")
+            entry.bind("<<Paste>>", lambda _e, w=entry: self._paste_entry(w), add="+")
         except Exception:
             pass
+
+    def _select_all_entry(self, entry):
+        try:
+            entry.select_range(0, "end")
+            entry.icursor("end")
+        except Exception:
+            pass
+        return "break"
+
+    def _paste_entry(self, entry):
+        try:
+            text = self.clipboard_get()
+        except Exception:
+            return "break"
+
+        try:
+            if entry.selection_present():
+                sel_first = entry.index("sel.first")
+                sel_last = entry.index("sel.last")
+                entry.delete(sel_first, sel_last)
+                entry.insert(sel_first, text)
+            else:
+                entry.insert(entry.index("insert"), text)
+        except Exception:
+            try:
+                entry.insert("end", text)
+            except Exception:
+                pass
+        return "break"
 
     def _hide_error_on_any_click(self, _event=None):
         # solo limpia si está visible con texto
@@ -896,6 +937,12 @@ class LoginDialog(ctk.CTkToplevel):
 
     def _clear_error_ui(self):
         try:
+            if hasattr(self, "_err_hide_after_id") and self._err_hide_after_id:
+                try:
+                    self.after_cancel(self._err_hide_after_id)
+                except Exception:
+                    pass
+                self._err_hide_after_id = None
             self.err.configure(text="")
             self.err_box.configure(border_width=0)
             self.err_box.grid_remove()
@@ -912,6 +959,12 @@ class LoginDialog(ctk.CTkToplevel):
             self.err_box.configure(border_width=2)
             self._err_lock = True
             self.after(300, lambda: setattr(self, "_err_lock", False))
+            if hasattr(self, "_err_hide_after_id") and self._err_hide_after_id:
+                try:
+                    self.after_cancel(self._err_hide_after_id)
+                except Exception:
+                    pass
+            self._err_hide_after_id = self.after(5000, self._clear_error_ui)
         except Exception:
             messagebox.showerror(title, user_msg, parent=self)
 
@@ -1035,6 +1088,272 @@ class LoginDialog(ctk.CTkToplevel):
                 self._request_registration_otp()
         else:
             self._ok()
+
+    def _password_meets_recovery_policy(self, password: str) -> bool:
+        pwd = str(password or "")
+        return (
+            len(pwd) >= 8
+            and bool(re.search(r"[A-Z]", pwd))
+            and bool(re.search(r"[a-z]", pwd))
+            and bool(re.search(r"[0-9]", pwd))
+        )
+
+    def _open_forgot_password_dialog(self):
+        self._clear_error_ui()
+        initial_email = self._sanitize_login_for_submit(self.en_user.get().strip().lower())
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Recuperar contraseña")
+        dialog.geometry("500x500")
+        dialog.minsize(480, 480)
+        try:
+            dialog.resizable(False, False)
+        except Exception:
+            pass
+        try:
+            dialog.configure(fg_color=self.app.COLOR_PANEL)
+            dialog.transient(self.winfo_toplevel())
+            dialog.grab_set()
+        except Exception:
+            pass
+
+        wrap = ctk.CTkFrame(
+            dialog,
+            fg_color=self.app.COLOR_PANEL,
+            corner_radius=16,
+            border_width=2,
+            border_color=self.app.COLOR_DIVIDER,
+        )
+        wrap.pack(fill="both", expand=True, padx=16, pady=16)
+        wrap.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            wrap,
+            text="Recuperar contraseña",
+            text_color="#DC2626",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
+
+        ctk.CTkLabel(
+            wrap,
+            text="Solicita un código, verifícalo y luego define una nueva contraseña.",
+            text_color=self.app.COLOR_MUTED,
+            justify="left",
+            wraplength=400,
+        ).grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
+
+        form = ctk.CTkFrame(wrap, fg_color="transparent")
+        form.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="ew")
+        form.grid_columnconfigure(0, weight=1)
+        form.grid_columnconfigure(1, weight=1)
+
+        def make_entry(parent, placeholder, show=None):
+            e = ctk.CTkEntry(
+                parent,
+                height=38,
+                corner_radius=10,
+                fg_color=self.app.COLOR_INPUT_BG,
+                text_color=self.app.COLOR_TEXT,
+                border_width=2,
+                border_color=self.app.COLOR_DIVIDER,
+                placeholder_text=placeholder,
+                show=show or "",
+            )
+            self._decorate_entry(e)
+            return e
+
+        ctk.CTkLabel(form, text="Correo", text_color=self.app.COLOR_TEXT).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        en_email = make_entry(form, "correo@dominio.com")
+        en_email.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        if initial_email:
+            en_email.insert(0, initial_email)
+
+        ctk.CTkLabel(form, text="Código OTP", text_color=self.app.COLOR_TEXT).grid(row=2, column=0, sticky="w", pady=(0, 4))
+        ctk.CTkLabel(form, text="Nueva contraseña", text_color=self.app.COLOR_TEXT).grid(row=2, column=1, sticky="w", pady=(0, 4), padx=(10, 0))
+
+        en_code = make_entry(form, "123456")
+        en_code.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        try:
+            en_code.configure(validate="key", validatecommand=(self.register(lambda P: (P.isdigit() and len(P) <= 6) or P == ""), "%P"))
+        except Exception:
+            pass
+
+        en_password = make_entry(form, "NuevaClave123", show="*")
+        en_password.grid(row=3, column=1, sticky="ew", pady=(0, 10), padx=(10, 0))
+
+        ctk.CTkLabel(form, text="Confirmar contraseña", text_color=self.app.COLOR_TEXT).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        en_password2 = make_entry(form, "Repite la nueva contraseña", show="*")
+        en_password2.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+
+        status = ctk.CTkLabel(
+            wrap,
+            text="",
+            text_color=self.app.COLOR_MUTED,
+            justify="left",
+            wraplength=400,
+        )
+        status.grid(row=3, column=0, padx=16, pady=(0, 6), sticky="w")
+
+        def set_status(msg, color=None):
+            try:
+                status.configure(text=str(msg or ""), text_color=color or self.app.COLOR_MUTED)
+            except Exception:
+                pass
+
+        def current_email():
+            return self._sanitize_login_for_submit(en_email.get().strip().lower())
+
+        def ask_code():
+            correo = current_email()
+            if not correo:
+                set_status("Escribe el correo del administrador.", "#DC2626")
+                return
+            if not self._re_email_full.fullmatch(correo):
+                set_status("El correo no es válido.", "#DC2626")
+                return
+
+            set_status("Solicitando código de recuperación...", self.app.COLOR_MUTED)
+
+            def do_send():
+                data = self.api.post(self.FORGOT_PASSWORD_ENDPOINT, json={"correo": correo})
+                if data is None:
+                    raise RuntimeError(self.api.last_error or "No se pudo iniciar la recuperación.")
+                return correo
+
+            def on_ok(sent_email):
+                set_status(f"Si el correo existe y está activo, el código fue enviado a {sent_email}.", "#2e7d32")
+                try:
+                    en_code.focus_set()
+                except Exception:
+                    pass
+
+            def on_err(err):
+                set_status(self._classify_error(str(err))[1], "#DC2626")
+
+            self._run_async(do_send, on_ok=on_ok, on_err=on_err)
+
+        def verify_code():
+            correo = current_email()
+            codigo = en_code.get().strip()
+            if not correo or not self._re_email_full.fullmatch(correo):
+                set_status("Escribe un correo válido.", "#DC2626")
+                return
+            if len(codigo) != 6 or not codigo.isdigit():
+                set_status("Ingresa un código OTP válido de 6 dígitos.", "#DC2626")
+                return
+
+            set_status("Verificando código...", self.app.COLOR_MUTED)
+
+            def do_verify():
+                data = self.api.post(self.FORGOT_PASSWORD_VERIFY_ENDPOINT, json={"correo": correo, "code": codigo})
+                if data is None:
+                    raise RuntimeError(self.api.last_error or "No se pudo verificar el código.")
+                return True
+
+            def on_ok(_):
+                set_status("Código válido. Ya puedes cambiar la contraseña.", "#2e7d32")
+
+            def on_err(err):
+                set_status(self._classify_error(str(err))[1], "#DC2626")
+
+            self._run_async(do_verify, on_ok=on_ok, on_err=on_err)
+
+        def reset_password():
+            correo = current_email()
+            codigo = en_code.get().strip()
+            nueva = en_password.get().strip()
+            confirmacion = en_password2.get().strip()
+
+            if not correo or not self._re_email_full.fullmatch(correo):
+                set_status("Escribe un correo válido.", "#DC2626")
+                return
+            if len(codigo) != 6 or not codigo.isdigit():
+                set_status("Ingresa un código OTP válido de 6 dígitos.", "#DC2626")
+                return
+            if not self._password_meets_recovery_policy(nueva):
+                set_status("La nueva contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número.", "#DC2626")
+                return
+            if nueva != confirmacion:
+                set_status("La confirmación de contraseña no coincide.", "#DC2626")
+                return
+
+            set_status("Actualizando contraseña...", self.app.COLOR_MUTED)
+
+            def do_reset():
+                data = self.api.post(
+                    self.RESET_PASSWORD_ENDPOINT,
+                    json={"correo": correo, "code": codigo, "nuevaContrasena": nueva},
+                )
+                if data is None:
+                    raise RuntimeError(self.api.last_error or "No se pudo restablecer la contraseña.")
+                return correo
+
+            def on_ok(done_email):
+                set_status("Contraseña actualizada correctamente.", "#2e7d32")
+                try:
+                    self.en_user.delete(0, "end")
+                    self.en_user.insert(0, done_email)
+                    self.en_pass.delete(0, "end")
+                    self.en_pass.focus_set()
+                except Exception:
+                    pass
+                messagebox.showinfo(
+                    "Contraseña actualizada",
+                    "Ya puedes iniciar sesión con tu nueva contraseña.",
+                    parent=self,
+                )
+                try:
+                    dialog.destroy()
+                except Exception:
+                    pass
+
+            def on_err(err):
+                set_status(self._classify_error(str(err))[1], "#DC2626")
+
+            self._run_async(do_reset, on_ok=on_ok, on_err=on_err)
+
+        btns = ctk.CTkFrame(wrap, fg_color="transparent")
+        btns.grid(row=4, column=0, padx=16, pady=(0, 12), sticky="ew")
+        for col in range(2):
+            btns.grid_columnconfigure(col, weight=1)
+
+        ctk.CTkButton(
+            btns,
+            text="Solicitar OTP",
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+            command=ask_code,
+        ).grid(row=0, column=0, padx=(0, 6), pady=(0, 6), sticky="ew")
+
+        ctk.CTkButton(
+            btns,
+            text="Verificar OTP",
+            fg_color=self.app.COLOR_INPUT_BG,
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+            command=verify_code,
+        ).grid(row=0, column=1, padx=(6, 0), pady=(0, 6), sticky="ew")
+
+        ctk.CTkButton(
+            btns,
+            text="Cambiar clave",
+            fg_color=self.PLACEHOLDER_YELLOW,
+            hover_color="#D4A017",
+            text_color="#111111",
+            command=reset_password,
+        ).grid(row=1, column=0, padx=(0, 6), pady=(6, 0), sticky="ew")
+
+        ctk.CTkButton(
+            btns,
+            text="Cerrar",
+            fg_color="transparent",
+            hover_color=self.app.COLOR_DIVIDER,
+            text_color=self.app.COLOR_TEXT,
+            border_width=1,
+            border_color=self.app.COLOR_DIVIDER,
+            command=dialog.destroy,
+        ).grid(row=1, column=1, padx=(6, 0), pady=(6, 0), sticky="ew")
 
     def _toggle_pass(self):
         self._pass_visible = not getattr(self, "_pass_visible", False)
@@ -1283,6 +1602,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._clear_error_ui()
 
         try:
+            self._build_pending_admin_payload()
             correo = (self.ADMIN_OTP_EMAIL or "").strip().lower()
             if not correo:
                 raise ValueError("No hay correo configurado para el superadministrador.")
@@ -1450,7 +1770,6 @@ class LoginDialog(ctk.CTkToplevel):
 
         p_hex = hashlib.sha256(p.encode("utf-8")).hexdigest()
         on_success_secret = self._credential_for_on_success(p, p_hex)
-
         if callable(self.on_success):
             try:
                 # Valida credenciales por correo (contrato actual del backend).
@@ -1463,6 +1782,10 @@ class LoginDialog(ctk.CTkToplevel):
                     self.grab_release()
                 except Exception:
                     pass
+                if bool(self.cb_remember.get()):
+                    self._save_remembered_login(correo)
+                else:
+                    self._clear_remembered_login()
                 self.on_success(correo, on_success_secret)
                 if hasattr(self.app, "api") and getattr(self.app.api, "last_error", None):
                     self._show_error(technical=str(self.app.api.last_error))
@@ -1480,6 +1803,10 @@ class LoginDialog(ctk.CTkToplevel):
             self._show_error(technical=self.api.last_error or "Error desconocido")
             return
 
+        if bool(self.cb_remember.get()):
+            self._save_remembered_login(correo)
+        else:
+            self._clear_remembered_login()
         self._reset_fields(True)
         self.grab_release()
         self.destroy()
@@ -1493,6 +1820,44 @@ class LoginDialog(ctk.CTkToplevel):
 
     def _sanitize_login_for_submit(self, text):
         return "".join(ch for ch in text if ch not in self._danger_chars)
+
+    def _clear_remembered_login(self):
+        try:
+            if REMEMBER_LOGIN_PATH.exists():
+                REMEMBER_LOGIN_PATH.unlink()
+        except Exception:
+            pass
+
+    def _save_remembered_login(self, correo: str):
+        correo = str(correo or "").strip().lower()
+        if not correo:
+            self._clear_remembered_login()
+            return
+        payload = {
+            "correo": correo,
+            "expiresAt": int(time.time()) + REMEMBER_LOGIN_TTL_SECONDS,
+        }
+        try:
+            REMEMBER_LOGIN_PATH.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _load_remembered_login(self):
+        try:
+            if not REMEMBER_LOGIN_PATH.exists():
+                return
+            raw = json.loads(REMEMBER_LOGIN_PATH.read_text(encoding="utf-8"))
+            correo = str(raw.get("correo") or "").strip()
+            expires_at = int(raw.get("expiresAt") or 0)
+            if not correo or expires_at <= int(time.time()):
+                self._clear_remembered_login()
+                return
+            self.en_user.delete(0, "end")
+            self.en_user.insert(0, correo)
+            self.cb_remember.select()
+            self.en_pass.focus_set()
+        except Exception:
+            self._clear_remembered_login()
 
     def _password_strength_score(self, pwd):
         if not pwd:
