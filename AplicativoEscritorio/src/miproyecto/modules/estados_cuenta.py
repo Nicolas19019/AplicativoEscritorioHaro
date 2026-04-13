@@ -856,6 +856,10 @@ class EstadosCuentaView(BaseModuleFrame):
         except Exception:
             pass
 
+        if not getattr(self.app, "is_superadmin", False):
+            self._totals_frame = None
+            return
+
         total_total = sum(float(r.get("montoTotal") or 0) for r in self._data)
         total_multas = sum(float(r.get("multas") or 0) for r in self._data)
         total_exigible = total_total + total_multas

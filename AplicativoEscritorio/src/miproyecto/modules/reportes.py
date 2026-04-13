@@ -6,7 +6,7 @@ from pathlib import Path
 import threading
 from collections import Counter, defaultdict
 
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import LETTER, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
@@ -138,7 +138,7 @@ class ReportesView(BaseModuleFrame):
         # Márgenes tipo carta y espacio arriba para el logo
         return SimpleDocTemplate(
             path,
-            pagesize=LETTER,
+            pagesize=landscape(LETTER),
             leftMargin=2.2 * cm,
             rightMargin=2.2 * cm,
             topMargin=4.2 * cm,     # deja aire para el header + logo (evita que quede pegado arriba)
@@ -1082,7 +1082,6 @@ class ReportesView(BaseModuleFrame):
                 ),
             ],
             "insights": [
-                "Las métricas de chatbot se estiman con tipoEstudiante porque hoy Reportes no consume un endpoint separado del bot.",
                 f"Sede con más matrículas (mes): {top_sede} ({top_sede_n})" if top_sede_n else "Sin matrículas para este periodo.",
                 f"Categoría más común (mes): {top_cat} ({top_cat_n})" if top_cat_n else "—",
                 f"Activos en el sistema: {activos}/{total}",
@@ -2087,7 +2086,7 @@ class ReportesView(BaseModuleFrame):
         # Tabla detalle (compacta para PDF)
         headers = ["ID", "Nombre", "Documento", "Estado", "Sede", "Días restantes", "Ingreso"]
         rows = [headers] + [[r.get(h, "") for h in headers] for r in (self._data or [])]
-        elems.append(self._table_pro(rows, col_widths=[1.2*cm, 4.8*cm, 2.4*cm, 2.0*cm, 2.2*cm, 2.2*cm, 2.2*cm]))
+        elems.append(self._table_pro(rows, col_widths=[1.2*cm, 8.2*cm, 3.0*cm, 2.2*cm, 3.0*cm, 2.6*cm, 2.6*cm]))
 
         header_draw = self._header_canvas()
         doc.build(elems, onFirstPage=header_draw, onLaterPages=header_draw)
