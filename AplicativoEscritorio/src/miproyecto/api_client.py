@@ -1,3 +1,11 @@
+"""
+Cliente HTTP para HaroGestion.
+
+- Soporta autenticación `basic` y `jwt`.
+- Expone helpers CRUD por recurso (GET/POST/PUT/PATCH/DELETE).
+- Incluye cache TTL para `GET` y logging de diagnóstico.
+"""
+
 import base64
 import copy
 import json
@@ -13,14 +21,17 @@ except Exception:
 
 
 class AuthError(RuntimeError):
+    """Credenciales inválidas o falta de token/autorización."""
     pass
 
 
 class ConflictError(RuntimeError):
+    """Conflicto al guardar: el registro cambió en otra sesión."""
     pass
 
 
 class ApiClient:
+    """Wrapper de `requests` con autenticación, cache y manejo de errores."""
     def __init__(
         self,
         app,
@@ -34,6 +45,21 @@ class ApiClient:
         token_field: str = "token",
         request_timeout: float = 25.0,
     ):
+        """
+        Crea un cliente API autenticado para consumir recursos REST del backend.
+
+        Args:
+            app: Referencia a la app (solo para contexto/logs).
+            base_url: URL base del backend (sin "/" final).
+            user: Usuario/correo para autenticación.
+            password: Contraseña para autenticación.
+            auth_mode: `"basic"` o `"jwt"`.
+            jwt_login_path: Endpoint relativo para obtener token (modo JWT).
+            user_field: Campo de usuario esperado por el endpoint JWT.
+            pass_field: Campo de contraseña esperado por el endpoint JWT.
+            token_field: Campo donde viene el token en la respuesta JWT.
+            request_timeout: Timeout por petición (segundos).
+        """
         self.app = app
         self.base_url = base_url.rstrip("/")
         self.user = user
@@ -67,6 +93,12 @@ class ApiClient:
             self._login_jwt()
 
     def _log_debug(self, message: str):
+        """
+        Escribe una línea en el log de diagnóstico del cliente.
+
+        Args:
+            message: Mensaje a registrar.
+        """
         if not self._debug_http:
             return
         line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {message}"
@@ -83,12 +115,28 @@ class ApiClient:
 
     @staticmethod
     def _short_text(value, max_len=1800):
+        """
+        Acorta texto para logs evitando payloads gigantes.
+
+        Args:
+            value: Valor a serializar como string.
+            max_len: Longitud máxima permitida.
+
+        Returns:
+            String acortado.
+        """
         txt = str(value or "")
         if len(txt) <= max_len:
             return txt
         return txt[:max_len] + f"... [truncado {len(txt) - max_len} chars]"
 
     def _login_jwt(self):
+        """
+        Inicia sesión en modo JWT y guarda el Bearer token.
+
+        Raises:
+            AuthError: Si credenciales son inválidas o no se recibe token.
+        """
         payload = {self.user_field: self.user, self.pass_field: self.password}
         url = f"{self.base_url}/{self.jwt_login_path.lstrip('/')}"
         if requests:
@@ -118,10 +166,12 @@ class ApiClient:
         self._bearer = f"Bearer {token}"
 
     def _cache_key(self, resource, params=None):
+        """Construye la clave de cache para un `GET` (recurso + params)."""
         frozen_params = tuple(sorted((params or {}).items()))
         return (resource, frozen_params)
 
     def _cache_get(self, key):
+        """Obtiene un valor del cache si no expiró (retorna copia)."""
         now = time.time()
         with self._cache_lock:
             item = self._get_cache.get(key)
@@ -134,15 +184,23 @@ class ApiClient:
             return copy.deepcopy(value)
 
     def _cache_set(self, key, value):
+        """Guarda un valor en cache (copia profunda para evitar mutaciones)."""
         with self._cache_lock:
             self._get_cache[key] = (time.time(), copy.deepcopy(value))
 
     def _cache_clear(self):
+        """Limpia el cache de `GET` (se usa tras mutaciones)."""
         with self._cache_lock:
             self._get_cache.clear()
 
     @staticmethod
     def _normalize_conflict_value(value):
+        """
+        Normaliza valores para comparación de concurrencia (strings, floats, listas, dicts).
+
+        Returns:
+            Valor normalizado comparable.
+        """
         if value is None:
             return ""
         if isinstance(value, bool):
@@ -161,6 +219,19 @@ class ApiClient:
         return str(value).strip().lower()
 
     def ensure_not_modified(self, resource, _id, original_snapshot, *, compare_fields=None, label="registro"):
+        """
+        Verifica que un registro no haya cambiado en otra sesión (concurrency check).
+
+        Args:
+            resource: Recurso base (ej. `"estudiantes"`).
+            _id: ID del registro.
+            original_snapshot: Diccionario con el estado original al abrir.
+            compare_fields: Campos a comparar (por defecto compara todo el snapshot).
+            label: Texto para mensajes de error.
+
+        Raises:
+            ConflictError: Si detecta cambios en campos comparados.
+        """
         if not _id or not isinstance(original_snapshot, dict):
             return
         current = self.get_by_id(resource, _id)
@@ -187,7 +258,22 @@ class ApiClient:
             )
 
     def _request(self, method, path, data=None, params=None):
-        """Envia una peticion HTTP al backend y levanta excepciones si falla."""
+        """
+        Envía una petición HTTP al backend y retorna el JSON (o texto) parseado.
+
+        Args:
+            method: Método HTTP (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`).
+            path: Path relativo a `base_url`.
+            data: JSON body (si aplica).
+            params: Query params.
+
+        Returns:
+            Respuesta parseada (dict/list) o `{"raw": ...}` si no es JSON.
+
+        Raises:
+            AuthError: En errores de autenticación/authorization.
+            RuntimeError: En errores de red/timeout u otros errores inesperados.
+        """
         self.last_error = None
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -264,6 +350,17 @@ class ApiClient:
 
     # CRUD helpers
     def get_all(self, resource, params=None, force_refresh=False):
+        """
+        Obtiene todos los items de un recurso (GET) con cache TTL.
+
+        Args:
+            resource: Recurso (ej. `"estudiantes"`).
+            params: Query params (dict).
+            force_refresh: Si True, ignora cache.
+
+        Returns:
+            Respuesta del backend (list/dict según API).
+        """
         key = self._cache_key(resource, params=params)
         if not force_refresh:
             cached = self._cache_get(key)
@@ -274,19 +371,31 @@ class ApiClient:
         return copy.deepcopy(data)
 
     def get_by_id(self, resource, _id):
+        """Obtiene un registro por ID (GET /{resource}/{id})."""
         return self._request("GET", f"{resource}/{_id}")
 
     def create(self, resource, payload):
+        """Crea un registro (POST) y limpia cache."""
         data = self._request("POST", resource, data=payload)
         self._cache_clear()
         return data
 
     def update(self, resource, _id, payload):
+        """Actualiza un registro completo (PUT) y limpia cache."""
         data = self._request("PUT", f"{resource}/{_id}", data=payload)
         self._cache_clear()
         return data
 
     def patch(self, resource, _id, payload=None, suffix=""):
+        """
+        Actualiza parcialmente un registro (PATCH) y limpia cache.
+
+        Args:
+            resource: Recurso base.
+            _id: ID del registro.
+            payload: JSON body (opcional según endpoint).
+            suffix: Sufijo adicional (ej. acciones tipo `/confirmar-pago`).
+        """
         path = f"{resource}/{_id}"
         if suffix:
             path = f"{path}/{suffix.lstrip('/')}"
@@ -295,6 +404,7 @@ class ApiClient:
         return data
 
     def delete(self, resource, _id):
+        """Elimina un registro (DELETE) y limpia cache."""
         data = self._request("DELETE", f"{resource}/{_id}")
         self._cache_clear()
         return data

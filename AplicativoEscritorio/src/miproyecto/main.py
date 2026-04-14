@@ -1,3 +1,11 @@
+"""
+Entrypoint de HaroGestion (aplicación de escritorio).
+
+- Define `HaroDesktopApp`: ventana principal, paleta/estilos y navegación.
+- Inicializa el cliente HTTP (`ApiClient`) y gestiona la sesión del administrador.
+- Carga módulos UI desde `src/miproyecto/modules/`.
+"""
+
 import sys
 import threading
 from pathlib import Path
@@ -11,6 +19,7 @@ from modules.login import LoginDialog
 
 
 class HaroDesktopApp(ctk.CTk):
+    """Ventana principal de HaroGestion (UI, navegación, sesión y configuración)."""
     # -------- Paleta (light, dark) -------- #
     # Blancos y grises base
     COLOR_BG          = ("#FAFBFC", "#0f0f10")   # fondo app (blanco muy suave / casi negro)
@@ -86,6 +95,7 @@ class HaroDesktopApp(ctk.CTk):
     SUPERADMIN_PASSWORD = "Harogestion2026"
 
     def __init__(self):
+        """Inicializa la app: UI base, login, navegación y estado de sesión."""
         super().__init__()
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("dark-blue")
@@ -145,9 +155,16 @@ class HaroDesktopApp(ctk.CTk):
 
 
     def minimizar(self):
+        """Minimiza la ventana principal (Windows/Linux/Mac)."""
         self.iconify()   # minimiza la ventana
 
     def _compute_window_size(self):
+        """
+        Calcula un tamaño de ventana “usable” basado en la resolución del monitor.
+
+        Returns:
+            Tuple[int, int]: (width, height) sugeridos.
+        """
         try:
             self.update_idletasks()
             screen_w = max(int(self.winfo_screenwidth() or self.APP_W), 900)
@@ -162,6 +179,15 @@ class HaroDesktopApp(ctk.CTk):
         return width, height
 
     def _compute_logo_size(self, window_h: int):
+        """
+        Define el tamaño del logo según la altura de la ventana.
+
+        Args:
+            window_h: Altura de la ventana en píxeles.
+
+        Returns:
+            Tuple[int, int]: (width, height) a usar en el logo.
+        """
         if window_h <= 640:
             return (42, 34)
         if window_h <= 700:
@@ -172,6 +198,15 @@ class HaroDesktopApp(ctk.CTk):
     # ----------------------- Helpers de recursos ----------------------- #
     @staticmethod
     def resource_path(p) -> Path:
+        """
+        Resuelve rutas de recursos considerando PyInstaller (`sys._MEIPASS`).
+
+        Args:
+            p: Ruta relativa o absoluta del recurso.
+
+        Returns:
+            Path existente dentro del bundle o el Path original.
+        """
         p = Path(p)
         base = getattr(sys, "_MEIPASS", None)
         if base:
@@ -231,6 +266,7 @@ class HaroDesktopApp(ctk.CTk):
 
 
     def _set_default_logo(self):
+        """Crea un logo placeholder (círculo rojo) cuando no hay imagen disponible."""
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         for x in range(64):
             for y in range(64):
@@ -241,6 +277,7 @@ class HaroDesktopApp(ctk.CTk):
         self.logo_image = ctk.CTkImage(light_image=img, dark_image=img, size=size)
 
     def _load_fixed_logo(self):
+        """Carga el logo desde `media/` y lo recorta a cuadrado (fallback a default si falla)."""
         try:
             path = self.resource_path(self._LOGO_PATH)
             if not path.exists():
@@ -260,6 +297,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Topbar ----------------------- #
     def _build_topbar(self):
+        """Construye la barra superior: menú, marca, búsqueda, sincronización y logout."""
         self.topbar = ctk.CTkFrame(self, height=self.TOPBAR_H, fg_color=self.COLOR_PANEL, corner_radius=0)
         self.topbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
         for col in (0, 1, 2, 3, 4, 5, 6, 7):
@@ -325,6 +363,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Sidebar ----------------------- #
     def _build_sidebar(self):
+        """Construye el sidebar con botones de navegación y footer."""
         self.sidebar = ctk.CTkFrame(self, width=self.SIDEBAR_W, fg_color=self.COLOR_PANEL, corner_radius=0)
         self.sidebar.grid(row=1, column=0, sticky="nsew")
         for r in range(30):
@@ -381,6 +420,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Content ----------------------- #
     def _build_content_area(self):
+        """Construye el contenedor principal donde se montan las vistas/módulos."""
         self.content = ctk.CTkFrame(self, fg_color=self.COLOR_BG, corner_radius=0)
         self.content.grid(row=1, column=1, sticky="nsew")
         self.content.grid_rowconfigure(0, weight=1)
@@ -389,6 +429,12 @@ class HaroDesktopApp(ctk.CTk):
         self._loading_text = None
 
     def _show_loading(self, text="Cargando..."):
+        """
+        Muestra un overlay de carga no bloqueante sobre el área de contenido.
+
+        Args:
+            text: Mensaje a mostrar.
+        """
         try:
             if self._loading_overlay and self._loading_overlay.winfo_exists():
                 if self._loading_text and self._loading_text.winfo_exists():
@@ -417,6 +463,7 @@ class HaroDesktopApp(ctk.CTk):
             pass
 
     def _hide_loading(self):
+        """Oculta y destruye el overlay de carga si existe."""
         try:
             if self._loading_overlay and self._loading_overlay.winfo_exists():
                 self._loading_overlay.destroy()
@@ -426,6 +473,7 @@ class HaroDesktopApp(ctk.CTk):
         self._loading_text = None
 
     def _register_view_factories(self):
+        """Registra las “fábricas” de vistas para instanciarlas bajo demanda."""
         self._view_factories = {
             "Estudiantes": self._create_estudiantes_view,
             "Matrículas": self._create_matriculas_view,
@@ -439,38 +487,52 @@ class HaroDesktopApp(ctk.CTk):
         self.views = {}
 
     def _create_estudiantes_view(self):
+        """Crea la vista de Estudiantes cuando se navega al módulo."""
         from modules.estudiantes import EstudiantesView
         return EstudiantesView(self.content)
 
     def _create_matriculas_view(self):
+        """Crea la vista de Matrículas cuando se navega al módulo."""
         from modules.matriculas import MatriculasView
         return MatriculasView(self.content)
 
     def _create_administradores_view(self):
+        """Crea la vista de Administradores cuando se navega al módulo."""
         from modules.administradores import AdministradoresView
         return AdministradoresView(self.content)
 
     def _create_instructores_view(self):
+        """Crea la vista de Instructores cuando se navega al módulo."""
         from modules.instructores import InstructoresView
         return InstructoresView(self.content)
 
     def _create_vehiculos_view(self):
+        """Crea la vista de Vehículos cuando se navega al módulo."""
         from modules.vehiculos import VehiculosView
         return VehiculosView(self.content)
 
     def _create_clases_view(self):
+        """Crea la vista de Clases cuando se navega al módulo."""
         from modules.clases import ClasesView
         return ClasesView(self.content)
 
     def _create_estados_cuenta_view(self):
+        """Crea la vista de Estados de Cuenta cuando se navega al módulo."""
         from modules.estados_cuenta import EstadosCuentaView
         return EstadosCuentaView(self.content)
 
     def _create_reportes_view(self):
+        """Crea la vista de Reportes cuando se navega al módulo."""
         from modules.reportes import ReportesView
         return ReportesView(self.content)
 
     def _show_login_error(self, msg: str):
+        """
+        Muestra un error dentro del diálogo de login (si está abierto).
+
+        Args:
+            msg: Mensaje de error para el usuario.
+        """
         for w in self.winfo_children():
             if isinstance(w, LoginDialog):
                 w._show_error(msg)
@@ -480,6 +542,7 @@ class HaroDesktopApp(ctk.CTk):
     # ----------------------- Login / Sesión ----------------------- #
 
     def _show_login(self):
+        """Abre el diálogo de login y cierra el splash de PyInstaller (si aplica)."""
         self.login_window = LoginDialog(self, on_success=self._on_login_ok, brand=self.BRAND_TEXT)
         if self.API_USER_DEFAULT:
             self.login_window.en_user.insert(0, self.API_USER_DEFAULT)
@@ -493,12 +556,23 @@ class HaroDesktopApp(ctk.CTk):
             pass
 
     def _matches_superadmin(self, user: str, password: str) -> bool:
+        """
+        Valida si las credenciales corresponden al superadministrador local.
+
+        Args:
+            user: Correo/usuario ingresado.
+            password: Contraseña ingresada.
+
+        Returns:
+            True si coincide con `SUPERADMIN_EMAIL` y `SUPERADMIN_PASSWORD`.
+        """
         login = str(user or "").strip().lower()
         secret = str(password or "").strip()
         superadmin_email = str(self.SUPERADMIN_EMAIL or "").strip().lower()
         return login == superadmin_email and secret == str(self.SUPERADMIN_PASSWORD or "")
 
     def _apply_nav_visibility(self):
+        """Muestra/oculta el módulo de Administradores según permisos (superadmin)."""
         btn = getattr(self, "nav_buttons", {}).get("Administradores")
         if not btn:
             return
@@ -508,6 +582,11 @@ class HaroDesktopApp(ctk.CTk):
             btn.grid_remove()
 
     def _on_login_ok(self, user, password):
+        """
+        Callback ejecutado cuando el login fue exitoso.
+
+        Inicializa `ApiClient`, carga perfil del admin actual y abre el primer módulo.
+        """
         from api_client import ApiClient
 
         try:
@@ -547,6 +626,7 @@ class HaroDesktopApp(ctk.CTk):
         self.after(150, self._warm_api_cache_async)
 
     def _warm_api_cache_async(self):
+        """Precarga catálogos frecuentes en background para mejorar la navegación."""
         if not self.api:
             return
 
@@ -570,6 +650,7 @@ class HaroDesktopApp(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _logout(self):
+        """Cierra sesión local (limpia cliente API, vistas y muestra login)."""
         if messagebox.askyesno("Sesión", "¿Está seguro de que desea salir?"):
             self.api = None
             self.api_user = None
@@ -590,9 +671,16 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Navegación ----------------------- #
     def _nav_callback(self, name):
+        """Callback de botones del sidebar: cambia la vista activa."""
         self.switch_view(name)
 
     def switch_view(self, name: str):
+        """
+        Cambia el módulo visible, creando la vista si aún no existe.
+
+        Args:
+            name: Nombre del módulo (clave del sidebar).
+        """
         if name == "Administradores" and not getattr(self, "is_superadmin", False):
             messagebox.showwarning("Acceso restringido", "Solo el superadministrador puede ver esta vista.", parent=self)
             return
@@ -637,19 +725,23 @@ class HaroDesktopApp(ctk.CTk):
 
     # ----------------------- Acciones genéricas ----------------------- #
     def _on_escape(self, _event=None):
+        """Atajo: solicita confirmación y cierra la app (Esc)."""
         if messagebox.askyesno("Salir", "¿Deseas cerrar la aplicación?"):
             self.destroy()
 
     def _focus_search(self, _event=None):
+        """Atajo: enfoca el buscador global (Ctrl+F)."""
         self.search_entry.focus_set()
         self.search_entry.select_range(0, 'end')
 
     def _do_search(self, _event=None):
+        """Ejecuta la búsqueda global (por ahora registra/inspecciona el texto)."""
         q = self.search_entry.get().strip()
         if q:
             self._info(f"Buscar: {q}")
 
     def _sync(self):
+        """Sincroniza datos consultando recursos principales y refrescando vistas cargadas."""
         if not self.api:
             self._info("No hay cliente API activo. Inicia sesión.")
             return
@@ -703,16 +795,24 @@ class HaroDesktopApp(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _toggle_theme(self):
+        """Cambia el modo de apariencia (light/dark)."""
         current = ctk.get_appearance_mode()
         ctk.set_appearance_mode("light" if current == "Dark" else "dark")
 
     def _confirm_delete(self, what="registro"):
+        """
+        Utilidad genérica para confirmar un borrado (UI).
+
+        Args:
+            what: Texto del recurso a eliminar (solo UI).
+        """
         if messagebox.askyesno("Confirmar", f"¿Eliminar {what}?"):
             self._info(f"{what.capitalize()} eliminado.")
         else:
             self._info("Operación cancelada.")
 
     def _toggle_sidebar(self):
+        """Muestra u oculta el sidebar y ajusta el grid principal."""
         if not hasattr(self, "sidebar"):
             return
         if getattr(self, "sidebar_visible", True):
@@ -727,6 +827,7 @@ class HaroDesktopApp(ctk.CTk):
             self.sidebar_visible = True
 
     def _load_current_admin_profile(self):
+        """Carga desde la API el perfil del administrador actual (sede/id) para permisos locales."""
         self.current_admin_profile = None
         self.current_admin_sede = None
         self.current_admin_id = None
@@ -754,6 +855,7 @@ class HaroDesktopApp(ctk.CTk):
 
     # Util
     def _info(self, msg: str):
+        """Log simple (consola) usado por varios módulos."""
         print(msg)
 
 
