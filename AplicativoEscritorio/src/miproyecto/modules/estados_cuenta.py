@@ -1,4 +1,10 @@
 # modules/estados_cuenta.py
+"""
+Módulo de Estados de Cuenta.
+
+Consulta y gestión de saldos/pagos, con render por lotes para mejorar rendimiento en UI.
+"""
+
 from typing import Tuple, Dict, Any, Optional
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -8,6 +14,7 @@ from modules.base import BaseModuleFrame
 from modules.treeview_theme import configure_treeview_style
 
 class EstadosCuentaView(BaseModuleFrame):
+    """Vista de estados de cuenta (consulta, edición y totales según permisos)."""
     ROW_BATCH_SIZE = 30
     ROW_BATCH_DELAY = 4
     MIN_REFRESH_INTERVAL = 500  # ms
@@ -16,6 +23,7 @@ class EstadosCuentaView(BaseModuleFrame):
     student_combo_placeholder = _student_combo_placeholder
 
     def __init__(self, master):
+        """Inicializa la vista de estados de cuenta (filtros, formulario y tabla)."""
         super().__init__(master, "Estados de cuenta", "Gestión de saldos y pagos")
         self.can_edit = bool(getattr(self.app, "is_superadmin", False))
 
@@ -101,9 +109,11 @@ class EstadosCuentaView(BaseModuleFrame):
         self.after(150, self._cargar_catalogos_y_listar)
 
     def _take_estudiante_id(self, rec):
+        """Obtiene el id del estudiante desde un registro de estado de cuenta."""
         return rec.get("idEstudiante") or rec.get("id_estudiante") or rec.get("estudianteId")
 
     def _student_name_from_record(self, rec) -> str:
+        """Extrae el nombre del estudiante desde el registro (si viene embebido)."""
         if not isinstance(rec, dict):
             return ""
 
@@ -123,6 +133,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return ""
 
     def _student_name_for(self, estudiante_id) -> str:
+        """Resuelve un id de estudiante a nombre usando el cache `estudiantes_id_to_name`."""
         if estudiante_id in (None, ""):
             return "—"
         name = self.estudiantes_id_to_name.get(estudiante_id)
@@ -131,6 +142,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return name or "—"
 
     def _apply_search(self, rows):
+        """Filtra filas por termino de busqueda (por nombre del estudiante)."""
         term = (self.en_buscar.get() or "").strip().lower()
         if not term:
             return list(rows or [])
@@ -142,6 +154,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return out
 
     def _on_search_key(self, _evt=None):
+        """Maneja el input de busqueda con debounce para evitar renders excesivos."""
         if self._search_after_id:
             try:
                 self.after_cancel(self._search_after_id)
@@ -150,6 +163,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._search_after_id = self.after(200, lambda: self._queue_render(self._apply_search(self._all_data)))
 
     def _build_filters_bar(self):
+        """Construye la barra de filtros (busqueda y acciones) de la vista."""
         self.filters_bar = ctk.CTkFrame(
             self,
             fg_color=self.app.COLOR_PANEL,
@@ -191,6 +205,7 @@ class EstadosCuentaView(BaseModuleFrame):
         ).grid(row=1, column=2, padx=(0, 14), pady=(0, 12), sticky="e")
 
     def _clear_search(self):
+        """Limpia el termino de busqueda y re-renderiza la tabla."""
         if self._search_after_id:
             try:
                 self.after_cancel(self._search_after_id)
@@ -202,9 +217,11 @@ class EstadosCuentaView(BaseModuleFrame):
         self.after_idle(self.en_buscar.focus_set)
 
     def _normalize_text_filter(self, value: str) -> str:
+        """Normaliza texto para filtros (lowercase y espacios compactados)."""
         return " ".join(str(value or "").lower().split())
 
     def _used_student_ids(self, exclude_record: Optional[Dict[str, Any]] = None):
+        """Retorna ids de estudiantes ya usados (evita duplicar estados de cuenta)."""
         used = set()
         exclude_id = self._take_estudiante_id(exclude_record or {}) if exclude_record else None
         for rec in (self._all_data or []):
@@ -217,6 +234,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return used
 
     def _refresh_student_combo_values(self, typed_text: str = ""):
+        """Refresca las opciones del combobox de estudiantes segun lo que se escribe."""
         values = []
         if self._form_mode == "edit":
             current_rec = None
@@ -252,6 +270,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._restore_student_combo_text(raw_term)
 
     def _restore_student_combo_text(self, text: str):
+        """Restaura el texto tecleado en el combobox y la posicion del cursor."""
         try:
             self.cb_estudiante.set(text)
             entry = getattr(self.cb_estudiante, "_entry", None)
@@ -262,10 +281,12 @@ class EstadosCuentaView(BaseModuleFrame):
             pass
 
     def _apply_student_filter(self, typed: str):
+        """Aplica el filtro de estudiantes (debounce) y actualiza opciones."""
         self._student_filter_after_id = None
         self._refresh_student_combo_values(typed)
 
     def _on_student_filter_key(self, _evt=None):
+        """Maneja la escritura en el combobox de estudiante con debounce."""
         typed = self.cb_estudiante.get() if hasattr(self, "cb_estudiante") else ""
         if self._student_filter_after_id:
             try:
@@ -276,6 +297,7 @@ class EstadosCuentaView(BaseModuleFrame):
 
     # ===================== FORMULARIO =====================
     def _build_form(self):
+        """Construye el formulario de creacion/edicion de estados de cuenta."""
         self.form = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL,
                                  corner_radius=12, border_width=2, border_color=self.app.COLOR_DIVIDER)
         for c in range(4):
@@ -405,6 +427,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._editing_idx = None
 
     def _show_form(self, mode="create", data=None):
+        """Muestra el formulario en modo `create` o `edit` y precarga datos si aplica."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede modificar estados de cuenta.")
             return
@@ -434,6 +457,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self.form.grid()
 
     def _hide_form(self):
+        """Oculta el formulario y restablece estados de widgets si aplica."""
         try:
             self.cb_estudiante.configure(state="normal")
         except Exception:
@@ -441,6 +465,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self.form.grid_remove()
 
     def _calc_financials(self, total: float, pagado: float, multas: float) -> Dict[str, Any]:
+        """Calcula totales/estado (total exigible, saldo, estado y aptitud)."""
         total_exigible = total + multas
         saldo = total_exigible - pagado
         if total < 0 or pagado < 0 or multas < 0 or pagado > total_exigible:
@@ -459,6 +484,7 @@ class EstadosCuentaView(BaseModuleFrame):
         }
 
     def _refresh_form_preview(self, _event=None):
+        """Actualiza el panel de vista previa (pagado, saldo, estado) en el formulario."""
         try:
             total = self._parse_money(self.en_total.get())
             abono = self._parse_money(self.en_abono.get())
@@ -487,12 +513,14 @@ class EstadosCuentaView(BaseModuleFrame):
 
     # ===================== CRUD =====================
     def _nuevo(self):
+        """Abre el formulario para crear un nuevo estado de cuenta."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede crear estados de cuenta.")
             return
         self._show_form("create", {})
 
     def _editar(self):
+        """Abre el formulario para editar el registro seleccionado."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede editar estados de cuenta.")
             return
@@ -503,6 +531,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._show_form("edit", rec)
 
     def _eliminar(self):
+        """Elimina el registro seleccionado (API si existe, o local si no)."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede eliminar estados de cuenta.")
             return
@@ -530,9 +559,12 @@ class EstadosCuentaView(BaseModuleFrame):
         except Exception as e:
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
 
-    def _cancelar(self): self._hide_form()
+    def _cancelar(self):
+        """Cancela la creacion/edicion actual y oculta el formulario."""
+        self._hide_form()
 
     def _guardar(self):
+        """Valida y guarda cambios del formulario (create/edit)."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede guardar cambios en estados de cuenta.")
             return
@@ -582,6 +614,7 @@ class EstadosCuentaView(BaseModuleFrame):
 
     # ===================== CARGA DATOS =====================
     def _cargar_catalogos_y_listar(self, force_refresh=False):
+        """Carga catalogos (estudiantes) y luego lista estados de cuenta desde la API."""
         try:
             if not getattr(self.app, "api", None):
                 self._refrescar(local_only=True)
@@ -617,6 +650,7 @@ class EstadosCuentaView(BaseModuleFrame):
             messagebox.showerror("Estados de cuenta", f"No fue posible cargar catálogos:\n{e}", parent=self)
 
     def _refrescar(self, local_only=False, force_refresh=True):
+        """Refresca la data desde la API (o local) respetando un intervalo minimo."""
         if local_only:
             base = self._all_data or self._data
             self._queue_render(self._apply_search(base))
@@ -661,6 +695,7 @@ class EstadosCuentaView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _show_loading(self, on=True, text="Actualizando..."):
+        """Muestra u oculta un indicador de carga sobre la tabla."""
         if on:
             if self._loading_overlay and self._loading_overlay.winfo_exists():
                 return
@@ -678,6 +713,7 @@ class EstadosCuentaView(BaseModuleFrame):
 
     # ===================== RENDER =====================
     def _apply_colspecs(self, container):
+        """Define columnas y configura el grid del contenedor con anchos/pesos."""
         specs = [
             ("Estudiante",   430, 4, "w"),
             ("Curso",        105, 1, "w"),
@@ -694,6 +730,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return specs
 
     def _queue_render(self, rows):
+        """Encola un render de tabla con delay (batch) y actualiza `self._data`."""
         self._data = list(rows or [])
         if self._render_after_id:
             try:
@@ -703,13 +740,16 @@ class EstadosCuentaView(BaseModuleFrame):
         self._render_after_id = self.after(self.RENDER_DELAY_MS, self._flush_render)
 
     def _flush_render(self):
+        """Ejecuta el render programado y limpia el id del job."""
         self._render_after_id = None
         self._set_data(self._data)
 
     def _render_table(self):
+        """Dispara un render completo usando la data actual."""
         self._queue_render(self._data)
 
     def _row_values(self, rec):
+        """Calcula valores derivados para una fila (saldo, estado, apto, colores)."""
         est = self._student_name_from_record(rec) or self._student_name_for(self._take_estudiante_id(rec))
         total = float(rec.get("montoTotal") or 0)
         pagado = float(rec.get("montoPagado") or 0)
@@ -728,6 +768,7 @@ class EstadosCuentaView(BaseModuleFrame):
         }
 
     def _estado_badge_style(self, estado: str):
+        """Retorna (bg, fg) para el badge de estado segun el texto del estado."""
         t = str(estado or "").strip().lower()
         if "pagado" in t:
             return self.app.GREEN_SOFT_BG, self.app.COLOR_GREEN
@@ -738,11 +779,13 @@ class EstadosCuentaView(BaseModuleFrame):
         return self.app.COLOR_INPUT_BG, self.app.COLOR_TEXT
 
     def _apto_badge_style(self, apto: bool):
+        """Retorna (bg, fg) para el badge de aptitud (apto/no apto)."""
         if apto:
             return self.app.GREEN_SOFT_BG, self.app.COLOR_GREEN
         return self.app.RED_SOFT_BG, self.app.COLOR_RED
 
     def _table_columns(self):
+        """Define columnas visibles de la tabla (nombre, ancho y alineacion)."""
         return [
             ("Estudiante", 430, "w"),
             ("Curso", 110, "w"),
@@ -755,6 +798,7 @@ class EstadosCuentaView(BaseModuleFrame):
         ]
 
     def _build_table_shell(self):
+        """Crea el Treeview y scrollbars si no existen, y aplica el tema."""
         if getattr(self, "tree", None) and self.tree.winfo_exists():
             return
 
@@ -786,6 +830,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _set_data(self, rows):
+        """Carga `rows` en el Treeview por lotes y actualiza totales."""
         self._build_table_shell()
         self._selected_idx = None
         data = list(rows or [])
@@ -843,6 +888,7 @@ class EstadosCuentaView(BaseModuleFrame):
         paint_batch(0)
 
     def _on_tree_select(self, _evt=None):
+        """Actualiza el indice seleccionado al cambiar la seleccion del Treeview."""
         sel = self.tree.selection()
         if not sel:
             self._selected_idx = None
@@ -850,6 +896,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._selected_idx = self._iid_to_index.get(sel[0])
 
     def _render_totals(self):
+        """Renderiza el recuadro de totales (solo para superadmin)."""
         try:
             if hasattr(self, "_totals_frame") and self._totals_frame is not None:
                 self._totals_frame.destroy()
@@ -919,6 +966,7 @@ class EstadosCuentaView(BaseModuleFrame):
 
     # ===================== SELECCIÓN =====================
     def _edit_row(self, idx: int):
+        """Atajo para editar una fila por indice (seleccion + abrir formulario)."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede editar estados de cuenta.")
             return
@@ -932,6 +980,7 @@ class EstadosCuentaView(BaseModuleFrame):
         self._show_form("edit", self._data[idx])
 
     def _delete_row(self, idx: int):
+        """Atajo para eliminar una fila por indice (seleccion + confirmacion)."""
         if not self.can_edit:
             self.app._info("Solo el superadministrador puede eliminar estados de cuenta.")
             return
@@ -1049,6 +1098,7 @@ class EstadosCuentaView(BaseModuleFrame):
         return (True, "")
 
     def _validate_money_live(self, event=None):
+        """Filtra caracteres no numericos en vivo en inputs de dinero (., , y digitos)."""
         widget = getattr(event, "widget", None)
         if widget is None:
             return

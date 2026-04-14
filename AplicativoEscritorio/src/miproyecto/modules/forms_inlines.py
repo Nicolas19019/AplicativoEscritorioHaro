@@ -1,3 +1,9 @@
+"""
+Componentes UI reutilizables (formularios inline y mini-diálogos).
+
+Centraliza widgets usados por múltiples módulos (estudiantes, instructores, vehículos, clases).
+"""
+
 import calendar as _cal
 from datetime import date, datetime
 import re
@@ -10,6 +16,7 @@ SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
 
 
 def _normalize_sede_label(value):
+    """Normaliza valores de sede a etiquetas estandar (`1 de Mayo` / `El Eden`)."""
     txt = str(value or "").strip().lower()
     if not txt:
         return ""
@@ -38,15 +45,18 @@ def _normalize_sede_label(value):
 
 
 def _upper_text(value):
+    """Convierte un valor a texto en mayusculas, limpiando espacios."""
     return str(value or "").strip().upper()
 
 
 def _assigned_admin_sede(app) -> str:
+    """Obtiene la sede asignada al administrador actual (si aplica)."""
     raw = getattr(app, "current_admin_sede", None)
     return _normalize_sede_label(raw) or str(raw or "").strip()
 
 
 def _apply_admin_sede_to_combobox(app, combo):
+    """Restringe el combobox de sede segun el rol/sede asignada del administrador."""
     assigned_sede = _assigned_admin_sede(app)
     if getattr(app, "is_superadmin", False) or not assigned_sede:
         combo.configure(values=SEDES_DISPONIBLES, state="normal")
@@ -69,6 +79,7 @@ class InstructorInlineForm(ctk.CTkFrame):
     }
     """
     def __init__(self, master, app, on_submit, on_cancel):
+        """Crea el formulario inline para registrar/editar instructores."""
         super().__init__(
             master,
             fg_color=app.COLOR_PANEL,
@@ -153,6 +164,7 @@ class InstructorInlineForm(ctk.CTkFrame):
         self.mode = "create"
         _apply_admin_sede_to_combobox(self.app, self.cb_sede)
     def _reset_fields(self):
+        """Limpia los campos y restablece valores por defecto del formulario."""
         try:
             for w in (
                 self.en_ced,
@@ -170,6 +182,7 @@ class InstructorInlineForm(ctk.CTkFrame):
         except Exception as e:
             print(f"[WARN] Error al reiniciar campos en InstructorInlineForm: {e}")
     def _force_entry_placeholders(self):
+        """Fuerza el pintado de placeholders en CTkEntry (workaround visual)."""
         try:
             for attr in dir(self):
                 widget = getattr(self, attr)
@@ -180,20 +193,24 @@ class InstructorInlineForm(ctk.CTkFrame):
         except Exception as e:
             print(f"[WARN] Error forzando placeholders en {self.__class__.__name__}: {e}")
     def show_create(self):
+        """Muestra el formulario en modo creacion."""
         self.mode = "create"
         self._reset_fields()
         _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
     def show_edit(self, data):
+        """Muestra el formulario en modo edicion y carga los datos existentes."""
         self.mode = "edit"
         self._fill(data or {})
         _apply_admin_sede_to_combobox(self.app, self.cb_sede)
         self.grid()
         self.after(100, self._force_entry_placeholders)
     def hide(self):
+        """Oculta el formulario (sin destruirlo)."""
         self.grid_remove()
     def _fill(self, d):
+        """Rellena campos del formulario con un dict del backend."""
         for w in (
             self.en_ced,
             self.en_nom,
@@ -230,6 +247,7 @@ class InstructorInlineForm(ctk.CTkFrame):
         visible_str = str(visible_val).strip().lower()
         self.cb_visible.set("true" if visible_str in {"true", "1", "si", "yes"} else "false")
     def _collect(self):
+        """Recolecta valores del formulario y arma el payload del backend."""
         email = self.en_email.get().strip()
         especialidad = (self.cb_esp.get() or "").strip().lower()
         categoria = (self.cb_categoria.get() or "").strip().lower()
@@ -250,6 +268,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             "contrasena": None,
         }
     def _validate(self, d):
+        """Valida el payload recolectado y retorna (ok, mensaje)."""
         req = [
             "cedula", "nombre", "apellido", "email", "especialidad",
             "categoria", "telefono", "usuario"
@@ -271,6 +290,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             return False, "Email no valido."
         return True, ""
     def _save(self):
+        """Valida y envia el payload via `on_submit`."""
         d = self._collect()
         print("[DEBUG] Colectado:", d)
         ok, msg = self._validate(d)
@@ -286,6 +306,7 @@ class InstructorInlineForm(ctk.CTkFrame):
             self.on_submit(d, mode=self.mode)
         self.hide()
     def _cancel(self):
+        """Cancela el formulario y ejecuta `on_cancel` si existe."""
         if self.on_cancel:
             self.on_cancel()
         self.hide()
@@ -298,6 +319,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
     { "placa", "marca", "modelo", "anio", "sede", "estado" }
     """
     def __init__(self, master, app, on_submit, on_cancel):
+        """Crea el formulario inline para registrar/editar vehiculos."""
         super().__init__(
             master,
             fg_color=app.COLOR_PANEL,
@@ -384,6 +406,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
 
     # -------- API pública --------
     def show_create(self):
+        """Muestra el formulario en modo creacion."""
         self.mode = "create"
         self._fill({})
         _apply_admin_sede_to_combobox(self.app, self.cb_sede)
@@ -391,6 +414,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.after(100, self._force_entry_placeholders)
 
     def show_edit(self, data):
+        """Muestra el formulario en modo edicion y carga los datos existentes."""
         self.mode = "edit"
         self._fill(data or {})
         _apply_admin_sede_to_combobox(self.app, self.cb_sede)
@@ -398,10 +422,12 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.after(100, self._force_entry_placeholders)
 
     def hide(self):
+        """Oculta el formulario (sin destruirlo)."""
         self.grid_remove()
 
     # -------- Internos --------
     def _fill(self, d):
+        """Rellena campos del formulario con un dict del backend."""
         for w in (self.en_placa, self.en_marca, self.en_modelo, self.en_anio):
             w.delete(0, "end")
         self.en_placa.insert(0, d.get("placa", ""))
@@ -413,6 +439,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.cb_estado.set(d.get("estado", "Activo") or "Activo")
 
     def _collect(self):
+        """Recolecta valores del formulario y arma el payload del backend."""
         anio_raw = (self.en_anio.get() or "").strip()
         return {
             "placa": _upper_text(self.en_placa.get()),
@@ -424,6 +451,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         }
 
     def _validate(self, d):
+        """Valida el payload recolectado y retorna (ok, mensaje)."""
         req = ["placa","marca","modelo","anio","sede","estado"]
         for k in req:
             if d.get(k) in ("", None):
@@ -435,6 +463,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         return True, ""
 
     def _save(self):
+        """Valida y envia el payload via `on_submit`."""
         d = self._collect()
         ok, msg = self._validate(d)
         if not ok:
@@ -445,6 +474,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
         self.hide()
 
     def _cancel(self):
+        """Cancela el formulario y ejecuta `on_cancel` si existe."""
         if self.on_cancel:
             self.on_cancel()
         self.hide()
@@ -453,6 +483,7 @@ class VehiculoInlineForm(ctk.CTkFrame):
 class MiniCalendarDialog(ctk.CTkFrame):
     """Calendario embebido, reutilizable en cualquier vista."""
     def __init__(self, master, on_pick, start_date=None):
+        """Inicializa el calendario y configura el callback `on_pick` (YYYY-MM-DD)."""
         super().__init__(master)
 
         # Detectar app o definir colores por defecto
@@ -525,19 +556,23 @@ class MiniCalendarDialog(ctk.CTkFrame):
     #   Navegación de meses
     # =======================
     def _set_month_label(self):
+        """Actualiza el label del mes actual."""
         self.lbl_month.configure(text=self.current.strftime("%B %Y").capitalize())
 
     def _prev_month(self):
+        """Navega al mes anterior y re-renderiza el calendario."""
         y, m = self.current.year, self.current.month
         self.current = date(y - 1, 12, 1) if m == 1 else date(y, m - 1, 1)
         self._render_days()
 
     def _next_month(self):
+        """Navega al siguiente mes y re-renderiza el calendario."""
         y, m = self.current.year, self.current.month
         self.current = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
         self._render_days()
 
     def _go_today(self):
+        """Posiciona el calendario en el mes actual (hoy)."""
         t = date.today()
         self.current = date(t.year, t.month, 1)
         self._render_days()
@@ -546,6 +581,7 @@ class MiniCalendarDialog(ctk.CTkFrame):
     #   Renderizado
     # =======================
     def _render_days(self):
+        """Renderiza la grilla de dias del mes actual y enlaza el callback por dia."""
         for w in self.body.winfo_children(): 
             w.destroy()
 
@@ -589,6 +625,7 @@ class ClaseInlineForm(ctk.CTkFrame):
     Formulario para crear/editar clases.
     """
     def __init__(self, master, app, on_submit, on_cancel):
+        """Crea el formulario inline para programar/editar clases practicas."""
         super().__init__(
             master,
             fg_color=app.COLOR_PANEL,
@@ -839,6 +876,7 @@ class ClaseInlineForm(ctk.CTkFrame):
 
     # === Lógica de horas ===
     def _auto_set_hf(self, selected):
+        """Calcula automaticamente la hora fin cuando se elige hora inicio."""
         try:
             if not selected or "hora" in selected.lower():
                 return
@@ -853,6 +891,7 @@ class ClaseInlineForm(ctk.CTkFrame):
 
     # === API pública ===
     def set_options(self, estudiantes, profesores, vehiculos):
+        """Configura las opciones de los combobox (estudiantes, instructores, vehiculos)."""
         self._est_opts = [(str(e.get("id")), f"{e.get('nombre','')} {e.get('apellido','')}".strip())
                           for e in (estudiantes or []) if e.get("id")]
         self._prof_opts = [(str(p.get("id")), f"{p.get('nombre','')} {p.get('apellido','')}".strip())
@@ -864,6 +903,7 @@ class ClaseInlineForm(ctk.CTkFrame):
         self.cb_veh.configure(values=[t for _, t in self._veh_opts])
 
     def _save(self):
+        """Valida y envia el payload via `on_submit`."""
         data = self._collect()
         ok, msg = self._validate(data)
         if not ok:
@@ -874,11 +914,13 @@ class ClaseInlineForm(ctk.CTkFrame):
         self.hide()
 
     def _cancel(self):
+        """Cancela el formulario y ejecuta `on_cancel` si existe."""
         if self.on_cancel:
             self.on_cancel()
         self.hide()
 
     def _collect(self):
+        """Recolecta valores del formulario y arma el payload del backend."""
         def val(cb, opts):
             txt = cb.get()
             for v, t in opts:
@@ -897,6 +939,7 @@ class ClaseInlineForm(ctk.CTkFrame):
         }
 
     def _validate(self, d):
+        """Valida el payload recolectado y retorna (ok, mensaje)."""
         for k in ("id_estudiante","id_profesor","placa_vehiculo","fecha","horaInicio","horaFin","estado"):
             if not d.get(k):
                 return False, f"El campo '{k}' es obligatorio."
@@ -907,12 +950,14 @@ class ClaseInlineForm(ctk.CTkFrame):
         return True, ""
 
     def show_create(self):
+        """Muestra el formulario en modo creacion y reinicia campos."""
         self.mode = "create"
         self._reset_fields()
         self.grid()
 
 
     def _reset_fields(self):
+        """Limpia campos del formulario y restablece valores por defecto."""
         try:
             self.cb_est.set("Seleccione un estudiante")
             self.cb_prof.set("Seleccione un instructor")
@@ -930,6 +975,7 @@ class ClaseInlineForm(ctk.CTkFrame):
 
 
     def show_edit(self, d):
+        """Muestra el formulario en modo edicion y carga los valores del registro."""
         self.mode = "edit"
         try:
             self.cb_est.set(next((t for v,t in self._est_opts if str(v)==str(d.get("id_estudiante"))),"Seleccione un estudiante"))
@@ -944,4 +990,5 @@ class ClaseInlineForm(ctk.CTkFrame):
         self.grid()
 
     def hide(self): 
+        """Oculta el formulario (sin destruirlo)."""
         self.grid_remove()

@@ -1,4 +1,10 @@
 # modules/clases.py
+"""
+Módulo de Clases.
+
+Contiene `ClasesView` (tabla + modo calendario) para clases prácticas.
+"""
+
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -27,6 +33,7 @@ class ClasesView(BaseModuleFrame):
     HEADER_PADY = (10, 6)
 
     def __init__(self, master):
+        """Inicializa la vista de clases (tabla normal y modo calendario)."""
         super().__init__(master, "Clases", "Gestión de clases teóricas y prácticas")
         self.app = self.winfo_toplevel()
 
@@ -125,6 +132,7 @@ class ClasesView(BaseModuleFrame):
         self.after(150, lambda: self._cargar_catalogos_y_listar(force_refresh=True))
 
     def _build_filters_bar(self, parent):
+        """Construye la barra de filtros (búsqueda y estado) para la vista de clases."""
         filt = ctk.CTkFrame(
             parent,
             fg_color=self.app.COLOR_PANEL,
@@ -218,6 +226,7 @@ class ClasesView(BaseModuleFrame):
     # VISTA NORMAL: TABLA PRO
     # ============================
     def _build_normal_view(self):
+        """Construye la vista normal (tabla tipo Treeview) para listar clases."""
         self.view_normal = ctk.CTkFrame(self.main, fg_color="transparent")
         self.view_normal.grid(row=0, column=0, sticky="nsew")
         self.view_normal.grid_columnconfigure(0, weight=1)
@@ -245,6 +254,7 @@ class ClasesView(BaseModuleFrame):
         self._empty_label = None
 
     def _build_table_shell(self):
+        """Crea el Treeview y scrollbars si no existen y aplica el tema/estilos."""
         if getattr(self, "tree", None) and self.tree.winfo_exists():
             return
 
@@ -283,6 +293,7 @@ class ClasesView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _on_tree_select(self, _evt=None):
+        """Actualiza el id/clave seleccionada cuando cambia la selección del Treeview."""
         try:
             sel = self.tree.selection()
             if not sel:
@@ -337,6 +348,7 @@ class ClasesView(BaseModuleFrame):
     # VISTA CALENDARIO
     # ============================
     def _build_calendar_view(self):
+        """Construye la vista calendario (calendario + panel derecho de tarjetas)."""
         self.view_calendar = ctk.CTkFrame(self.main, fg_color="transparent")
         self.view_calendar.grid_rowconfigure(0, weight=1)
         self.view_calendar.grid_columnconfigure(0, weight=0, minsize=360)
@@ -381,6 +393,7 @@ class ClasesView(BaseModuleFrame):
         self.cards_container_right.grid_columnconfigure(0, weight=1)
 
     def _render_vertical_cards(self, parent, records):
+        """Renderiza tarjetas verticales del día seleccionado, agrupando por área y estudiante."""
         for w in parent.winfo_children():
             try:
                 w.destroy()
@@ -589,6 +602,7 @@ class ClasesView(BaseModuleFrame):
     # Mostrar vista
     # ============================
     def _show_view(self, name: str):
+        """Muestra la vista indicada (`normal` o `calendar`) y sincroniza el contenido."""
         for w in self.main.winfo_children():
             w.grid_forget()
 
@@ -604,9 +618,11 @@ class ClasesView(BaseModuleFrame):
             self._sync_rows_to("top")
 
     def _toggle_calendar_mode(self):
+        """Alterna entre la vista normal y la vista calendario."""
         self._show_view("calendar" if not self._calendar_mode else "normal")
 
     def _restablecer_filtros(self):
+        """Restablece filtros (búsqueda/estado/fecha) y refresca la vista actual."""
         self.fecha_filtrada = None
         if hasattr(self, "f_buscar"):
             self.f_buscar.delete(0, "end")
@@ -617,6 +633,7 @@ class ClasesView(BaseModuleFrame):
         self.app._info("Filtros restablecidos. Mostrando todas las clases.")
 
     def _debounced_apply_filters(self):
+        """Aplica filtros con debounce para evitar renders excesivos al escribir."""
         if self._filter_after_id:
             try:
                 self.after_cancel(self._filter_after_id)
@@ -625,12 +642,14 @@ class ClasesView(BaseModuleFrame):
         self._filter_after_id = self.after(180, lambda: self._sync_rows_to("right" if self._calendar_mode else "top"))
 
     def _allowed_admin_sede(self) -> str:
+        """Retorna la sede permitida para el admin actual (vacío si es superadmin)."""
         if getattr(self.app, "is_superadmin", False):
             return ""
         return self._normalize_admin_sede(getattr(self.app, "current_admin_sede", None))
 
     @staticmethod
     def _normalize_admin_sede(value) -> str:
+        """Normaliza un valor de sede para comparaciones (admin/registro)."""
         txt = str(value or "").strip().lower()
         if txt in {"1 de mayo", "1demayo"}:
             return "1 de Mayo"
@@ -642,6 +661,7 @@ class ClasesView(BaseModuleFrame):
     # Catálogos y datos
     # ============================
     def _cargar_catalogos_y_listar(self, force_refresh=False):
+        """Carga catálogos (estudiantes/instructores/vehículos) y luego refresca clases."""
         try:
             if not (self.app and getattr(self.app, "api", None)):
                 self.app._info("Modo local: sin conexión a API.")
@@ -698,14 +718,17 @@ class ClasesView(BaseModuleFrame):
     # CRUD
     # ============================
     def _nuevo(self):
+        """Abre el formulario inline en modo creación."""
         if self.form:
             self.form.show_create()
 
     def _on_cancel(self):
+        """Oculta el formulario inline sin guardar cambios."""
         if self.form:
             self.form.hide()
 
     def _editar(self):
+        """Abre el formulario inline para editar la clase seleccionada."""
         if not self._selected_id:
             self.app._info("Selecciona un registro primero.")
             return
@@ -714,6 +737,7 @@ class ClasesView(BaseModuleFrame):
             self.form.show_edit(rec)
 
     def _eliminar(self):
+        """Elimina la clase seleccionada (API si existe, o local si no)."""
         if not self._selected_id:
             self.app._info("Selecciona una clase para eliminar.")
             return
@@ -739,6 +763,7 @@ class ClasesView(BaseModuleFrame):
             messagebox.showerror("Error", f"No fue posible eliminar:\n{e}", parent=self)
 
     def _on_submit(self, payload, mode):
+        """Guarda cambios del formulario inline (create/edit) y refresca la vista."""
         try:
             if mode == "create":
                 ok, msg = self._validate_same_sede_on_create(payload or {})
@@ -788,6 +813,7 @@ class ClasesView(BaseModuleFrame):
     # Google Calendar sync
     # ============================
     def _try_sync_google_calendar(self, payload):
+        """Intenta crear un evento en Google Calendar para la clase (si está habilitado)."""
         if not getattr(self.app, "GOOGLE_CALENDAR_ENABLED", True):
             return
         if not (self.app and getattr(self.app, "api", None)):
@@ -835,6 +861,7 @@ class ClasesView(BaseModuleFrame):
             )
 
     def _build_google_calendar_request(self, payload):
+        """Construye el payload para el endpoint de Google Calendar a partir de la clase."""
         fecha = str(payload.get("fecha") or "").strip()
         hora_inicio = str(payload.get("horaInicio") or "").strip()
         hora_fin = str(payload.get("horaFin") or "").strip()
@@ -886,6 +913,7 @@ class ClasesView(BaseModuleFrame):
         }
 
     def _to_iso8601(self, fecha, hora, tz_name):
+        """Convierte fecha+hora a ISO8601 con zona horaria para Calendar."""
         try:
             dt_naive = datetime.datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
             try:
@@ -898,6 +926,7 @@ class ClasesView(BaseModuleFrame):
             return None
 
     def _find_by_id(self, records, expected_id, id_keys):
+        """Busca un registro por id dentro de una lista, usando múltiples claves candidatas."""
         if expected_id in (None, ""):
             return None
         target = str(expected_id)
@@ -909,6 +938,7 @@ class ClasesView(BaseModuleFrame):
         return None
 
     def _find_by_placa(self, records, placa):
+        """Busca un vehículo por placa dentro de una lista de registros."""
         p = str(placa or "").strip().upper()
         if not p:
             return None
@@ -918,12 +948,14 @@ class ClasesView(BaseModuleFrame):
         return None
 
     def _person_name(self, person, fallback="Persona"):
+        """Obtiene nombre completo desde un dict persona, con fallback."""
         if not person:
             return fallback
         full = f"{person.get('nombre', '')} {person.get('apellido', '')}".strip()
         return full or fallback
 
     def _collect_attendees(self, est, prof):
+        """Recolecta correos válidos (asistentes) desde estudiante e instructor."""
         mails = []
         for person in (est, prof):
             if not person:
@@ -937,6 +969,7 @@ class ClasesView(BaseModuleFrame):
     # Refresh (bg)
     # ============================
     def _refrescar(self, local_only=False, force_refresh=True):
+        """Refresca la lista de clases desde la API (con throttle) y sincroniza la vista."""
         now = int(time.time() * 1000)
         if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
             return
@@ -971,6 +1004,7 @@ class ClasesView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_current_filters(self, data):
+        """Aplica filtros actuales (búsqueda, estado, fecha, sede) a la lista de clases."""
         rows = list(data or [])
         query = (self.f_buscar.get() if hasattr(self, "f_buscar") else "" or "").strip().lower()
         estado = (self.f_estado.get() if hasattr(self, "f_estado") else "Todos" or "Todos").strip().lower()
@@ -1014,9 +1048,11 @@ class ClasesView(BaseModuleFrame):
     # Sync rows -> vista actual
     # ============================
     def _row_key(self, rec):
+        """Construye una clave estable para identificar una fila (id o combinación local)."""
         return rec.get("id") or rec.get("_local_id") or (self._take_id_est(rec), rec.get("fecha"), rec.get("horaInicio"))
 
     def _sync_rows_to(self, where: str):
+        """Sincroniza los registros filtrados a la vista actual (tabla o panel derecho)."""
         filtered_rows = self._apply_current_filters(self._data)
         if where == "top":
             self._set_table_data(filtered_rows)
@@ -1027,6 +1063,7 @@ class ClasesView(BaseModuleFrame):
             self._update_calendar_highlights()
 
     def _normalize_ymd(self, value):
+        """Normaliza entradas de fecha a string YYYY-MM-DD para comparación."""
         if value is None:
             return ""
         if isinstance(value, datetime.date):
@@ -1054,6 +1091,7 @@ class ClasesView(BaseModuleFrame):
     # Valores por fila
     # ============================
     def _row_values(self, rec):
+        """Construye el arreglo de valores de columna para el Treeview."""
         id_est = self._take_id_est(rec)
         est = rec.get("nombre_estudiante") or self._student_name(id_est)
         doc = self._get_documento_from(rec)
@@ -1071,9 +1109,11 @@ class ClasesView(BaseModuleFrame):
         ]
 
     def _take_id_est(self, rec):
+        """Extrae el id del estudiante desde un registro de clase."""
         return rec.get("id_estudiante") or rec.get("idEstudiante") or rec.get("estudianteId")
 
     def _student_name(self, id_est):
+        """Resuelve id de estudiante a nombre usando cache local de catálogos."""
         if id_est in (None, ""):
             return "Estudiante"
         return (
@@ -1083,6 +1123,7 @@ class ClasesView(BaseModuleFrame):
         )
 
     def _student_area(self, id_est):
+        """Determina el área (carro/moto/mixto) y etiqueta para un estudiante."""
         e = self._find_by_id(self._estudiantes, id_est, ("id", "idEstudiante"))
         tipo = str((e or {}).get("tipoPase") or "").strip().lower()
         cat = str(

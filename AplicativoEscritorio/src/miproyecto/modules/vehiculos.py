@@ -1,3 +1,9 @@
+"""
+Módulo de Vehículos.
+
+Vista para crear/editar vehículos y consultar datos desde la API.
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox, ttk
 import threading
@@ -8,6 +14,15 @@ from modules.treeview_theme import configure_treeview_style
 
 
 def _normalize_sede_label(value) -> str:
+    """
+    Normaliza el texto de sede para mostrar valores consistentes en UI.
+
+    Args:
+        value: Texto original (puede venir con acentos/variaciones).
+
+    Returns:
+        Sede normalizada (`"1 de Mayo"` / `"El Eden"` o el valor original).
+    """
     txt = str(value or "").strip().lower()
     if not txt:
         return str(value or "").strip()
@@ -32,6 +47,7 @@ def _normalize_sede_label(value) -> str:
 
 
 class VehiculosView(BaseModuleFrame):
+    """Vista de gestión de vehículos (tabla, filtros y formulario)."""
     DEBOUNCE_MS = 250
     MIN_REFRESH_INTERVAL = 500
     RENDER_DELAY_MS = 16
@@ -39,6 +55,7 @@ class VehiculosView(BaseModuleFrame):
     TREE_INSERT_DELAY = 1
 
     def __init__(self, master):
+        """Inicializa la vista (toolbar, formulario, tabla) y programa la carga inicial."""
         super().__init__(master, "Vehículos", "Gestione los automóviles de la academia")
 
         self._all_data = []
@@ -107,6 +124,7 @@ class VehiculosView(BaseModuleFrame):
     #                TREEVIEW (TABLA RÁPIDA)
     # =====================================================
     def _build_tree(self):
+        """Construye Treeview, columnas y estilos; enlaza selección y doble clic."""
         style = ttk.Style()
         palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
@@ -136,6 +154,7 @@ class VehiculosView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _on_tree_select(self, _=None):
+        """Evento de selección: mapea el IID seleccionado a índice de `_data`."""
         sel = self.tree.selection()
         if not sel:
             self._selected_idx = None
@@ -145,6 +164,7 @@ class VehiculosView(BaseModuleFrame):
 
     @staticmethod
     def _sede_value(vh):
+        """Extrae la sede del vehículo desde llaves/estructuras variadas (string/dict/id)."""
         for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
             if key not in vh:
                 continue
@@ -168,6 +188,7 @@ class VehiculosView(BaseModuleFrame):
         return ""
 
     def _row_values(self, vh):
+        """Convierte un dict de vehículo a la tupla de valores de la fila."""
         estado = str(vh.get("estado", "") or "").strip()
         estado_disp = estado.capitalize() if estado else ""
         return (
@@ -180,6 +201,7 @@ class VehiculosView(BaseModuleFrame):
         )
 
     def _set_data(self, rows):
+        """Repinta el Treeview con la lista actual de vehículos."""
         for iid in self.tree.get_children():
             self.tree.delete(iid)
 
@@ -213,27 +235,32 @@ class VehiculosView(BaseModuleFrame):
     #                ACCIONES
     # =====================================================
     def _nuevo(self):
+        """Acción: abrir formulario para crear vehículo."""
         self.form.show_create()
 
     def _editar(self):
+        """Acción: abrir formulario para editar el vehículo seleccionado."""
         if self._selected_idx is None:
             self.app._info("Selecciona un vehículo primero.")
             return
         self.form.show_edit(self._data[self._selected_idx])
 
     def _eliminar_seleccionado(self):
+        """Acción: eliminar el vehículo seleccionado (confirmación + API)."""
         if self._selected_idx is None:
             self.app._info("Selecciona un vehículo primero.")
             return
         self._delete_row(self._selected_idx)
 
     def _cancel_inline(self):
+        """Acción: ocultar el formulario inline."""
         self.form.hide()
 
     # =====================================================
     #                API
     # =====================================================
     def _refrescar(self, force_refresh=True):
+        """Consulta la API de vehículos, aplica sede/permisos y repinta tabla."""
         now = int(time.time() * 1000)
         if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
             return
@@ -273,6 +300,7 @@ class VehiculosView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _submit_inline(self, payload, mode):
+        """Callback del formulario: crea/actualiza vehículo y refresca datos."""
         try:
             payload = dict(payload or {})
             for key in ("placa", "marca", "modelo"):
@@ -302,6 +330,7 @@ class VehiculosView(BaseModuleFrame):
             messagebox.showerror("Vehículos", str(e), parent=self)
 
     def _delete_row(self, idx):
+        """Elimina un vehículo por índice (confirmación + delete en API)."""
         vh = self._data[idx]
         placa = vh.get("placa")
 

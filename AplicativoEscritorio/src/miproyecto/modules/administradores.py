@@ -1,3 +1,9 @@
+"""
+Módulo de Administradores.
+
+Permite gestionar administradores y su sede asociada (según permisos del usuario).
+"""
+
 from datetime import datetime
 from tkinter import messagebox, ttk
 
@@ -10,6 +16,15 @@ SEDES_ADMIN = ["1 de Mayo", "El Eden"]
 
 
 def _normalize_sede(value) -> str:
+    """
+    Normaliza el nombre de sede para mostrar/guardar valores consistentes.
+
+    Args:
+        value: Texto original (puede venir con variaciones).
+
+    Returns:
+        Sede normalizada (por ejemplo: `"1 de Mayo"` o `"El Eden"`).
+    """
     txt = str(value or "").strip().lower()
     if txt in {"1 de mayo", "1demayo"}:
         return "1 de Mayo"
@@ -19,7 +34,17 @@ def _normalize_sede(value) -> str:
 
 
 class AdminInlineForm(ctk.CTkFrame):
+    """Formulario inline para crear/editar un administrador."""
     def __init__(self, master, app, on_submit, on_cancel):
+        """
+        Construye el formulario inline de administradores.
+
+        Args:
+            master: Contenedor padre.
+            app: Instancia de `HaroDesktopApp` (paleta, cliente API, etc.).
+            on_submit: Callback `(payload, mode, record)`.
+            on_cancel: Callback al cancelar.
+        """
         super().__init__(
             master,
             fg_color=app.COLOR_PANEL,
@@ -136,21 +161,25 @@ class AdminInlineForm(ctk.CTkFrame):
         ).grid(row=0, column=1, padx=6)
 
     def show_create(self):
+        """Muestra el formulario en modo creación y limpia campos."""
         self.mode = "create"
         self.record = {}
         self._fill({})
         self.grid()
 
     def show_edit(self, record):
+        """Muestra el formulario en modo edición cargando el registro dado."""
         self.mode = "edit"
         self.record = dict(record or {})
         self._fill(self.record)
         self.grid()
 
     def hide(self):
+        """Oculta el formulario inline (sin destruirlo)."""
         self.grid_remove()
 
     def _fill(self, record):
+        """Rellena los campos desde el diccionario del registro."""
         for entry in (self.en_nombre, self.en_usuario, self.en_correo, self.en_cedula, self.en_password):
             entry.delete(0, "end")
         self.en_nombre.insert(0, record.get("nombre") or "")
@@ -161,6 +190,7 @@ class AdminInlineForm(ctk.CTkFrame):
         self.cb_estado.set("Activo" if bool(record.get("activo", True)) else "Inactivo")
 
     def _collect(self):
+        """Construye el payload a enviar a la API desde los campos del formulario."""
         payload = {
             "nombre": str(self.en_nombre.get() or "").strip(),
             "usuario": str(self.en_usuario.get() or "").strip(),
@@ -175,6 +205,7 @@ class AdminInlineForm(ctk.CTkFrame):
         return payload
 
     def _validate(self, payload):
+        """Valida campos obligatorios antes de enviar a la API."""
         if not all([payload.get("nombre"), payload.get("usuario"), payload.get("correo"), payload.get("cedula"), payload.get("sede")]):
             return False, "Completa nombre, usuario, correo, cédula y sede."
         if "@" not in payload["correo"] or "." not in payload["correo"].split("@")[-1]:
@@ -184,6 +215,7 @@ class AdminInlineForm(ctk.CTkFrame):
         return True, ""
 
     def _save(self):
+        """Valida y dispara `on_submit` con el payload (create/edit)."""
         payload = self._collect()
         ok, msg = self._validate(payload)
         if not ok:
@@ -192,15 +224,18 @@ class AdminInlineForm(ctk.CTkFrame):
         self.on_submit(payload, self.mode, dict(self.record or {}))
 
     def _cancel(self):
+        """Cancela la edición/creación y notifica el callback."""
         self.hide()
         if callable(self.on_cancel):
             self.on_cancel()
 
 
 class AdministradoresView(BaseModuleFrame):
+    """Vista de gestión de administradores (tabla + formulario)."""
     RESOURCE = "administradores"
 
     def __init__(self, master):
+        """Inicializa la vista y construye toolbar, filtros, tabla y carga inicial."""
         super().__init__(master, "Administradores", "Controle perfiles administrativos y su estado")
         self._all_data = []
         self._data = []
@@ -214,10 +249,12 @@ class AdministradoresView(BaseModuleFrame):
         self.after(120, self._refrescar)
 
     def _is_superadmin_record(self, item) -> bool:
+        """Retorna True si el registro corresponde al superadmin (no modificable/elim.)."""
         correo = str((item or {}).get("correo") or "").strip().lower()
         return correo == str(self.app.SUPERADMIN_EMAIL or "").strip().lower()
 
     def _selected_admin_item(self):
+        """Devuelve el dict del admin seleccionado en la tabla (o None)."""
         if self._selected_id in (None, ""):
             messagebox.showinfo("Administradores", "Selecciona un administrador primero.", parent=self)
             return None
@@ -227,6 +264,7 @@ class AdministradoresView(BaseModuleFrame):
         return None
 
     def _build_toolbar(self):
+        """Construye la barra de acciones (nuevo/editar/eliminar/activar/desactivar/refrescar)."""
         tb = ctk.CTkFrame(self, fg_color="transparent")
         tb.grid(row=1, column=0, padx=16, pady=(0, 6), sticky="ew")
         tb.grid_columnconfigure(6, weight=1)
@@ -252,11 +290,13 @@ class AdministradoresView(BaseModuleFrame):
         btn("↻ Refrescar", self._refrescar).grid(row=0, column=5, padx=8, pady=6, sticky="w")
 
     def _build_form(self):
+        """Crea el formulario inline y lo deja oculto por defecto."""
         self.form = AdminInlineForm(self, self.app, on_submit=self._save_admin, on_cancel=self._cancel_form)
         self.form.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
         self.form.hide()
 
     def _build_summary(self):
+        """Crea tarjetas de resumen (total, activos, por sede)."""
         self.summary = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=14, border_width=1, border_color=self.app.COLOR_DIVIDER)
         self.summary.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
         for col in range(4):
@@ -281,6 +321,7 @@ class AdministradoresView(BaseModuleFrame):
             self._summary_cards[key] = value
 
     def _build_filters(self):
+        """Crea filtros rápidos (texto) y avanzados (estado/sede)."""
         bar = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         bar.grid(row=4, column=0, padx=16, pady=(0, 10), sticky="ew")
         bar.grid_columnconfigure(0, weight=1)
@@ -368,6 +409,7 @@ class AdministradoresView(BaseModuleFrame):
         self.f_sede.bind("<<ComboboxSelected>>", lambda _e: self._apply_filters())
 
     def _build_table(self):
+        """Construye el Treeview con scrollbars para listar administradores."""
         self.table = ctk.CTkFrame(self, fg_color=self.app.COLOR_BG, corner_radius=12)
         self.table.grid(row=5, column=0, padx=16, pady=(0, 16), sticky="nsew")
         self.grid_rowconfigure(5, weight=1)
@@ -409,6 +451,7 @@ class AdministradoresView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _unwrap(self, raw):
+        """Normaliza respuestas (list/dict) a lista de items."""
         if isinstance(raw, list):
             return raw
         if isinstance(raw, dict):
@@ -419,6 +462,7 @@ class AdministradoresView(BaseModuleFrame):
         return []
 
     def _format_dt(self, value):
+        """Formatea fechas ISO a `YYYY-MM-DD HH:MM` (o devuelve texto recortado)."""
         if not value:
             return "—"
         text = str(value).strip()
@@ -429,6 +473,7 @@ class AdministradoresView(BaseModuleFrame):
             return text[:16].replace("T", " ")
 
     def _on_select(self, _evt=None):
+        """Evento de selección en Treeview: guarda el ID seleccionado."""
         selection = self.tree.selection()
         if not selection:
             self._selected_id = None
@@ -437,12 +482,14 @@ class AdministradoresView(BaseModuleFrame):
         self._selected_id = values[0] if values else None
 
     def _clear_filters(self):
+        """Resetea filtros UI y reaplica el filtrado."""
         self.f_buscar.delete(0, "end")
         self.f_estado.set("Todos")
         self.f_sede.set("Todas")
         self._apply_filters()
 
     def _apply_filters(self):
+        """Aplica filtros locales a `_all_data` y repinta tabla/resumen."""
         term = str(self.f_buscar.get() or "").strip().lower()
         estado = str(self.f_estado.get() or "Todos").strip().lower()
         sede = _normalize_sede(self.f_sede.get())
@@ -467,6 +514,7 @@ class AdministradoresView(BaseModuleFrame):
         self._render_table()
 
     def _render_summary(self):
+        """Actualiza las tarjetas de resumen usando la data filtrada (`self._data`)."""
         total = len(self._data)
         activos = sum(1 for item in self._data if bool(item.get("activo")))
         mayo = sum(1 for item in self._data if _normalize_sede(item.get("sede")) == "1 de Mayo")
@@ -477,6 +525,7 @@ class AdministradoresView(BaseModuleFrame):
         self._summary_cards["eden"].configure(text=str(eden))
 
     def _render_table(self):
+        """Repinta el Treeview con la lista filtrada (`self._data`)."""
         for iid in self.tree.get_children():
             self.tree.delete(iid)
         self._selected_id = None
@@ -503,18 +552,22 @@ class AdministradoresView(BaseModuleFrame):
             )
 
     def _nuevo(self):
+        """Acción: abrir formulario para crear admin."""
         self.form.show_create()
 
     def _editar(self):
+        """Acción: abrir formulario para editar el admin seleccionado."""
         item = self._selected_admin_item()
         if not item:
             return
         self.form.show_edit(item)
 
     def _cancel_form(self):
+        """Acción: ocultar el formulario."""
         self.form.hide()
 
     def _save_admin(self, payload, mode, record):
+        """Crea/actualiza el admin en la API y refresca la lista."""
         try:
             if mode == "edit" and record.get("id"):
                 self.app.api.ensure_not_modified(
@@ -535,6 +588,7 @@ class AdministradoresView(BaseModuleFrame):
             messagebox.showerror("Administradores", f"No fue posible guardar el administrador:\n{e}", parent=self)
 
     def _eliminar(self):
+        """Elimina el admin seleccionado (con confirmación y reglas para superadmin)."""
         item = self._selected_admin_item()
         if not item:
             return
@@ -551,6 +605,7 @@ class AdministradoresView(BaseModuleFrame):
             messagebox.showerror("Administradores", f"No fue posible eliminar el administrador:\n{e}", parent=self)
 
     def _activar_seleccionado(self):
+        """Activa el admin seleccionado (PATCH /activar)."""
         item = self._selected_admin_item()
         if not item:
             return
@@ -561,6 +616,7 @@ class AdministradoresView(BaseModuleFrame):
             messagebox.showerror("Administradores", f"No fue posible activar el administrador:\n{e}", parent=self)
 
     def _desactivar_seleccionado(self):
+        """Desactiva el admin seleccionado (PATCH /desactivar)."""
         item = self._selected_admin_item()
         if not item:
             return
@@ -574,6 +630,7 @@ class AdministradoresView(BaseModuleFrame):
             messagebox.showerror("Administradores", f"No fue posible desactivar el administrador:\n{e}", parent=self)
 
     def _refrescar(self, force_refresh=True):
+        """Consulta la API, normaliza la respuesta y reaplica filtros."""
         try:
             raw = self.app.api.get_all(self.RESOURCE, force_refresh=force_refresh) or []
             self._all_data = self._unwrap(raw)

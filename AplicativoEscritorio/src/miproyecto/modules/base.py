@@ -1,7 +1,23 @@
+"""
+Base UI para módulos (vistas) de HaroGestion.
+
+`BaseModuleFrame` estandariza layout y header, y expone `self.app`
+(instancia de `HaroDesktopApp`) a las vistas.
+"""
+
 import customtkinter as ctk
 
 class BaseModuleFrame(ctk.CTkFrame):
+    """Frame base para módulos: crea header y utilidades comunes a las vistas."""
     def __init__(self, master, title: str, subtitle: str = ""):
+        """
+        Inicializa el frame base y dibuja el header del módulo.
+
+        Args:
+            master: Contenedor padre (normalmente el área de contenido de la app).
+            title: Título del módulo.
+            subtitle: Texto de apoyo opcional.
+        """
         app = self._find_app(master)
         self.app = app
         super().__init__(master, fg_color=getattr(app, "COLOR_BG", ("#FFFFFF", "#0f0f10")))
@@ -13,6 +29,15 @@ class BaseModuleFrame(ctk.CTkFrame):
         header.grid(row=0, column=0, padx=16, pady=(12, 8), sticky="ew")
 
     def _find_app(self, widget):
+        """
+        Recorre la jerarquía de `master` para ubicar la instancia principal de la app.
+
+        Args:
+            widget: Widget desde el cual empezar la búsqueda.
+
+        Returns:
+            Instancia de app (con atributos como `APP_TITLE`, `COLOR_BG`) o el widget original si no se encontró.
+        """
         w = widget
         while w is not None:
             if hasattr(w, "APP_TITLE") and hasattr(w, "COLOR_BG"):
@@ -21,6 +46,16 @@ class BaseModuleFrame(ctk.CTkFrame):
         return widget
 
     def _make_header_bar(self, title: str, subtitle: str = ""):
+        """
+        Construye el header visual (título/subtítulo) del módulo.
+
+        Args:
+            title: Título del módulo.
+            subtitle: Subtítulo opcional.
+
+        Returns:
+            `CTkFrame` listo para `grid/pack`.
+        """
         try:
             accent, soft_bg, soft_border = self.app.module_theme(title)
         except Exception:
@@ -58,6 +93,19 @@ class BaseModuleFrame(ctk.CTkFrame):
         return bar
 
     def _make_toolbar(self, master, on_new, on_edit, on_delete, on_refresh):
+        """
+        Crea una barra de acciones estándar (Nuevo/Editar/Eliminar/Refrescar).
+
+        Args:
+            master: Contenedor padre.
+            on_new: Callback para "Nuevo".
+            on_edit: Callback para "Editar".
+            on_delete: Callback para "Eliminar".
+            on_refresh: Callback para "Refrescar".
+
+        Returns:
+            `CTkFrame` con botones de acción.
+        """
         tb = ctk.CTkFrame(master, fg_color="transparent")
         tb.grid_columnconfigure((0,1,2,3), weight=0)
         tb.grid_columnconfigure(4, weight=1)
@@ -82,6 +130,17 @@ class BaseModuleFrame(ctk.CTkFrame):
         return tb
 
     def _make_filters(self, master, p1="Buscar…", p2="Filtro"):
+        """
+        Crea una barra de filtros simple con 2 entradas y botones aplicar/limpiar.
+
+        Args:
+            master: Contenedor padre.
+            p1: Placeholder del primer filtro.
+            p2: Placeholder del segundo filtro.
+
+        Returns:
+            `CTkFrame` con inputs y botones.
+        """
         bar = ctk.CTkFrame(master, fg_color="transparent")
         bar.grid_columnconfigure((0,1,2,3), weight=0)
         bar.grid_columnconfigure(4, weight=1)
@@ -118,6 +177,17 @@ class BaseModuleFrame(ctk.CTkFrame):
 
     def _make_filters_pro(self, master, campos=("Documento","Nombre","Apellidos"),
                           estados=("Todos","Activo","Inactivo","Suspendido")):
+        """
+        Crea un panel de filtros “pro” (campo + valor + estado) con botones aplicar/limpiar.
+
+        Args:
+            master: Contenedor padre.
+            campos: Campos disponibles para búsqueda.
+            estados: Lista de estados para filtrar.
+
+        Returns:
+            `CTkFrame` con el panel de filtros.
+        """
         panel = ctk.CTkFrame(
             master,
             fg_color=self.app.COLOR_PANEL,

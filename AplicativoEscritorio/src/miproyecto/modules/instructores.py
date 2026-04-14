@@ -1,3 +1,9 @@
+"""
+Módulo de Instructores.
+
+Vista para crear/editar instructores y consultar datos desde la API.
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox
 from tkinter import ttk
@@ -10,6 +16,15 @@ from modules.treeview_theme import configure_treeview_style
 
 
 def _normalize_sede_label(value) -> str:
+    """
+    Normaliza el texto de sede para mostrar valores consistentes en UI.
+
+    Args:
+        value: Texto original (puede venir con acentos/variaciones).
+
+    Returns:
+        Sede normalizada (`"1 de Mayo"` / `"El Eden"` o el valor original).
+    """
     txt = str(value or "").strip().lower()
     if not txt:
         return str(value or "").strip()
@@ -34,6 +49,7 @@ def _normalize_sede_label(value) -> str:
 
 
 class InstructoresView(BaseModuleFrame):
+    """Vista de gestión de instructores (tabla, filtros y formulario)."""
     DEBOUNCE_MS = 250
     MIN_REFRESH_INTERVAL = 500  # ms
     RENDER_DELAY_MS = 16
@@ -41,6 +57,7 @@ class InstructoresView(BaseModuleFrame):
     TREE_INSERT_DELAY = 1  # ms
 
     def __init__(self, master):
+        """Inicializa la vista (toolbar, filtros, tabla) y programa la carga inicial."""
         super().__init__(master, "Instructores", "Gestione los profesores registrados en el sistema")
 
         # ===== Estado para filtros =====
@@ -121,6 +138,7 @@ class InstructoresView(BaseModuleFrame):
     #                    FILTROS (PRO)
     # =====================================================
     def _make_filters_bar(self, parent):
+        """Crea la barra de filtros (búsqueda + combos) y enlaza eventos de filtrado."""
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         bar.grid_columnconfigure(0, weight=1)
 
@@ -213,6 +231,7 @@ class InstructoresView(BaseModuleFrame):
         return bar
 
     def _collect_filters(self):
+        """Lee los valores actuales de los filtros y retorna un dict normalizado."""
         return {
             "cedula": (self.f_cedula.get() or "").strip(),
             "nombre": (self.f_nombre.get() or "").strip(),
@@ -223,6 +242,7 @@ class InstructoresView(BaseModuleFrame):
         }
 
     def _clear_filters(self):
+        """Limpia filtros y vuelve a aplicar el filtrado."""
         self.f_cedula.delete(0, "end")
         self.f_nombre.delete(0, "end")
         self.f_apellido.delete(0, "end")
@@ -232,6 +252,7 @@ class InstructoresView(BaseModuleFrame):
         self._apply_filters_now()
 
     def _debounced_apply_filters(self):
+        """Aplica filtros con debounce para evitar recalcular en cada tecla."""
         if self._debounce_id:
             try:
                 self.after_cancel(self._debounce_id)
@@ -240,11 +261,13 @@ class InstructoresView(BaseModuleFrame):
         self._debounce_id = self.after(self.DEBOUNCE_MS, self._apply_filters_now)
 
     def _apply_filters_now(self):
+        """Aplica filtros a `_all_data`, actualiza `_data` y programa el render."""
         src = self._all_data or []
         self._data = self._apply_filters(src, self._collect_filters())
         self._queue_render(self._data)
 
     def _queue_render(self, rows):
+        """Agenda un render diferido (pequeño delay) para actualizar el Treeview."""
         self._data = list(rows or [])
         if self._render_after_id:
             try:
@@ -254,11 +277,13 @@ class InstructoresView(BaseModuleFrame):
         self._render_after_id = self.after(self.RENDER_DELAY_MS, self._flush_render)
 
     def _flush_render(self):
+        """Ejecuta el render programado y actualiza la tabla con la data actual."""
         self._render_after_id = None
         self._set_data(self._data)
 
     @staticmethod
     def _categoria_value(prof):
+        """Extrae/normaliza el valor de categoría desde distintas llaves del backend."""
         categoria = (
             prof.get("categoria")
             or prof.get("categoriaLicencia")
@@ -269,14 +294,17 @@ class InstructoresView(BaseModuleFrame):
 
     @staticmethod
     def _email_value(prof):
+        """Obtiene el email del instructor como string."""
         return str(prof.get("email") or "").strip()
 
     @staticmethod
     def _usuario_value(prof):
+        """Obtiene el usuario del instructor como string."""
         return str(prof.get("usuario") or "").strip()
 
     @staticmethod
     def _sede_value(prof):
+        """Obtiene la sede desde estructuras variadas (string/dict/id)."""
         for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
             if key not in prof:
                 continue
@@ -301,11 +329,13 @@ class InstructoresView(BaseModuleFrame):
 
     @staticmethod
     def _visible_value(prof):
+        """Convierte el campo `visible` del backend a texto Sí/No para la tabla."""
         raw = str(prof.get("visible", True)).strip().lower()
         return "Sí" if raw in {"true", "1", "si", "yes"} else "No"
 
     @staticmethod
     def _to_bool(v, default=True):
+        """Convierte un valor a booleano con un `default` controlado."""
         if isinstance(v, bool):
             return v
         if v is None:
@@ -313,6 +343,7 @@ class InstructoresView(BaseModuleFrame):
         return str(v).strip().lower() in {"true", "1", "si", "yes"}
 
     def _normalize_profesor_payload(self, payload):
+        """Normaliza el payload de instructor antes de enviarlo a la API (trim/case/valores)."""
         src = dict(payload or {})
 
         cedula = str(src.get("cedula", "") or "").strip()
@@ -355,6 +386,7 @@ class InstructoresView(BaseModuleFrame):
 
     @staticmethod
     def _assert_email_updated(server_obj, expected_email):
+        """Lanza error si el servidor devolvió un email distinto al esperado (diagnóstico)."""
         if not isinstance(server_obj, dict):
             return
         exp = str(expected_email or "").strip().lower()
@@ -365,6 +397,7 @@ class InstructoresView(BaseModuleFrame):
             )
 
     def _apply_filters(self, data_list, f):
+        """Filtra `data_list` usando criterios de `f` y la sede del admin (si no es superadmin)."""
         if not data_list:
             return []
         allowed_sede = "" if getattr(self.app, "is_superadmin", False) else _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
@@ -405,6 +438,7 @@ class InstructoresView(BaseModuleFrame):
         return out
 
     def _refresh_especialidad_options(self):
+        """Refresca el combo de especialidad con valores presentes en `_all_data`."""
         esps = set()
         for p in (self._all_data or []):
             e = str(p.get("especialidad", "") or "").strip()
@@ -419,6 +453,7 @@ class InstructoresView(BaseModuleFrame):
             pass
 
     def _refresh_categoria_options(self):
+        """Refresca el combo de categoría con valores presentes en `_all_data`."""
         cats = set()
         for p in (self._all_data or []):
             c = self._categoria_value(p)
@@ -436,6 +471,7 @@ class InstructoresView(BaseModuleFrame):
     #                    TREEVIEW (TABLA RÁPIDA)
     # =====================================================
     def _build_tree(self):
+        """Construye Treeview, columnas y estilos; enlaza selección y doble clic."""
         style = ttk.Style()
         palette = configure_treeview_style(style, self.app, "Haro.Treeview", rowheight=30)
 
@@ -467,6 +503,7 @@ class InstructoresView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _on_tree_select(self, _evt=None):
+        """Evento de selección: mapea el IID seleccionado a índice de `_data`."""
         sel = self.tree.selection()
         if not sel:
             self._selected_idx = None
@@ -475,6 +512,7 @@ class InstructoresView(BaseModuleFrame):
         self._selected_idx = self._iid_to_index.get(iid)
 
     def _row_values(self, prof):
+        """Convierte un dict de instructor a la tupla de valores de la fila."""
         full_name = f"{prof.get('nombre', '')} {prof.get('apellido', '')}".strip()
         return (
             prof.get("cedula", ""),
@@ -489,6 +527,7 @@ class InstructoresView(BaseModuleFrame):
         )
 
     def _set_data(self, rows):
+        """Reemplaza el contenido del Treeview usando inserción por lotes (chunked)."""
         data = list(rows or [])
 
         self._render_seq += 1
@@ -528,27 +567,32 @@ class InstructoresView(BaseModuleFrame):
     #                    ACCIONES
     # =====================================================
     def _nuevo(self):
+        """Acción: abrir formulario para crear instructor."""
         self.form.show_create()
 
     def _editar(self):
+        """Acción: abrir formulario para editar instructor seleccionado."""
         if self._selected_idx is None:
             self.app._info("Selecciona un profesor en la tabla primero.")
             return
         self.form.show_edit(self._data[self._selected_idx])
 
     def _eliminar_seleccionado(self):
+        """Acción: eliminar el instructor seleccionado (confirmación + API)."""
         if self._selected_idx is None:
             self.app._info("Selecciona un profesor en la tabla primero.")
             return
         self._delete_row(self._selected_idx)
 
     def _cancel_inline(self):
+        """Acción: ocultar el formulario inline."""
         self.form.hide()
 
     # =====================================================
     #                    API
     # =====================================================
     def _refrescar(self, force_refresh=True):
+        """Consulta la API de profesores, aplica sede/permisos y repinta tabla."""
         now = int(time.time() * 1000)
         if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
             return
@@ -593,6 +637,7 @@ class InstructoresView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _show_loading(self, on=True, text="Actualizando..."):
+        """Muestra/oculta etiqueta de carga en la tabla."""
         if on:
             if self._loading_overlay and self._loading_overlay.winfo_exists():
                 return
@@ -609,6 +654,7 @@ class InstructoresView(BaseModuleFrame):
             self._loading_overlay = None
 
     def _submit_inline(self, payload, mode):
+        """Callback del formulario: crea/actualiza instructor y refresca datos."""
         try:
             if not self.app.api:
                 self.app._info("No hay cliente API activo. Inicia sesión.")
@@ -653,6 +699,7 @@ class InstructoresView(BaseModuleFrame):
             messagebox.showerror("Profesores", f"Operación fallida:\n{e}", parent=self)
 
     def _delete_row(self, idx):
+        """Elimina un instructor por índice (confirmación + delete en API)."""
         prof = self._data[idx]
         name = f"{prof.get('nombre','')} {prof.get('apellido','')}".strip()
         ced = prof.get("cedula", "")

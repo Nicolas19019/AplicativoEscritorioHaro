@@ -1,3 +1,9 @@
+"""
+Módulo de Reportes.
+
+Genera estadísticas e informes y permite exportar a PDF usando ReportLab.
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox, filedialog, ttk
 from modules.base import BaseModuleFrame
@@ -15,6 +21,7 @@ from reportlab.lib.utils import ImageReader
 
 
 def _solid_color(value, fallback):
+    """Devuelve un color solido (string) a partir de un valor (light/dark) o un fallback."""
     if isinstance(value, (tuple, list)) and value:
         return str(value[0] or fallback)
     if value in (None, ""):
@@ -31,6 +38,7 @@ class ReportesView(BaseModuleFrame):
       - Clases prácticas
     """
     def __init__(self, master):
+        """Inicializa la vista de reportes (filtros, resumen y tabla)."""
         super().__init__(master, "Reportes", "Visualización de estadísticas y reportes del sistema")
 
         # ===== Toolbar =====
@@ -135,6 +143,7 @@ class ReportesView(BaseModuleFrame):
         return None
 
     def _make_doc(self, path: str) -> SimpleDocTemplate:
+        """Crea el documento PDF (ReportLab) con márgenes y espacio para el logo."""
         # Márgenes tipo carta y espacio arriba para el logo
         return SimpleDocTemplate(
             path,
@@ -146,6 +155,7 @@ class ReportesView(BaseModuleFrame):
         )
 
     def _styles(self):
+        """Construye estilos tipográficos para el PDF (título, meta y cuerpo)."""
         styles = getSampleStyleSheet()
 
         title = ParagraphStyle(
@@ -217,6 +227,7 @@ class ReportesView(BaseModuleFrame):
         return _draw
 
     def _table_pro(self, rows, col_widths=None):
+        """Crea una tabla con estilo 'pro' para PDF a partir de filas y anchos opcionales."""
         t = Table(rows, colWidths=col_widths)
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
@@ -244,6 +255,7 @@ class ReportesView(BaseModuleFrame):
     #                     FILTROS
     # =====================================================
     def _build_filtros(self):
+        """Construye la barra de filtros (tipo, mes, año) del módulo de reportes."""
         filtros = ctk.CTkFrame(self, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         filtros.grid(row=2, column=0, padx=16, pady=(0, 10), sticky="ew")
         filtros.grid_columnconfigure(6, weight=1)
@@ -287,14 +299,17 @@ class ReportesView(BaseModuleFrame):
     #                 RESUMEN / ANÁLISIS
     # =====================================================
     def _empty_report_state(self):
+        """Retorna un estado inicial de reporte sin data ni análisis."""
         tipo = getattr(self, "_tipo", "Estudiantes")
         return {"tipo": tipo, "data": [], "analysis": {"kpis": [], "insights": [], "tops": {}}}
 
     def _toggle_table_mode(self):
+        """Alterna entre modo resumen y modo tabla (para visualizar datos completos)."""
         self._table_mode = not bool(getattr(self, "_table_mode", False))
         self._update_view_mode()
 
     def _update_view_mode(self):
+        """Muestra/oculta resumen y tabla según el estado de `_table_mode`."""
         showing_table = bool(getattr(self, "_table_mode", False))
         if showing_table:
             self.summary.grid_remove()
@@ -309,6 +324,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _kpi_description(title_text: str, value_text: str) -> str:
+        """Genera una breve descripción para el KPI según el título y valor."""
         t = str(title_text or "").strip().lower()
         value = str(value_text or "").strip()
 
@@ -345,6 +361,7 @@ class ReportesView(BaseModuleFrame):
         return ""
 
     def _render_summary(self):
+        """Renderiza el panel de resumen (KPIs, insights y tops) del reporte actual."""
         container = getattr(self, "summary_body", None) or self.summary
         # Limpia y vuelve a pintar el resumen (KPIs + análisis)
         for w in container.winfo_children():
@@ -570,6 +587,7 @@ class ReportesView(BaseModuleFrame):
                         .grid(row=i, column=1, padx=10, pady=4, sticky="e")
 
     def _render_summary(self):
+        """Renderiza el panel de resumen (KPIs, insights y tops) del reporte actual."""
         container = getattr(self, "summary_body", None) or self.summary
         for w in container.winfo_children():
             try:
@@ -729,6 +747,7 @@ class ReportesView(BaseModuleFrame):
                     ).grid(row=idx, column=1, padx=10, pady=4, sticky="e")
 
     def _apply_report_state(self, state):
+        """Aplica un estado de reporte (tipo, data, analisis) y actualiza la UI."""
         if not isinstance(state, dict):
             state = self._empty_report_state()
         self._tipo = state.get("tipo", getattr(self, "_tipo", "Estudiantes"))
@@ -741,10 +760,12 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _tipo_norm(tipo: str) -> str:
+        """Normaliza el texto del tipo de reporte para comparaciones (lower/strip)."""
         return str(tipo or "").strip().lower()
 
     @staticmethod
     def _unwrap_list(raw, prefer_keys=()):
+        """Extrae una lista desde respuestas que pueden venir como lista o dict con clave."""
         if isinstance(raw, list):
             return raw
         if isinstance(raw, dict):
@@ -759,6 +780,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _parse_date(value):
+        """Intenta parsear una fecha desde string/datetime/date y retorna `date` o `None`."""
         if value is None:
             return None
         if isinstance(value, datetime):
@@ -782,6 +804,7 @@ class ReportesView(BaseModuleFrame):
         return None
 
     def _remaining_days_report(self, rec):
+        """Calcula dias restantes del reporte segun la fecha de creacion/ingreso."""
         start_date = self._parse_date(rec.get("fechaCreacion") or rec.get("fechaIngreso") or rec.get("createdAt"))
         if not start_date:
             return "—"
@@ -790,6 +813,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _extract_sede_value(value) -> str:
+        """Extrae el nombre/identificador de sede desde string/dict u otros formatos."""
         if value is None:
             return ""
         if isinstance(value, dict):
@@ -803,6 +827,7 @@ class ReportesView(BaseModuleFrame):
         return str(value).strip()
 
     def _record_sede(self, rec) -> str:
+        """Obtiene la sede asociada a un registro (campo directo o estructura anidada)."""
         if not isinstance(rec, dict):
             return ""
         for key in ("sede", "sedePrincipal", "sede_principal", "sedeNombre", "nombreSede", "campus"):
@@ -817,6 +842,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _normalize_doc(doc_value):
+        """Normaliza documento/identificacion para mostrar en reportes (oculta invalidos)."""
         invalid = {"-1", "-2", "-3", "0", "None", "null", ""}
         if doc_value is None:
             return "—"
@@ -832,6 +858,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _format_money(value) -> str:
+        """Formatea un numero como moneda simple (separador de miles)."""
         try:
             v = float(value or 0)
         except Exception:
@@ -842,6 +869,7 @@ class ReportesView(BaseModuleFrame):
 
     @staticmethod
     def _duration_hours(h_ini: str, h_fin: str) -> float:
+        """Calcula duracion en horas entre dos strings HH:MM (puede cruzar medianoche)."""
         try:
             t1 = datetime.strptime(str(h_ini or "").strip(), "%H:%M")
             t2 = datetime.strptime(str(h_fin or "").strip(), "%H:%M")
@@ -853,6 +881,7 @@ class ReportesView(BaseModuleFrame):
             return 0.0
 
     def _filter_by_month(self, records, month: int, year: int, date_keys):
+        """Filtra registros por mes/año usando una lista de claves candidatas de fecha."""
         if not month or not year:
             return list(records or [])
         out = []
@@ -865,6 +894,7 @@ class ReportesView(BaseModuleFrame):
         return out
 
     def _show_loading(self, on=True, text="Generando..."):
+        """Muestra u oculta un indicador de carga sobre la tabla."""
         if on:
             if getattr(self, "_loading_overlay", None) and self._loading_overlay.winfo_exists():
                 return
@@ -884,6 +914,7 @@ class ReportesView(BaseModuleFrame):
     #   Construcción de reportes
     # ==============================
     def _build_report_state(self, tipo: str, month: int, year: int, force_refresh: bool = True):
+        """Construye data + analisis del reporte segun el tipo seleccionado."""
         api = getattr(self.app, "api", None)
         if not api:
             return {
@@ -905,6 +936,7 @@ class ReportesView(BaseModuleFrame):
         return self._build_clases_report_state(tipo, month, year, force_refresh=force_refresh)
 
     def _build_estudiantes_report_state(self, tipo: str, month: int, year: int, force_refresh: bool = True):
+        """Construye el reporte de estudiantes (detalle + KPIs) para el periodo indicado."""
         raw = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
         estudiantes = self._unwrap_list(raw, prefer_keys=("estudiantes",))
 
@@ -986,6 +1018,7 @@ class ReportesView(BaseModuleFrame):
         return {"tipo": tipo, "data": detalle, "analysis": analysis}
 
     def _build_estudiantes_report_state(self, tipo: str, month: int, year: int, force_refresh: bool = True):
+        """Construye el reporte de estudiantes (detalle + KPIs) para el periodo indicado."""
         raw = self.app.api.get_all("estudiantes", force_refresh=force_refresh) or []
         estudiantes = self._unwrap_list(raw, prefer_keys=("estudiantes",))
 
@@ -1096,6 +1129,7 @@ class ReportesView(BaseModuleFrame):
         return {"tipo": tipo, "data": detalle, "analysis": analysis}
 
     def _build_estado_cuenta_report_state(self, tipo: str, force_refresh: bool = True):
+        """Construye el reporte de estados de cuenta (detalle + KPIs globales)."""
         raw_ec = self.app.api.get_all("estados-cuenta", force_refresh=force_refresh) or []
         estados = self._unwrap_list(raw_ec, prefer_keys=("estados-cuenta", "estadosCuenta", "estados"))
 
@@ -1188,6 +1222,7 @@ class ReportesView(BaseModuleFrame):
         return {"tipo": tipo, "data": detalle, "analysis": analysis}
 
     def _build_clases_report_state(self, tipo: str, month: int, year: int, force_refresh: bool = True):
+        """Construye el reporte de clases practicas (detalle + KPIs del periodo)."""
         raw_cl = self.app.api.get_all("clases-practicas", force_refresh=force_refresh) or []
         clases = self._unwrap_list(raw_cl, prefer_keys=("clases", "clases-practicas", "items"))
         clases_mes = self._filter_by_month(clases, month, year, ("fecha",))
@@ -1314,6 +1349,7 @@ class ReportesView(BaseModuleFrame):
     #                     RENDER TABLA (LEGACY)
     # =====================================================
     def _render_table(self):
+        """Renderiza la tabla del reporte (modo tabla) dentro del scroll."""
         for w in self.table.winfo_children():
             w.destroy()
 
@@ -1495,6 +1531,7 @@ class ReportesView(BaseModuleFrame):
                 ).grid(row=0, column=i, padx=10, pady=10, sticky="ew")
 
     def _render_table(self):
+        """Renderiza la tabla del reporte (modo tabla) dentro del scroll."""
         def C(name, default):
             return getattr(self.app, name, default)
 
@@ -1725,6 +1762,7 @@ class ReportesView(BaseModuleFrame):
                 ).grid(row=0, column=i, padx=10, pady=10, sticky="ew")
 
     def _render_table(self):
+        """Renderiza la tabla del reporte (modo tabla) dentro del scroll."""
         def C(name, default):
             return getattr(self.app, name, default)
 
@@ -1926,6 +1964,7 @@ class ReportesView(BaseModuleFrame):
             tree.insert("", "end", values=values, tags=("even" if idx % 2 == 0 else "odd",))
 
     def _on_table_search(self, _event=None):
+        """Maneja el input de busqueda en modo tabla (debounce)."""
         if hasattr(self, "en_table_search"):
             self._table_query = self.en_table_search.get()
         job = getattr(self, "_table_search_job", None)
@@ -1937,10 +1976,12 @@ class ReportesView(BaseModuleFrame):
         self._table_search_job = self.after(120, self._apply_table_search)
 
     def _apply_table_search(self):
+        """Aplica el filtro de busqueda actual y vuelve a renderizar la tabla."""
         self._table_search_job = None
         self._render_table()
 
     def _restore_table_search_focus(self, cursor_pos=None):
+        """Restaura el foco y posicion del cursor del campo de busqueda de la tabla."""
         if not hasattr(self, "en_table_search"):
             return
         try:
@@ -1952,6 +1993,7 @@ class ReportesView(BaseModuleFrame):
             pass
 
     def _clear_table_search(self):
+        """Limpia el campo de busqueda de la tabla y elimina el job pendiente."""
         job = getattr(self, "_table_search_job", None)
         if job:
             try:
@@ -1969,6 +2011,7 @@ class ReportesView(BaseModuleFrame):
     #                     ACCIONES
     # =====================================================
     def _generar(self, force_refresh=True):
+        """Genera el reporte segun filtros actuales y actualiza resumen/tabla."""
         tipo = self.cb_tipo.get()
         mes_nombre = self.cb_mes.get()
         anio_txt = self.cb_anio.get()
@@ -2008,6 +2051,7 @@ class ReportesView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _exportar(self):
+        """Exporta el reporte actual a PDF segun el tipo seleccionado."""
         if not self._data:
             messagebox.showinfo("Exportar", "Primero genera un reporte.", parent=self)
             return
@@ -2021,6 +2065,7 @@ class ReportesView(BaseModuleFrame):
             self._exportar_clases_pdf()
 
     def _refrescar(self):
+        """Regenera el reporte forzando refresco de datos desde la API."""
         self._generar(force_refresh=True)
         self.app._info("Vista de reportes actualizada.")
 
@@ -2028,6 +2073,7 @@ class ReportesView(BaseModuleFrame):
     #                 REPORTES PDF INDIVIDUALES
     # =====================================================
     def _exportar_estudiantes_pdf(self):
+        """Exporta el reporte de estudiantes a un PDF (ReportLab)."""
         path = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF", "*.pdf")],
@@ -2093,6 +2139,7 @@ class ReportesView(BaseModuleFrame):
         messagebox.showinfo("PDF", f"Reporte de estudiantes exportado:\n{path}")
 
     def _exportar_estado_cuenta_pdf(self):
+        """Exporta el reporte de estado de cuenta a un PDF (ReportLab)."""
         path = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF", "*.pdf")],
@@ -2148,6 +2195,7 @@ class ReportesView(BaseModuleFrame):
         messagebox.showinfo("PDF", f"Reporte de estado de cuenta exportado:\n{path}")
 
     def _exportar_clases_pdf(self):
+        """Exporta el reporte de clases practicas a un PDF (ReportLab)."""
         path = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF", "*.pdf")],

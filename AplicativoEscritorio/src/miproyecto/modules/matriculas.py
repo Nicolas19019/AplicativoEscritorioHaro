@@ -15,6 +15,7 @@ from modules.treeview_theme import configure_treeview_style, solid_color
 
 
 def _normalize_sede_label(value) -> str:
+    """Normaliza valores de sede a etiquetas estandar (p. ej. `1 de Mayo`, `El Eden`)."""
     txt = str(value or "").strip().lower()
     if not txt:
         return str(value or "").strip()
@@ -43,10 +44,12 @@ def _normalize_sede_label(value) -> str:
 
 
 def _norm_enum(value) -> str:
+    """Normaliza un valor para comparaciones tipo enum (upper/strip)."""
     return str(value or "").strip().upper()
 
 
 def _format_date(value) -> str:
+    """Formatea fechas para mostrar en UI (YYYY-MM-DD o YYYY-MM-DD HH:MM)."""
     if value is None or value == "":
         return "—"
     if isinstance(value, datetime):
@@ -62,6 +65,7 @@ def _format_date(value) -> str:
 
 
 def _parse_datetime(value) -> Optional[datetime]:
+    """Parsea distintos formatos de fecha/hora a `datetime` con timezone (UTC por defecto)."""
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -86,6 +90,7 @@ def _parse_datetime(value) -> Optional[datetime]:
 
 
 def _parse_money(value) -> float:
+    """Convierte un valor (string/numero) a float, removiendo separadores/simbolos comunes."""
     if value is None:
         return 0.0
     if isinstance(value, (int, float)):
@@ -102,7 +107,9 @@ def _parse_money(value) -> float:
 
 
 class _ConfirmarPagoDialog(ctk.CTkToplevel):
+    """Diálogo para confirmar pago en efectivo y registrar valor/observación."""
     def __init__(self, master, app, *, on_confirm):
+        """Inicializa el diálogo para confirmar pago (captura valor y observación)."""
         super().__init__(master)
         self.app = app
         self.on_confirm = on_confirm
@@ -203,6 +210,7 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
 
 
     def _confirm(self):
+        """Valida el valor ingresado y ejecuta `on_confirm(valor, obs)`."""
         valor = _parse_money(self.en_valor.get())
         obs = (self.en_obs.get() or "").strip()
         if valor <= 0:
@@ -223,7 +231,9 @@ class _ConfirmarPagoDialog(ctk.CTkToplevel):
 
 
 class _NuevaSolicitudDialog(ctk.CTkToplevel):
+    """Diálogo para crear una solicitud/matrícula manual desde HaroGestion."""
     def __init__(self, master, app, *, sedes, on_create):
+        """Inicializa el diálogo para crear una solicitud manual y definir sedes disponibles."""
         super().__init__(master)
         self.app = app
         self.sedes = list(sedes or [])
@@ -353,6 +363,7 @@ class _NuevaSolicitudDialog(ctk.CTkToplevel):
         ).grid(row=0, column=1, padx=6)
 
     def _create(self):
+        """Valida campos del formulario y ejecuta `on_create(payload)` si es valido."""
         doc_raw = (self.en_doc.get() or "").strip()
         doc = "".join(ch for ch in doc_raw if ch.isdigit())
         if not doc or len(doc) < 5:
@@ -477,6 +488,7 @@ class MatriculasView(BaseModuleFrame):
     AUTO_SWEEP_MS = 60_000
 
     def __init__(self, master):
+        """Inicializa la vista de solicitudes de matrícula (filtros, tabla y acciones)."""
         super().__init__(master, "matrículas", "Solicitudes de matrícula y gestión de contratos")
 
         self._resource = None
@@ -564,6 +576,7 @@ class MatriculasView(BaseModuleFrame):
         self.after(1000, self._schedule_auto_sweep)
 
     def destroy(self):
+        """Cancela timers internos (auto-sweep) antes de destruir la vista."""
         if self._auto_sweep_after_id:
             try:
                 self.after_cancel(self._auto_sweep_after_id)
@@ -576,6 +589,7 @@ class MatriculasView(BaseModuleFrame):
     #                    FILTROS
     # =====================================================
     def _make_filters_bar(self, parent):
+        """Construye la barra de filtros para listar/filtrar solicitudes."""
         bar = ctk.CTkFrame(parent, fg_color=self.app.COLOR_PANEL, corner_radius=12)
         bar.grid_columnconfigure(0, weight=1)
 
@@ -695,6 +709,7 @@ class MatriculasView(BaseModuleFrame):
         return bar
 
     def _collect_filters(self):
+        """Lee los widgets de filtros y retorna un dict con valores normalizados."""
         return {
             "q": (self.f_buscar.get() or "").strip(),
             "origen": _norm_enum(self.f_origen.get()),
@@ -705,6 +720,7 @@ class MatriculasView(BaseModuleFrame):
         }
 
     def _clear_filters(self):
+        """Restablece filtros a valores por defecto y aplica el filtrado."""
         self.f_buscar.delete(0, "end")
         self.f_origen.set("Todos")
         self.f_metodo.set("Todos")
@@ -717,6 +733,7 @@ class MatriculasView(BaseModuleFrame):
         self._apply_filters_now()
 
     def _debounced_apply_filters(self):
+        """Aplica filtros con debounce para evitar renders excesivos al escribir."""
         if self._debounce_id:
             try:
                 self.after_cancel(self._debounce_id)
@@ -725,16 +742,19 @@ class MatriculasView(BaseModuleFrame):
         self._debounce_id = self.after(self.DEBOUNCE_MS, self._apply_filters_now)
 
     def _apply_filters_now(self):
+        """Aplica filtros actuales sobre `_all_data` y actualiza la tabla."""
         self._data = self._apply_filters(self._all_data, self._collect_filters())
         self._refresh_expiry_alert()
         self._queue_render(self._data)
 
     def _allowed_admin_sede(self) -> str:
+        """Retorna la sede permitida para el admin actual (vacío si es superadmin)."""
         if getattr(self.app, "is_superadmin", False):
             return ""
         return _normalize_sede_label(getattr(self.app, "current_admin_sede", None))
 
     def _apply_filters(self, data_list, f):
+        """Filtra la lista de registros según término, enums y sede/permisos."""
         term = (f.get("q") or "").strip().lower()
         origen = f.get("origen") or ""
         metodo = f.get("metodo") or ""
@@ -786,6 +806,7 @@ class MatriculasView(BaseModuleFrame):
     #                     TREEVIEW
     # =====================================================
     def _build_tree(self):
+        """Construye el Treeview (tabla) y configura estilos, columnas y eventos."""
         style = ttk.Style()
         palette = configure_treeview_style(style, self.app, "Haro.Matriculas.Treeview", rowheight=30)
 
@@ -839,6 +860,7 @@ class MatriculasView(BaseModuleFrame):
         self._empty_label.place_forget()
 
     def _on_tree_select(self, _evt=None):
+        """Actualiza el indice seleccionado cuando cambia la seleccion del Treeview."""
         sel = self.tree.selection()
         if not sel:
             self._selected_idx = None
@@ -847,6 +869,7 @@ class MatriculasView(BaseModuleFrame):
         self._selected_idx = self._iid_to_index.get(iid)
 
     def _queue_render(self, rows):
+        """Encola un render con delay y actualiza `self._data`."""
         self._data = list(rows or [])
         if self._render_after_id:
             try:
@@ -856,10 +879,12 @@ class MatriculasView(BaseModuleFrame):
         self._render_after_id = self.after(self.RENDER_DELAY_MS, self._flush_render)
 
     def _flush_render(self):
+        """Ejecuta el render programado y limpia el id del job."""
         self._render_after_id = None
         self._set_data(self._data)
 
     def _set_data(self, rows):
+        """Carga filas en el Treeview por chunks y mantiene el mapeo iid->indice."""
         for iid in self.tree.get_children():
             self.tree.delete(iid)
         self._iid_to_index.clear()
@@ -890,6 +915,7 @@ class MatriculasView(BaseModuleFrame):
 
     @staticmethod
     def _payment_tag(estado_pago: str) -> str:
+        """Mapea el estado de pago a una etiqueta (tag) de estilo del Treeview."""
         ep = _norm_enum(estado_pago)
         if ep in {"CONFIRMADO", "PAGADO", "OK"}:
             return "pago_confirmado"
@@ -898,6 +924,7 @@ class MatriculasView(BaseModuleFrame):
         return "pago_pendiente"
 
     def _timing_tag(self, rec) -> str:
+        """Devuelve tag visual para alertas de expiracion (warning/expired) si aplica."""
         status = self._payment_deadline_status(rec)
         if status == "expired":
             return "expirada"
@@ -910,6 +937,7 @@ class MatriculasView(BaseModuleFrame):
     # =====================================================
     @staticmethod
     def _unwrap_list(raw):
+        """Extrae una lista desde respuestas tipo list o dict con claves comunes."""
         if isinstance(raw, dict):
             for key in ("content", "items", "data", "results", "solicitudes", "prematriculas", "matriculas"):
                 val = raw.get(key)
@@ -922,17 +950,20 @@ class MatriculasView(BaseModuleFrame):
 
     @staticmethod
     def _take_id(rec) -> Optional[Any]:
+        """Obtiene el id del proceso/solicitud desde el registro."""
         if not isinstance(rec, dict):
             return None
         return rec.get("id") or rec.get("procesoId") or rec.get("idProceso") or rec.get("solicitudId")
 
     def _take_student_obj(self, rec) -> Dict[str, Any]:
+        """Retorna el objeto `estudiante` embebido en el registro (si existe)."""
         if not isinstance(rec, dict):
             return {}
         stu = rec.get("estudiante")
         return stu if isinstance(stu, dict) else {}
 
     def _take_student_name(self, rec) -> str:
+        """Obtiene el nombre del estudiante desde campos directos o desde el objeto estudiante."""
         if not isinstance(rec, dict):
             return "—"
         for key in ("nombreEstudiante", "estudianteNombre", "nombre_estudiante"):
@@ -946,6 +977,7 @@ class MatriculasView(BaseModuleFrame):
         return full or "—"
 
     def _take_doc(self, rec) -> str:
+        """Obtiene el documento del estudiante desde campos directos o desde el objeto estudiante."""
         if not isinstance(rec, dict):
             return ""
         for key in ("numeroDocumento", "documento", "doc", "dni", "cc"):
@@ -960,6 +992,7 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _take_email(self, rec) -> str:
+        """Obtiene el correo del estudiante desde campos directos o desde el objeto estudiante."""
         if not isinstance(rec, dict):
             return ""
         for key in ("correo", "email", "correoEstudiante", "emailEstudiante"):
@@ -971,6 +1004,7 @@ class MatriculasView(BaseModuleFrame):
         return str(val).strip() if val else ""
 
     def _take_phone(self, rec) -> str:
+        """Obtiene el teléfono del estudiante desde campos directos o desde el objeto estudiante."""
         if not isinstance(rec, dict):
             return ""
         for key in ("telefono", "tel", "celular", "phone", "telefonoEstudiante"):
@@ -982,6 +1016,7 @@ class MatriculasView(BaseModuleFrame):
         return str(val).strip() if val else ""
 
     def _take_categoria(self, rec) -> str:
+        """Obtiene la categoría/licencia asociada al estudiante."""
         if not isinstance(rec, dict):
             return "—"
         for key in ("categoria", "categoriaLicencia", "licenciaCategoria"):
@@ -996,6 +1031,7 @@ class MatriculasView(BaseModuleFrame):
         return "—"
 
     def _take_sede(self, rec) -> str:
+        """Obtiene la sede del registro o del estudiante embebido."""
         if not isinstance(rec, dict):
             return "—"
         for key in ("sede", "sedeNombre", "nombreSede", "campus"):
@@ -1012,6 +1048,7 @@ class MatriculasView(BaseModuleFrame):
         return str(val).strip() if val else "—"
 
     def _take_origen(self, rec) -> str:
+        """Obtiene el origen del registro (CHATBOT/HAROGESTION) si existe."""
         if not isinstance(rec, dict):
             return ""
         for key in ("origenRegistro", "origen", "origenMatricula", "origen_matricula"):
@@ -1021,6 +1058,7 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _take_metodo_pago(self, rec) -> str:
+        """Obtiene el método de pago y lo normaliza (EPAYCO/EFECTIVO)."""
         if not isinstance(rec, dict):
             return ""
         for key in ("metodoPago", "metodo_pago", "medioPago", "medio_pago"):
@@ -1030,6 +1068,7 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _map_metodo_pago(self, raw) -> str:
+        """Normaliza valores alternos/antiguos del método de pago a valores UI."""
         v = _norm_enum(raw)
         if not v:
             return ""
@@ -1044,6 +1083,7 @@ class MatriculasView(BaseModuleFrame):
         return v
 
     def _take_estado_pago(self, rec) -> str:
+        """Obtiene el estado de pago y lo mapea a valores UI (PENDIENTE/CONFIRMADO/...)."""
         if not isinstance(rec, dict):
             return "PENDIENTE"
         for key in ("estadoPago", "estado_pago", "pagoEstado", "paymentStatus"):
@@ -1053,6 +1093,7 @@ class MatriculasView(BaseModuleFrame):
         return "PENDIENTE"
 
     def _map_estado_pago(self, raw) -> str:
+        """Mapea estados internos del backend a estados UI de pago."""
         v = _norm_enum(raw)
         if not v:
             return "PENDIENTE"
@@ -1068,6 +1109,7 @@ class MatriculasView(BaseModuleFrame):
         return v
 
     def _take_estado_contrato(self, rec) -> str:
+        """Obtiene el estado de contrato asociado al proceso (si existe)."""
         if not isinstance(rec, dict):
             return ""
         for key in ("estadoContrato", "estado_contrato", "contractStatus"):
@@ -1077,6 +1119,7 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _take_flow_status(self, rec) -> str:
+        """Obtiene el estado de flujo asociado al proceso (si existe)."""
         if not isinstance(rec, dict):
             return ""
         for key in ("flowStatus", "flow_status", "estadoFlujo", "estado_flujo"):
@@ -1086,11 +1129,13 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _is_finalized_process(self, rec) -> bool:
+        """Indica si el proceso ya se considera finalizado (contrato firmado o estudiante creado)."""
         contrato = self._take_estado_contrato(rec)
         flujo = self._take_flow_status(rec)
         return contrato == "SIGNED" or flujo == "STUDENT_CREATED"
 
     def _take_fecha_creacion(self, rec) -> str:
+        """Obtiene/forma la fecha de creación del registro para UI."""
         if not isinstance(rec, dict):
             return "—"
         for key in ("fechaCreacion", "createdAt", "fecha", "fechaRegistro"):
@@ -1100,6 +1145,7 @@ class MatriculasView(BaseModuleFrame):
         return "—"
 
     def _take_created_at_dt(self, rec) -> Optional[datetime]:
+        """Extrae `createdAt`/fecha equivalente como datetime (UTC) para cálculos."""
         if not isinstance(rec, dict):
             return None
         for key in ("createdAt", "fechaCreacion", "fecha", "fechaRegistro"):
@@ -1109,9 +1155,11 @@ class MatriculasView(BaseModuleFrame):
         return None
 
     def _is_pending_payment(self, rec) -> bool:
+        """True si el registro está pendiente de pago."""
         return self._take_estado_pago(rec) == "PENDIENTE"
 
     def _payment_deadline_status(self, rec, now_utc: Optional[datetime] = None) -> str:
+        """Evalúa si un pago pendiente (EFECTIVO) está en warning o expirado según TTL."""
         if not self._is_pending_payment(rec):
             return ""
         # La expiración automática aplica principalmente para solicitudes en EFECTIVO.
@@ -1130,6 +1178,7 @@ class MatriculasView(BaseModuleFrame):
         return ""
 
     def _minutes_until_expiry(self, rec, now_utc: Optional[datetime] = None) -> Optional[int]:
+        """Retorna minutos restantes para expirar (basado en `createdAt`) o None si no aplica."""
         created_at = self._take_created_at_dt(rec)
         if not created_at:
             return None
@@ -1139,6 +1188,7 @@ class MatriculasView(BaseModuleFrame):
         return int(seconds_left // 60)
 
     def _build_expiry_alert_text(self, data_list) -> str:
+        """Construye un texto de alerta agregada para registros que expiran pronto/expirados."""
         now_utc = datetime.now(timezone.utc)
         warning_count = 0
         expired_count = 0
@@ -1165,6 +1215,7 @@ class MatriculasView(BaseModuleFrame):
         return " | ".join(parts)
 
     def _refresh_expiry_alert(self):
+        """Actualiza el banner de alertas de expiración basado en la data filtrada."""
         text = self._build_expiry_alert_text(self._data)
         self._expiry_alert_text = text
         if not text:
@@ -1179,6 +1230,7 @@ class MatriculasView(BaseModuleFrame):
         self.expiry_alert.grid()
 
     def _schedule_auto_sweep(self):
+        """Programa la ejecución periódica del auto-sweep (refresco periódico)."""
         if self._auto_sweep_after_id:
             try:
                 self.after_cancel(self._auto_sweep_after_id)
@@ -1187,11 +1239,13 @@ class MatriculasView(BaseModuleFrame):
         self._auto_sweep_after_id = self.after(self.AUTO_SWEEP_MS, self._run_auto_sweep)
 
     def _run_auto_sweep(self):
+        """Ejecuta el auto-sweep (refresca la lista) y vuelve a programarlo."""
         self._auto_sweep_after_id = None
         self._refrescar(force_refresh=True)
         self._schedule_auto_sweep()
 
     def _delete_expired_pending_async(self):
+        """Elimina registros pendientes expirados (solo si el backend soporta borrar el recurso)."""
         rows = list(self._all_data or [])
         now_utc = datetime.now(timezone.utc)
         expired = []
@@ -1228,6 +1282,7 @@ class MatriculasView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _row_values(self, rec):
+        """Construye la tupla de valores que se inserta como fila en el Treeview."""
         return (
             self._take_student_name(rec),
             self._take_doc(rec) or "—",
@@ -1243,6 +1298,7 @@ class MatriculasView(BaseModuleFrame):
         )
 
     def _selected_record(self) -> Optional[Dict[str, Any]]:
+        """Retorna el registro actualmente seleccionado en la tabla, o None."""
         if self._selected_idx is None:
             return None
         try:
@@ -1254,6 +1310,7 @@ class MatriculasView(BaseModuleFrame):
     #                     API
     # =====================================================
     def _show_loading(self, on=True, text="Actualizando..."):
+        """Muestra u oculta un indicador de carga sobre la tabla."""
         if on:
             if self._loading_overlay and self._loading_overlay.winfo_exists():
                 return
@@ -1270,6 +1327,7 @@ class MatriculasView(BaseModuleFrame):
             self._loading_overlay = None
 
     def _fetch_resource_and_data(self, force_refresh: bool):
+        """Obtiene el recurso (endpoint) y la data; intenta candidatos si no hay uno fijo."""
         if not self.app.api:
             raise RuntimeError("No hay cliente API activo. Inicia sesión.")
 
@@ -1296,6 +1354,7 @@ class MatriculasView(BaseModuleFrame):
         )
 
     def _refrescar(self, force_refresh=True):
+        """Refresca la data desde la API (con throttle) y aplica filtros actuales."""
         now = int(time.time() * 1000)
         if now - self._last_refresh_ts < self.MIN_REFRESH_INTERVAL:
             return
@@ -1321,6 +1380,7 @@ class MatriculasView(BaseModuleFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _call_action(self, action: str, proceso_id, payload: Optional[Dict[str, Any]] = None):
+        """Ejecuta una acción (confirmar pago / enviar correo/chatbot) probando sufijos y recursos."""
         suffixes = self.ACTIONS.get(action) or ()
         if not suffixes:
             raise RuntimeError("Acción no soportada por la API.")
@@ -1358,6 +1418,7 @@ class MatriculasView(BaseModuleFrame):
     #                     ACCIONES
     # =====================================================
     def _nuevo(self):
+        """Abre el diálogo para crear una nueva solicitud manual desde HaroGestion."""
         sedes = ["1 de Mayo", "El Eden"]
         allowed = self._allowed_admin_sede()
         if allowed:
@@ -1376,6 +1437,7 @@ class MatriculasView(BaseModuleFrame):
         _NuevaSolicitudDialog(self, self.app, sedes=sedes, on_create=do_create)
 
     def _ver_detalle(self):
+        """Muestra una ventana con el detalle del registro seleccionado."""
         rec = self._selected_record()
         if not rec:
             return
@@ -1456,6 +1518,7 @@ class MatriculasView(BaseModuleFrame):
         ).pack(side="right", padx=6)
 
     def _confirmar_pago(self):
+        """Confirma pago en efectivo (manual) y habilita contratos mediante la API."""
         rec = self._selected_record()
         if not rec:
             self.app._info("Selecciona una solicitud primero.")
@@ -1510,6 +1573,7 @@ class MatriculasView(BaseModuleFrame):
         _ConfirmarPagoDialog(self, self.app, on_confirm=do_confirm)
 
     def _enviar_correo(self):
+        """Envía el enlace de contratos por correo (requiere pago confirmado)."""
         rec = self._selected_record()
         if not rec:
             self.app._info("Selecciona una solicitud primero.")
@@ -1544,6 +1608,7 @@ class MatriculasView(BaseModuleFrame):
             messagebox.showerror("matrículas", f"No fue posible enviar el correo:\n{e}", parent=self)
 
     def _backend_root_url(self) -> str:
+        """Obtiene la URL base del backend sin el sufijo `/api` si viene incluido."""
         api = getattr(self.app, "api", None)
         base = str(getattr(api, "base_url", "") or "").strip().rstrip("/")
         if not base:
@@ -1553,6 +1618,7 @@ class MatriculasView(BaseModuleFrame):
         return base.rstrip("/")
 
     def _append_query_params(self, url: str, params: Dict[str, str]) -> str:
+        """Agrega parámetros de query a una URL preservando los existentes."""
         parsed = urlparse(url or "")
         current = dict(parse_qsl(parsed.query, keep_blank_values=True))
         for k, v in (params or {}).items():
@@ -1566,6 +1632,7 @@ class MatriculasView(BaseModuleFrame):
         return urlunparse(parsed._replace(query=query))
 
     def _resolve_contract_ui_url(self, verification_url: str, api_root: str) -> str:
+        """Construye la URL del formulario UI de contratos a partir de una URL de verificación o root."""
         raw = str(verification_url or "").strip()
         if raw:
             try:
@@ -1578,6 +1645,7 @@ class MatriculasView(BaseModuleFrame):
         return f"{root}/Contratos/contrato.html" if root else ""
 
     def _generar_link_contratos(self):
+        """Genera un nuevo link de contratos (token) y lo copia al portapapeles."""
         rec = self._selected_record()
         if not rec:
             self.app._info("Selecciona una solicitud primero.")
@@ -1649,6 +1717,7 @@ class MatriculasView(BaseModuleFrame):
             messagebox.showerror("matrículas", f"No fue posible generar el enlace:\n{e}", parent=self)
 
     def _is_prospecto_activo(self, rec) -> bool:
+        """Valida si el estudiante existe como prospecto activo (para permitir envío por chatbot)."""
         # 1) Si el backend ya lo trae calculado, úsalo.
         if isinstance(rec, dict):
             val = rec.get("prospectoChatbotActivo")
@@ -1702,6 +1771,7 @@ class MatriculasView(BaseModuleFrame):
         return False
 
     def _enviar_chatbot(self):
+        """Envía el enlace de contratos por chatbot (requiere prospecto activo o validación backend)."""
         rec = self._selected_record()
         if not rec:
             self.app._info("Selecciona una solicitud primero.")

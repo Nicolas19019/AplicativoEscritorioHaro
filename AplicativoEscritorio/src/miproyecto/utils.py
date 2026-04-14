@@ -1,6 +1,17 @@
+"""
+Utilidades generales de UI (Tk/CustomTkinter).
+
+Se mantiene pequeño a propósito: helpers reutilizables sin dependencias de negocio.
+"""
+
 def centrar_ventana(win, ancho=None, alto=None):
     """
-    Centra una ventana de CustomTkinter/Tkinter. Respeta el diseño y tamaños.
+    Centra una ventana de CustomTkinter/Tkinter.
+
+    Args:
+        win: Ventana (Tk/Toplevel/CTk/CTkToplevel).
+        ancho: Ancho deseado (si `None`, usa el ancho actual).
+        alto: Alto deseado (si `None`, usa el alto actual).
     """
     def _do_center(_=None):
         win.update_idletasks()

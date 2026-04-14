@@ -1,3 +1,11 @@
+"""
+Módulo de Estudiantes.
+
+- Lista estudiantes en tabla con render por lotes.
+- Permite crear/editar usando `StudentInlineForm`.
+- Normaliza campos (ej. sede) para soportar variaciones de la API.
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox
 from tkinter import ttk
@@ -12,6 +20,16 @@ SEDES_DISPONIBLES = ["1 de Mayo", "El Eden"]
 
 
 def _to_bool(value, default=False):
+    """
+    Convierte valores variados a booleano.
+
+    Args:
+        value: Valor a convertir (bool/int/float/str).
+        default: Valor por defecto si no se puede interpretar.
+
+    Returns:
+        bool resultante.
+    """
     if value is None:
         return default
     if isinstance(value, bool):
@@ -27,6 +45,15 @@ def _to_bool(value, default=False):
 
 
 def _normalize_tipo_pase(raw_value):
+    """
+    Normaliza el tipo de pase/categoría (carro/moto) desde texto libre.
+
+    Args:
+        raw_value: Texto con una o varias categorías.
+
+    Returns:
+        String `"carro"`, `"moto"` o `"carro,moto"` (sin duplicados).
+    """
     if raw_value is None:
         return ""
     tokens = []
@@ -43,6 +70,7 @@ def _normalize_tipo_pase(raw_value):
 
 
 def _upper_text(value):
+    """Convierte a texto y lo retorna en mayúsculas (trim)."""
     return str(value or "").strip().upper()
 
 def _extract_sede(data: dict) -> str:
@@ -79,6 +107,15 @@ def _extract_sede(data: dict) -> str:
 
 
 def _normalize_sede_label(value) -> str:
+    """
+    Normaliza el texto de sede para UI (mapea variaciones comunes).
+
+    Args:
+        value: Texto original.
+
+    Returns:
+        Sede normalizada (`"1 de Mayo"` / `"El Eden"` o `""` si no se reconoce).
+    """
     txt = str(value or "").strip().lower()
     if not txt:
         return ""
@@ -105,6 +142,15 @@ def _normalize_sede_label(value) -> str:
 
 
 def _normalize_tipo_estudiante(value) -> str:
+    """
+    Normaliza el tipo de estudiante desde texto libre/API.
+
+    Args:
+        value: Texto original.
+
+    Returns:
+        Valor en minúsculas (ej. `"prospecto"`, `"matriculado"`, `"activo"`).
+    """
     txt = str(value or "").strip().lower()
     if not txt:
         return ""
@@ -122,6 +168,15 @@ def _normalize_tipo_estudiante(value) -> str:
 
 
 def _extract_consecutivo(data: dict) -> str:
+    """
+    Extrae el consecutivo del estudiante desde distintas llaves del backend.
+
+    Args:
+        data: Dict del estudiante.
+
+    Returns:
+        Consecutivo como string o "" si no existe.
+    """
     if not isinstance(data, dict):
         return ""
     val = data.get("consecutivo")
@@ -470,6 +525,7 @@ class StudentInlineForm(ctk.CTkFrame):
 
 # === EstudiantesView (render optimizado con Treeview) ===
 class EstudiantesView(BaseModuleFrame):
+    """Vista de gestión de estudiantes (tabla, filtros, formulario y sincronización)."""
     DEBOUNCE_MS = 250
     MIN_REFRESH_INTERVAL = 500  # ms
     RENDER_DELAY_MS = 16

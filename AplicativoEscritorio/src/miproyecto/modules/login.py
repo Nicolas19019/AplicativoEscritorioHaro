@@ -1,4 +1,13 @@
 # ===================== modules/login.py =====================
+"""
+Login / registro de administradores y recuperación de contraseña.
+
+Incluye:
+- `LoginDialog`: inicio de sesión y registro (OTP).
+- Flujo “¿Olvidaste tu contraseña?” (OTP + reset).
+- `SimpleAPI`: cliente HTTP mínimo usado para acciones puntuales del login.
+"""
+
 __all__ = ["LoginDialog", "SimpleAPI", "AnimatedToggle"]
 
 # ---------- IMPORTS ----------
@@ -34,6 +43,7 @@ try:
     from utils import centrar_ventana
 except Exception:
     def centrar_ventana(win, w, h):
+        """Centra una ventana en pantalla (fallback local)."""
         win.update_idletasks()
         sw = win.winfo_screenwidth()
         sh = win.winfo_screenheight()
@@ -47,6 +57,7 @@ class SimpleAPI:
     """Cliente HTTP mínimo con manejo de errores, last_error y URL efectiva."""
 
     def __init__(self, base_url, context_path=""):
+        """Inicializa el cliente HTTP con una URL base y un `context_path` opcional."""
         # base_url: ej. "http://localhost:8082"
         # context_path: ej. "", "/cea" (sin barra final)
         self.base_url = (base_url or "").rstrip("/")
@@ -56,7 +67,8 @@ class SimpleAPI:
 
   
     def _join(self, path):
- 
+        """Construye una URL absoluta a partir de un path relativo o absoluto."""
+  
         if not path:
             path = "/"
         if path.startswith("http://") or path.startswith("https://"):
@@ -67,6 +79,7 @@ class SimpleAPI:
         return f"{left}{path if path.startswith('/') else '/'+path}"
 
     def _do_post(self, url, json, headers, timeout):
+        """Ejecuta un POST y retorna el JSON (o `None` si ocurre un error HTTP/red)."""
         if requests is None:
             self.last_error = "La librería 'requests' no está instalada."
             return None
@@ -91,6 +104,7 @@ class SimpleAPI:
             return None
 
     def post(self, path, json, headers=None, timeout=25):
+        """Realiza POST contra la API y aplica fallback si el backend no usa prefijo `/api`."""
         self.last_error = None
         url = self._join(path)
         self.last_url = url
@@ -118,6 +132,7 @@ class AnimatedToggle(ctk.CTkFrame):
                  height=38, corner_radius=12,
                  bg_color_bar="#E5E7EB", indicator_color="#111827", text_color="#000000",
                  pad=4, speed_ms=10, steps=16):
+        """Crea un toggle de dos estados con indicador animado y callback opcional."""
         super().__init__(master, fg_color="transparent")
  
         assert isinstance(values, (list, tuple)) and len(values) == 2, "values debe tener 2 opciones"
@@ -159,6 +174,7 @@ class AnimatedToggle(ctk.CTkFrame):
         self.lbl_right.place(relx=0.5, rely=0.0, relwidth=0.5, relheight=1.0)
 
     def _layout(self, _e=None):
+        """Recalcula el layout interno del indicador cuando cambia el tamano."""
         w = self.inner.winfo_width()
         h = self.inner.winfo_height()
         if w <= 2 or h <= 2:
@@ -171,6 +187,7 @@ class AnimatedToggle(ctk.CTkFrame):
         self.pill.place(x=x0, y=self.pad)
 
     def select(self, index, animate=True):
+        """Selecciona la opcion indicada y anima el cambio si corresponde."""
         index = 0 if index <= 0 else 1
         if index == self.idx:
             self.var.set(self.values[self.idx])
@@ -213,6 +230,7 @@ class AnimatedToggle(ctk.CTkFrame):
 # ---------- LOGIN DIALOG ----------
 
 class LoginDialog(ctk.CTkToplevel):
+    """Diálogo de autenticación (login/registro) y recuperación de contraseña (OTP)."""
 
     _re_usuario_tecla = re.compile(r"^[A-Za-z0-9._-]{0,20}$")
     _re_usuario_full  = re.compile(r"^[A-Za-z0-9._-]{3,20}$")
@@ -225,12 +243,14 @@ class LoginDialog(ctk.CTkToplevel):
 
     @staticmethod
     def _normalize_base_url(base_url: str) -> str:
+        """Normaliza `base_url` removiendo un sufijo `/api` si viene incluido."""
         raw = (base_url or "").strip().rstrip("/")
         if raw.lower().endswith("/api"):
             return raw[: len(raw) - 4]
         return raw
 
     def __init__(self, master, on_success=None, brand="CEA HARO", base_url=None, api_client=None):
+        """Inicializa la UI de login/registro y el flujo de OTP/recuperacion."""
         super().__init__(master)
         self.app = master
         self.title("Inicio de sesión")
@@ -759,6 +779,7 @@ class LoginDialog(ctk.CTkToplevel):
 
 
     def _on_login_unmap(self, event=None):
+        """Sincroniza el minimizado del login con la ventana principal (Windows)."""
         # En Windows, <Unmap> se dispara al minimizar
         try:
             if self.state() == "iconic" and self.app.winfo_exists():
@@ -768,6 +789,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _on_login_map(self, event=None):
+        """Sincroniza el restaurado del login con la ventana principal (Windows)."""
         # Se dispara al restaurar
         try:
             if self.app.winfo_exists() and self.app.state() == "iconic":
@@ -779,6 +801,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _enable_login_modal(self):
+        """Activa el modo modal (grab) para evitar interaccion con la ventana principal."""
         if getattr(self, "_login_modal_active", False):
             return
         try:
@@ -788,6 +811,7 @@ class LoginDialog(ctk.CTkToplevel):
             self._login_modal_active = False
 
     def _disable_login_modal(self):
+        """Desactiva el modo modal (libera el grab) si estaba activo."""
         if not getattr(self, "_login_modal_active", False):
             return
         try:
@@ -799,6 +823,7 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Async helper ======================
     def _run_async(self, fn, on_ok=None, on_err=None):
+        """Ejecuta `fn` en un hilo y reporta el resultado al hilo de UI (Tkinter)."""
         def runner():
             try:
                 result = fn()
@@ -812,6 +837,7 @@ class LoginDialog(ctk.CTkToplevel):
         threading.Thread(target=runner, daemon=True).start()
 
     def _is_smtp_error(self, err_text: str) -> bool:
+        """Heuristica para detectar errores de correo (SMTP) en texto de excepcion."""
         t = (err_text or "").lower()
         return (
             "smtp" in t
@@ -887,6 +913,7 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== UI helpers ======================
     def _decorate_entry(self, entry):
+        """Aplica estilos/bindings comunes a un `CTkEntry` (focus, copiar/pegar, etc.)."""
         normal = {"border_color": "#E5E7EB"}
         focus  = {"border_color": "#FFC107"}
         try:
@@ -902,6 +929,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _select_all_entry(self, entry):
+        """Selecciona todo el texto del `entry` y evita el comportamiento por defecto."""
         try:
             entry.select_range(0, "end")
             entry.icursor("end")
@@ -910,6 +938,7 @@ class LoginDialog(ctk.CTkToplevel):
         return "break"
 
     def _paste_entry(self, entry):
+        """Pega el texto del portapapeles en el `entry` respetando seleccion/cursor."""
         try:
             text = self.clipboard_get()
         except Exception:
@@ -931,12 +960,14 @@ class LoginDialog(ctk.CTkToplevel):
         return "break"
 
     def _hide_error_on_any_click(self, _event=None):
+        """Oculta el banner de error si el usuario interactua con la ventana."""
         # solo limpia si está visible con texto
         if getattr(self, "_err_lock", False):
             return
         self._clear_error_ui()
 
     def _clear_error_ui(self):
+        """Limpia el banner de error y cancela timers de auto-ocultado si existen."""
         try:
             if hasattr(self, "_err_hide_after_id") and self._err_hide_after_id:
                 try:
@@ -951,6 +982,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _show_error(self, msg=None, *, technical=None):
+        """Muestra un error en UI con mensaje amigable y detalle tecnico opcional."""
         tech = (technical or msg or "").strip()
         title, user_msg, _sev = self._classify_error(tech)
 
@@ -1045,7 +1077,8 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Login / Registro flow ======================
     def _switch_mode(self, mode):
-       
+        """Cambia la vista entre modo login y modo registro."""
+        
         self._clear_error_ui()
 
         if mode == "REG":
@@ -1088,6 +1121,7 @@ class LoginDialog(ctk.CTkToplevel):
             self.actions_login.grid(row=3, column=0, padx=20, pady=(4, 8), sticky="ew")
 
     def _enter_action(self):
+        """Accion al presionar Enter segun el modo (login o registro/OTP)."""
         if self.modo.get() == "REG":
             admin_otp_email = (self.ADMIN_OTP_EMAIL or "").strip().lower()
             if self.en_otp.get().strip() or self._otp_target_email == admin_otp_email:
@@ -1098,6 +1132,7 @@ class LoginDialog(ctk.CTkToplevel):
             self._ok()
 
     def _password_meets_recovery_policy(self, password: str) -> bool:
+        """Valida la politica minima de contrasena para el reset por OTP."""
         pwd = str(password or "")
         return (
             len(pwd) >= 8
@@ -1107,53 +1142,38 @@ class LoginDialog(ctk.CTkToplevel):
         )
 
     def _forgot_password_post(self, endpoint: str, payload: dict, timeout: int = 25):
+        """Llama a un endpoint del flujo de recuperacion y normaliza errores/red."""
         self._forgot_password_last_url = ""
-        if requests is None:
-            raise RuntimeError("No se pudo inicializar la librería de red para el flujo de recuperación.")
+        # Usar el cliente HTTP del login (SimpleAPI) para:
+        # - reutilizar la base URL ya normalizada
+        # - tener fallback automático cuando la base ya incluye "/api"
+        #   (evita llamadas tipo ".../api/api/...").
+        if not hasattr(self, "api") or not hasattr(self.api, "post"):
+            raise RuntimeError("No hay un cliente API disponible para el flujo de recuperación.")
 
-        base_url = self._normalize_base_url(getattr(self.app, "API_BASE_URL", "") or "")
-        if not base_url:
-            raise RuntimeError("No hay una URL base configurada para la API.")
-
-        url = f"{base_url}{endpoint if endpoint.startswith('/') else '/' + endpoint}"
-        self._forgot_password_last_url = url
-
-        try:
-            response = requests.post(
-                url,
-                json=payload,
-                headers={"Accept": "application/json", "Content-Type": "application/json"},
-                timeout=timeout,
-            )
-            if response.status_code >= 400:
-                try:
-                    data = response.json()
-                except Exception:
-                    data = response.text
-                raise RuntimeError(f"HTTP {response.status_code} en {url}: {data}")
-
-            if not response.text:
-                return {}
-            try:
-                return response.json()
-            except Exception:
-                return {"raw": response.text}
-        except Exception as exc:
-            raise RuntimeError(str(exc)) from exc
+        data = self.api.post(endpoint, json=payload, timeout=timeout)
+        self._forgot_password_last_url = getattr(self.api, "last_url", "") or ""
+        if data is None:
+            raise RuntimeError(getattr(self.api, "last_error", "") or "No se pudo completar la solicitud de recuperación.")
+        return data or {}
 
     def _forgot_password_request_otp(self, correo: str):
+        """Solicita el envio del OTP de recuperacion al correo indicado."""
         return self._forgot_password_post(self.FORGOT_PASSWORD_ENDPOINT, {"correo": correo})
 
     def _forgot_password_verify_otp(self, correo: str, code: str):
+        """Verifica el OTP de recuperacion recibido por el usuario."""
         return self._forgot_password_post(self.FORGOT_PASSWORD_VERIFY_ENDPOINT, {"correo": correo, "code": code})
 
     def _forgot_password_reset(self, correo: str, code: str, nueva_contrasena: str):
+        """Cambia la contrasena usando correo + OTP verificado."""
         return self._forgot_password_post(
             self.RESET_PASSWORD_ENDPOINT,
             {"correo": correo, "code": code, "nuevaContrasena": nueva_contrasena},
         )
 
     def _open_forgot_password_dialog_legacy(self):
+        """Abre el dialogo legacy para recuperar contrasena por OTP."""
         self._clear_error_ui()
         initial_email = self._sanitize_login_for_submit(self.en_user.get().strip().lower())
 
@@ -1445,6 +1465,7 @@ class LoginDialog(ctk.CTkToplevel):
         ).grid(row=1, column=1, padx=(6, 0), pady=(6, 0), sticky="ew")
 
     def _open_forgot_password_dialog(self):
+        """Abre el dialogo principal para recuperar contrasena (OTP + reset)."""
         self._clear_error_ui()
         initial_email = self._sanitize_login_for_submit(self.en_user.get().strip().lower())
 
@@ -1911,11 +1932,13 @@ class LoginDialog(ctk.CTkToplevel):
         ).grid(row=0, column=0, sticky="e")
 
     def _toggle_pass(self):
+        """Alterna la visibilidad del campo de contrasena en el formulario de login."""
         self._pass_visible = not getattr(self, "_pass_visible", False)
         self.en_pass.configure(show="" if self._pass_visible else "*")
 
     # ====================== OTP UI (popup) ======================
     def _show_otp_dialog(self):
+        """Muestra un popup para ingresar el OTP administrativo durante el registro."""
         if self._otp_dialog_open:
             return
         self._otp_dialog_open = True
@@ -1998,6 +2021,7 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== OTP send/verify helpers ======================
     def _set_otp_status(self, msg="", kind="info"):
+        """Actualiza el estado visual del OTP (mensaje + tipo)."""
         try:
             self.lbl_otp_status.configure(text="")
             self.lbl_otp_status.grid_remove()
@@ -2005,6 +2029,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _set_registration_buttons_state(self, enabled: bool):
+        """Habilita/deshabilita los botones del formulario de registro."""
         state = "normal" if enabled else "disabled"
         for widget_name in ("btn_guardar_enviar", "btn_send_otp"):
             try:
@@ -2013,6 +2038,7 @@ class LoginDialog(ctk.CTkToplevel):
                 pass
 
     def _build_pending_admin_payload(self):
+        """Construye y valida el payload de administrador antes de enviar/validar OTP."""
         nombre = self.ca_nombre.get().strip()
         cedula = self.ca_cedula.get().strip()
         usuario = self.ca_usuario.get().strip()
@@ -2052,6 +2078,7 @@ class LoginDialog(ctk.CTkToplevel):
         return self._pending_admin_payload
 
     def _send_otp_to_email(self, correo: str) -> bool:
+        """Solicita a la API el envio de OTP al correo indicado."""
         correo = (correo or "").strip().lower()
         if not correo:
             self._show_error("Correo vacío.")
@@ -2063,6 +2090,7 @@ class LoginDialog(ctk.CTkToplevel):
         return False
 
     def _guardar_y_enviar_otp(self):
+        """Valida el formulario de registro y ejecuta el flujo de creacion configurado."""
         self._clear_error_ui()
 
         try:
@@ -2119,6 +2147,7 @@ class LoginDialog(ctk.CTkToplevel):
                 pass
 
     def _verify_otp_and_create_with_code(self, codigo):
+        """Verifica un OTP y, si es valido, crea el administrador pendiente."""
         self._clear_error_ui()
 
         def do_verify():
@@ -2147,6 +2176,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._run_async(do_verify, on_ok=on_ok, on_err=on_err)
 
     def _verify_otp_and_create(self):
+        """Toma el OTP del campo y delega la verificacion/creacion."""
         codigo = self.en_otp.get().strip()
         if not codigo:
             self._show_error("Ingresa el código que llegó al correo.")
@@ -2154,6 +2184,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._verify_otp_and_create_with_code(codigo)
 
     def _request_registration_otp(self):
+        """Solicita el envio de OTP para el flujo de registro de administradores."""
         self._clear_error_ui()
 
         try:
@@ -2201,6 +2232,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._run_async(do_send, on_ok=on_ok, on_err=on_err)
 
     def _verify_otp_with_code(self, codigo):
+        """Verifica el OTP enviado al correo que se pretende registrar."""
         self._clear_error_ui()
 
         try:
@@ -2241,6 +2273,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._run_async(do_verify, on_ok=on_ok, on_err=on_err)
 
     def _verify_otp(self):
+        """Lee el codigo OTP del input y lo verifica contra la API."""
         codigo = self.en_otp.get().strip()
         if not codigo:
             self._show_error("Ingresa el codigo que llego al correo.")
@@ -2249,6 +2282,7 @@ class LoginDialog(ctk.CTkToplevel):
         self._verify_otp_with_code(codigo)
 
     def _create_admin_with_otp(self):
+        """Crea el administrador usando OTP del superadministrador como aprobacion."""
         self._clear_error_ui()
 
         try:
@@ -2301,12 +2335,14 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Login ======================
     def _credential_for_on_success(self, plain_password: str, hashed_password: str) -> str:
+        """Selecciona la credencial que se entrega a `on_success` segun `AUTH_MODE`."""
         mode = str(getattr(self.app, "AUTH_MODE", "basic") or "basic").strip().lower()
         # Para basic, enviar la clave en texto (el backend ya aplica su prehash interno).
         # Para jwt, mantenemos el hash SHA-256 que usa el endpoint /api/auth/login.
         return hashed_password if mode == "jwt" else plain_password
 
     def _ok(self):
+        """Ejecuta el intento de login y notifica al callback `on_success` si es valido."""
         self._clear_error_ui()
 
         if self.modo.get() != "LOGIN":
@@ -2368,15 +2404,18 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Validación / fuerza ======================
     def _email_key_validator(self, new_text):
+        """Valida el correo en tiempo real bloqueando caracteres peligrosos/espacios."""
         for ch in new_text:
             if ch in self._danger_chars or ch.isspace():
                 return False
         return True
 
     def _sanitize_login_for_submit(self, text):
+        """Limpia caracteres no permitidos antes de enviar el correo a la API."""
         return "".join(ch for ch in text if ch not in self._danger_chars)
 
     def _clear_remembered_login(self):
+        """Elimina el archivo local de 'recordar usuario' si existe."""
         try:
             if REMEMBER_LOGIN_PATH.exists():
                 REMEMBER_LOGIN_PATH.unlink()
@@ -2384,6 +2423,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _save_remembered_login(self, correo: str):
+        """Guarda el correo localmente con TTL para autocompletar el login."""
         correo = str(correo or "").strip().lower()
         if not correo:
             self._clear_remembered_login()
@@ -2398,6 +2438,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _load_remembered_login(self):
+        """Carga el correo recordado si el TTL no ha expirado y lo pone en UI."""
         try:
             if not REMEMBER_LOGIN_PATH.exists():
                 return
@@ -2415,6 +2456,7 @@ class LoginDialog(ctk.CTkToplevel):
             self._clear_remembered_login()
 
     def _password_strength_score(self, pwd):
+        """Calcula un score simple (0-4) de fortaleza de contraseña."""
         if not pwd:
             return 0
         score = 0
@@ -2431,6 +2473,7 @@ class LoginDialog(ctk.CTkToplevel):
         return min(score, 4)
 
     def _strength_to_ui(self, score):
+        """Convierte un score (0-4) en valores para UI (progreso, label, color)."""
         mapping = {
             0: (0.05, "Muy débil", "#ff4c4c"),
             1: (0.25, "Débil", "#ff7a59"),
@@ -2441,6 +2484,7 @@ class LoginDialog(ctk.CTkToplevel):
         return mapping.get(score, (0.05, "Muy débil", "#ff4c4c"))
 
     def _update_strength_meter(self, pwd, bar, lbl):
+        """Actualiza los widgets de barra/label de fortaleza según la contraseña."""
         val, text, color = self._strength_to_ui(self._password_strength_score(pwd))
         try:
             bar.set(val)
@@ -2450,6 +2494,7 @@ class LoginDialog(ctk.CTkToplevel):
             pass
 
     def _reset_fields(self, clear_errors=True):
+        """Limpia campos de login/registro y reinicia variables del flujo OTP."""
         try:
             self.en_user.delete(0, "end")
             self.en_pass.delete(0, "end")
@@ -2490,6 +2535,7 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Icono y recursos ======================
     def set_window_icon(self, window=None):
+        """Configura el icono de ventana (.ico en Windows, o PNG como fallback)."""
         win = window or self
         ico = self._resolve_existing_path(self._ICON_ICO_PATH)
         png = self._resolve_existing_path(self._ICON_PNG_PATH)
@@ -2516,6 +2562,7 @@ class LoginDialog(ctk.CTkToplevel):
             print(f"[Icono] iconphoto falló: {e}")
 
     def _resolve_existing_path(self, p: Path):
+        """Resuelve rutas de recursos soportando PyInstaller (_MEIPASS) y ruta local."""
         try:
             if not isinstance(p, Path):
                 p = Path(p)
@@ -2532,6 +2579,7 @@ class LoginDialog(ctk.CTkToplevel):
 
     # ====================== Salida ======================
     def _quit_all(self):
+        """Cierra el login y termina la aplicación de forma segura."""
         self._reset_fields(True)
         try:
             self.grab_release()
@@ -2557,4 +2605,5 @@ class LoginDialog(ctk.CTkToplevel):
             os._exit(0)
 
     def _cancel(self):
+        """Alias de salida/cancelación para botones/cierre del diálogo."""
         self._quit_all()

@@ -1,7 +1,23 @@
+"""
+Tema/estilos de Treeview para HaroGestion.
+
+Homogeneiza colores, selección y alturas de fila para tablas en los módulos.
+"""
+
 import customtkinter as ctk
 
 
 def solid_color(value, fallback):
+    """
+    Obtiene un color “plano” desde una tupla (light/dark) o un string.
+
+    Args:
+        value: Color como string o tupla/lista `(light, dark)`.
+        fallback: Color por defecto si `value` no es válido.
+
+    Returns:
+        Color como string.
+    """
     if isinstance(value, (tuple, list)) and value:
         return str(value[0] or fallback)
     if value in (None, ""):
@@ -10,6 +26,18 @@ def solid_color(value, fallback):
 
 
 def configure_treeview_style(style, app, style_name, *, rowheight=30):
+    """
+    Configura estilo de `ttk.Treeview` usando la paleta de la app.
+
+    Args:
+        style: Instancia `ttk.Style`.
+        app: Instancia de `HaroDesktopApp` (colores).
+        style_name: Nombre del estilo (ej. `"Estudiantes.Treeview"`).
+        rowheight: Alto de fila.
+
+    Returns:
+        Dict con colores calculados (bg/panel/text/selected/even/odd...).
+    """
     try:
         style.theme_use("clam")
     except Exception:

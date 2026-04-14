@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+"""
+Archivo legacy/de pruebas.
+
+Contiene una versión monolítica (más antigua) de vistas y formularios.
+La app activa usa `src/miproyecto/main.py` y los módulos en `src/miproyecto/modules/`.
+"""
+
 import calendar
 from calendar import Calendar
 import sys
